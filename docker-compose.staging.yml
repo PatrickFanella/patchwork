@@ -1,0 +1,123 @@
+# Staging environment compose file -- mirrors production topology (#108).
+#
+# Usage:
+#   docker compose -f docker-compose.staging.yml up -d --build
+#
+# This file maintains parity with docker-compose.yml (production) so that
+# staging validates the same service topology, networking, and health checks
+# before promotion to production.
+
+services:
+    postgres:
+        image: postgres:16-alpine
+        container_name: patchwork-staging-postgres
+        restart: unless-stopped
+        environment:
+            POSTGRES_DB: patchwork
+            POSTGRES_USER: patchwork
+            POSTGRES_PASSWORD: ${PATCHWORK_STAGING_POSTGRES_PASSWORD:?Set PATCHWORK_STAGING_POSTGRES_PASSWORD in .env}
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U patchwork -d patchwork']
+            interval: 5s
+            timeout: 3s
+            retries: 20
+        volumes:
+            - patchwork-staging-postgres-data:/var/lib/postgresql/data
+        networks:
+            staging-internal:
+
+    patchwork-api:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: api-runtime
+        container_name: patchwork-staging-api
+        restart: unless-stopped
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            NODE_ENV: production
+            PATCHWORK_ENV: staging
+            LOG_LEVEL: ${LOG_LEVEL:-info}
+            ATPROTO_SERVICE_DID: ${STAGING_ATPROTO_SERVICE_DID:?Set STAGING_ATPROTO_SERVICE_DID in .env}
+            ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            API_HOST: 0.0.0.0
+            API_PORT: 4000
+            API_PUBLIC_ORIGIN: ${STAGING_PUBLIC_ORIGIN:-https://staging.patchwork.subcult.tv}
+            API_DATA_SOURCE: ${API_DATA_SOURCE:-postgres}
+            API_DATABASE_URL: postgresql://patchwork:${PATCHWORK_STAGING_POSTGRES_PASSWORD:?Set PATCHWORK_STAGING_POSTGRES_PASSWORD in .env}@patchwork-staging-postgres:5432/patchwork
+        networks:
+            staging-internal:
+            staging-web:
+                aliases:
+                    - patchwork-staging-api
+
+    patchwork-spool:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: indexer-runtime
+        container_name: patchwork-staging-spool
+        restart: unless-stopped
+        environment:
+            NODE_ENV: production
+            PATCHWORK_ENV: staging
+            LOG_LEVEL: ${LOG_LEVEL:-info}
+            ATPROTO_SERVICE_DID: ${STAGING_ATPROTO_SERVICE_DID:?Set STAGING_ATPROTO_SERVICE_DID in .env}
+            ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            INDEXER_PORT: 4100
+            INDEXER_FIREHOSE_URL: ${INDEXER_FIREHOSE_URL:-wss://bsky.network}
+        networks:
+            staging-internal:
+            staging-web:
+                aliases:
+                    - patchwork-staging-spool
+
+    patchwork-thimble:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: moderation-runtime
+        container_name: patchwork-staging-thimble
+        restart: unless-stopped
+        environment:
+            NODE_ENV: production
+            PATCHWORK_ENV: staging
+            LOG_LEVEL: ${LOG_LEVEL:-info}
+            ATPROTO_SERVICE_DID: ${STAGING_ATPROTO_SERVICE_DID:?Set STAGING_ATPROTO_SERVICE_DID in .env}
+            ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            MODERATION_PORT: 4200
+            MODERATION_WORKER_CONCURRENCY: ${MODERATION_WORKER_CONCURRENCY:-2}
+        networks:
+            staging-internal:
+            staging-web:
+                aliases:
+                    - patchwork-staging-thimble
+
+    patchwork-web:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: web-runtime
+            args:
+                VITE_APP_NAME: 'Patchwork (Staging)'
+                VITE_API_BASE_URL: ${STAGING_VITE_API_BASE_URL:-https://staging.patchwork.subcult.tv/api}
+        container_name: patchwork-staging-web
+        restart: unless-stopped
+        depends_on:
+            - patchwork-api
+        networks:
+            staging-web:
+                aliases:
+                    - patchwork-staging-web
+
+volumes:
+    patchwork-staging-postgres-data:
+
+networks:
+    staging-internal:
+        driver: bridge
+    staging-web:
+        external: true
+        name: staging-web

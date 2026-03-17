@@ -1,0 +1,8 @@
+{
+    "$type": "app.patchwork.conversation.meta",
+    "version": "1.0.0",
+    "aidPostUri": "at://did:example:alice/app.patchwork.aid.post/3kq123",
+    "participantDids": ["did:example:alice"],
+    "status": "open",
+    "createdAt": "2026-02-26T11:00:00.000Z"
+}

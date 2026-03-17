@@ -1,0 +1,28 @@
+{
+    "name": "@patchwork/api",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "npm run typecheck",
+        "start": "tsx src/index.ts",
+        "db:migrate": "tsx src/db/migrate.ts",
+        "db:seed": "tsx src/db/seed.ts",
+        "db:seed:append": "tsx src/db/seed.ts --append",
+        "db:seed:phase3": "tsx src/db/seed.ts --phase3-only",
+        "lint": "npm run typecheck",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "test": "vitest run",
+        "test:phase7": "vitest run src/phase5.test.ts src/phase7.test.ts",
+        "test:phase8": "vitest run src/phase8.test.ts src/capacity-service.test.ts src/performance.test.ts src/load-profile.test.ts",
+        "test:phase8-e2e": "vitest run src/phase8-e2e.test.ts"
+    },
+    "dependencies": {
+        "@patchwork/shared": "0.1.0",
+        "pg": "^8.19.0"
+    },
+    "devDependencies": {
+        "@types/pg": "^8.16.0"
+    }
+}

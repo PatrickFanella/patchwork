@@ -1,0 +1,10 @@
+{
+    "$type": "app.patchwork.directory.resource",
+    "version": "1.0.0",
+    "name": "Downtown Community Pantry",
+    "category": "food-bank",
+    "serviceArea": "Downtown + adjacent neighborhoods",
+    "contact": {},
+    "verificationStatus": "community-verified",
+    "createdAt": "2026-02-26T11:25:00.000Z"
+}

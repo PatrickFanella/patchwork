@@ -1,0 +1,35 @@
+{
+    "lexicon": 1,
+    "id": "app.patchwork.conversation.meta",
+    "revision": "1.0.0",
+    "description": "Conversation metadata for post-linked mutual aid chats.",
+    "defs": {
+        "main": {
+            "type": "record",
+            "key": "tid",
+            "record": {
+                "type": "object",
+                "required": [
+                    "$type",
+                    "version",
+                    "aidPostUri",
+                    "participantDids",
+                    "status",
+                    "createdAt"
+                ],
+                "properties": {
+                    "$type": {
+                        "type": "string",
+                        "const": "app.patchwork.conversation.meta"
+                    },
+                    "version": { "type": "string", "const": "1.0.0" },
+                    "aidPostUri": { "type": "string" },
+                    "participantDids": { "type": "array" },
+                    "status": { "type": "string" },
+                    "createdAt": { "type": "string", "format": "datetime" },
+                    "updatedAt": { "type": "string", "format": "datetime" }
+                }
+            }
+        }
+    }
+}

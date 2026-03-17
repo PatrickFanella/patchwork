@@ -1,0 +1,15 @@
+{
+    "$type": "app.patchwork.aid.post",
+    "version": "1.0.0",
+    "title": "Need groceries for household of 3",
+    "description": "Need non-perishable food support for the next 2 days.",
+    "category": "food",
+    "urgency": "high",
+    "status": "open",
+    "location": {
+        "latitude": 40.7128,
+        "longitude": -74.006,
+        "precisionKm": 3
+    },
+    "createdAt": "2026-02-26T10:00:00.000Z"
+}

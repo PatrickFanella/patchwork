@@ -1,0 +1,8 @@
+{
+    "$type": "app.patchwork.moderation.report",
+    "version": "1.0.0",
+    "subjectUri": "at://did:example:alice/app.patchwork.aid.post/3kq123",
+    "reporterDid": "not-a-did",
+    "reason": "spam",
+    "createdAt": "2026-02-26T11:15:00.000Z"
+}

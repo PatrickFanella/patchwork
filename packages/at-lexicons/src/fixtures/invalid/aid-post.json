@@ -1,0 +1,14 @@
+{
+    "$type": "app.patchwork.aid.post",
+    "version": "1.0.0",
+    "description": "Missing title and invalid urgency enum",
+    "category": "food",
+    "urgency": "urgent",
+    "status": "open",
+    "location": {
+        "latitude": 40.7128,
+        "longitude": -74.006,
+        "precisionKm": 3
+    },
+    "createdAt": "2026-02-26T10:00:00.000Z"
+}

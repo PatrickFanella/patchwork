@@ -1,0 +1,234 @@
+{
+    "app": {
+        "title": "Patchwork",
+        "skipToContent": "Saltar al contenido principal"
+    },
+    "nav": {
+        "ariaLabel": "Flujos principales",
+        "home": "Inicio",
+        "map": "Mapa",
+        "feed": "Noticias",
+        "resources": "Recursos",
+        "volunteer": "Voluntario",
+        "posting": "Publicar",
+        "chat": "Chat"
+    },
+    "dashboard": {
+        "phaseLabel": "Panel de ayuda mutua \u00b7 fase 8",
+        "safetyBadge": "Protecciones de seguridad activas",
+        "heading": "{{appTitle}}",
+        "description": "Coordina apoyo urgente del vecindario con mapa, noticias, publicaciones, recursos, chat y flujos de voluntarios en una interfaz que prioriza la privacidad.",
+        "openMapTriage": "Abrir triaje de mapa",
+        "openPostingForm": "Abrir formulario de publicaci\u00f3n",
+        "openChatHandoff": "Abrir traspaso de chat",
+        "liveResponsePosture": "Postura de respuesta en vivo",
+        "requestsTriaged24h": "Solicitudes triadas (24h)",
+        "requestsTriaged24hValue": "127",
+        "medianResponse": "Respuesta mediana",
+        "medianResponseValue": "11m",
+        "verifiedVolunteers": "Voluntarios verificados",
+        "verifiedVolunteersValue": "42",
+        "discoveryShellTitle": "Panel de descubrimiento",
+        "discoveryShellDescription": "Busca solicitudes de apoyo por categor\u00eda y dir\u00edgelas a la ruta de respuesta m\u00e1s segura cercana.",
+        "searchRequests": "Buscar solicitudes",
+        "findNearby": "Buscar cercanos",
+        "createPost": "Crear publicaci\u00f3n",
+        "openLiveFeed": "Abrir noticias en vivo",
+        "serviceBoundariesTitle": "L\u00edmites de servicio en l\u00ednea",
+        "apiShellAt": "Shell API en",
+        "indexerShellAt": "Shell indexador en",
+        "moderationWorkerShellAt": "Shell de moderaci\u00f3n en",
+        "architectureDocs": "documentos de arquitectura",
+        "architectureDocsDescription": "Ver {{link}} para contextos acotados y fundamentos ADR.",
+        "quickRouteHandoffsTitle": "Traspasos de ruta r\u00e1pida",
+        "openSection": "Abrir {{title}}"
+    },
+    "discovery": {
+        "title": "Filtros de descubrimiento",
+        "searchText": "Texto de b\u00fasqueda",
+        "searchPlaceholder": "Buscar t\u00edtulo, descripci\u00f3n o \u00e1rea",
+        "feedTab": "Pesta\u00f1a de noticias",
+        "category": "Categor\u00eda",
+        "status": "Estado",
+        "minimumUrgency": "Urgencia m\u00ednima",
+        "radiusMeters": "Radio (m)",
+        "centerLat": "Latitud central",
+        "centerLng": "Longitud central",
+        "resetFilters": "Restablecer filtros",
+        "filtersPersist": "Los filtros persisten en la URL para contexto de triaje compartible."
+    },
+    "map": {
+        "heading": "Triaje de mapa",
+        "description": "Agrupaci\u00f3n de \u00e1rea aproximada con radios seguros para la privacidad y acciones directas de traspaso.",
+        "dbBackedApi": "API respaldada por BD",
+        "fallbackDataset": "Conjunto de datos de respaldo",
+        "apiSyncIssue": "Problema de sincronizaci\u00f3n de API: {{message}}",
+        "clusterOverviewTitle": "Resumen de cl\u00fasteres",
+        "noClusters": "No hay cl\u00fasteres para los filtros actuales. Intenta ampliar el radio o limpiar los chips de categor\u00eda/estado.",
+        "clusterRequests": "{{count}} solicitudes \u00b7 Urgencia m\u00e1x {{urgency}}",
+        "requestMarkersTitle": "Marcadores de solicitud",
+        "noRequests": "No hay solicitudes en el \u00e1rea seleccionada. Establece un radio m\u00e1s amplio o cambia a la pesta\u00f1a de noticias recientes.",
+        "urgencyLabel": "Urgencia {{level}}",
+        "openTriageDrawer": "Abrir caj\u00f3n de triaje",
+        "mapDetailDrawerTitle": "Caj\u00f3n de detalles del mapa",
+        "closeDrawer": "Cerrar caj\u00f3n",
+        "requestsInArea": "{{count}} solicitudes en \u00e1rea aproximada"
+    },
+    "feed": {
+        "heading": "Operaciones de noticias",
+        "description": "Gestionar transiciones de ciclo de vida y lanzar traspasos directamente desde las tarjetas de noticias.",
+        "liveRequestFeedTitle": "Noticias de solicitudes en vivo",
+        "noRequestsMatch": "Ninguna solicitud coincide con los filtros actuales. Restablece los filtros o publica una nueva solicitud.",
+        "resetFeedFilters": "Restablecer filtros de noticias",
+        "createRequest": "Crear solicitud",
+        "contactHelper": "Contactar ayudante",
+        "escalateUrgency": "Escalar urgencia",
+        "closeRequest": "Cerrar solicitud",
+        "updatedAt": "Actualizado {{date}}"
+    },
+    "posting": {
+        "heading": "Crear solicitud",
+        "description": "Formulario de publicaci\u00f3n compartido con taxonom\u00eda, etiquetas de accesibilidad y cumplimiento de geoprivacidad.",
+        "formTitle": "Formulario de publicaci\u00f3n",
+        "titleLabel": "T\u00edtulo",
+        "descriptionLabel": "Descripci\u00f3n",
+        "categoryLabel": "Categor\u00eda",
+        "urgencyLabel": "Urgencia",
+        "accessibilityTags": "Etiquetas de accesibilidad (separadas por comas)",
+        "latitudeLabel": "Latitud",
+        "longitudeLabel": "Longitud",
+        "precisionMetersLabel": "Metros de precisi\u00f3n",
+        "timeWindowStart": "Inicio de ventana de tiempo",
+        "timeWindowEnd": "Fin de ventana de tiempo",
+        "publishing": "Publicando\u2026",
+        "publishRequest": "Publicar solicitud",
+        "openFeed": "Abrir noticias",
+        "unableToPresist": "No se pudo guardar la solicitud: {{error}}",
+        "createdPost": "Publicaci\u00f3n {{id}} creada y guardada v\u00eda API/BD."
+    },
+    "resources": {
+        "heading": "Directorio de recursos",
+        "description": "Superponer servicios verificados en el contexto del mapa y lanzar traspasos de admisi\u00f3n r\u00e1pidamente.",
+        "directoryFiltersTitle": "Filtros de directorio",
+        "allCategories": "Todas las categor\u00edas",
+        "overlayCardsTitle": "Superposici\u00f3n + tarjetas",
+        "tryBroadening": "Intenta ampliar los filtros de radio/categor\u00eda o cambiar la categor\u00eda de ayuda.",
+        "clearDirectoryCategory": "Limpiar categor\u00eda del directorio",
+        "areaPending": "\u00c1rea pendiente",
+        "hoursUnavailable": "Horario no disponible",
+        "eligibilityUnavailable": "Detalles de elegibilidad no disponibles.",
+        "openDetails": "Abrir detalles",
+        "startIntake": "Iniciar admisi\u00f3n",
+        "resourceDetailTitle": "Detalle del recurso",
+        "close": "Cerrar"
+    },
+    "volunteer": {
+        "heading": "Incorporaci\u00f3n de voluntarios",
+        "description": "Capturar capacidades, disponibilidad y puntos de verificaci\u00f3n para emparejamiento seguro.",
+        "profileDraftTitle": "Borrador de perfil de voluntario",
+        "didLabel": "DID",
+        "displayNameLabel": "Nombre visible",
+        "availabilityLabel": "Disponibilidad",
+        "contactPreferenceLabel": "Preferencia de contacto",
+        "capabilitiesLabel": "Capacidades",
+        "skillsLabel": "Habilidades (separadas por comas)",
+        "availabilityWindowsLabel": "Ventanas de disponibilidad",
+        "preferredCategoriesLabel": "Categor\u00edas preferidas",
+        "preferredUrgenciesLabel": "Urgencias preferidas",
+        "maxDistanceLabel": "Distancia m\u00e1xima (km)",
+        "acceptLateNight": "Aceptar traspasos nocturnos",
+        "identityCheck": "Verificaci\u00f3n de identidad",
+        "safetyTraining": "Entrenamiento de seguridad",
+        "communityReference": "Referencia comunitaria",
+        "saveProfile": "Guardar perfil de voluntario",
+        "approved": "Aprobado {{count}}",
+        "pending": "Pendiente {{count}}",
+        "rejected": "Rechazado {{count}}",
+        "fullyVerified": "Completamente verificado"
+    },
+    "chat": {
+        "heading": "Traspaso de chat",
+        "description": "Iniciaci\u00f3n 1:1 vinculada a publicaci\u00f3n con verificaciones de permisos y manejo de respaldo de capacidad del destinatario.",
+        "launchControlsTitle": "Controles de lanzamiento",
+        "initiatorHasPermission": "El iniciador tiene permiso",
+        "forceCapabilityFallback": "Forzar respaldo de capacidad",
+        "initiatorDid": "DID del iniciador: {{did}}",
+        "pendingIntent": "Intenci\u00f3n pendiente \u00b7 {{title}}",
+        "recipientSource": "Destinatario: {{recipient}} \u00b7 Origen: {{source}}",
+        "noPendingIntent": "No hay intenci\u00f3n de chat pendiente. Comienza desde Mapa o Noticias \"Contactar ayudante\".",
+        "launchHandoffChat": "Lanzar chat de traspaso",
+        "resetState": "Restablecer estado",
+        "launchStatusTitle": "Estado de lanzamiento",
+        "state": "Estado: {{status}}"
+    },
+    "shellSections": {
+        "map": {
+            "title": "Mapa",
+            "description": "Descubrimiento de \u00e1rea aproximada con triaje r\u00e1pido."
+        },
+        "feed": {
+            "title": "Noticias",
+            "description": "Flujo de solicitudes recientes y cercanas con acciones de ciclo de vida."
+        },
+        "resources": {
+            "title": "Recursos",
+            "description": "Superposiciones de directorio y recursos de socios."
+        },
+        "volunteer": {
+            "title": "Voluntario",
+            "description": "Incorporaci\u00f3n y gesti\u00f3n de perfiles de voluntarios."
+        },
+        "legalTerms": {
+            "title": "T\u00e9rminos de servicio",
+            "description": "T\u00e9rminos de servicio y acuerdo de usuario de la plataforma."
+        },
+        "legalPrivacy": {
+            "title": "Pol\u00edtica de privacidad",
+            "description": "C\u00f3mo recopilamos, usamos y protegemos tus datos."
+        },
+        "legalCommunityGuidelines": {
+            "title": "Normas de la comunidad",
+            "description": "Comportamiento esperado, contenido prohibido y aplicaci\u00f3n."
+        }
+    },
+    "categories": {
+        "food": "Comida",
+        "shelter": "Refugio",
+        "medical": "M\u00e9dico",
+        "transport": "Transporte",
+        "legal": "Legal",
+        "mental-health": "Salud Mental",
+        "childcare": "Cuidado Infantil",
+        "other": "Otro",
+        "food-bank": "Banco de Alimentos",
+        "clinic": "Cl\u00ednica",
+        "legal-aid": "Ayuda Legal",
+        "hotline": "L\u00ednea Directa"
+    },
+    "urgency": {
+        "critical": "Cr\u00edtica",
+        "high": "Alta",
+        "medium": "Media",
+        "low": "Baja"
+    },
+    "status": {
+        "open": "Abierta",
+        "in-progress": "En progreso",
+        "resolved": "Resuelta",
+        "closed": "Cerrada"
+    },
+    "formatting": {
+        "dateShort": "{{date, shortDate}}",
+        "dateLong": "{{date, longDate}}",
+        "number": "{{value, number}}",
+        "currency": "{{value, currency}}"
+    },
+    "a11y": {
+        "languageSwitcher": "Idioma",
+        "currentLanguage": "Idioma actual: {{language}}",
+        "loadingContent": "Cargando contenido",
+        "navigationLandmark": "Navegaci\u00f3n principal",
+        "mainContent": "Contenido principal",
+        "filterResults": "Resultados de filtro actualizados"
+    }
+}

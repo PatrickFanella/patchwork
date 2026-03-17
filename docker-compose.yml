@@ -1,0 +1,112 @@
+services:
+    postgres:
+        image: postgres:16-alpine
+        container_name: patchwork-postgres
+        restart: unless-stopped
+        environment:
+            POSTGRES_DB: patchwork
+            POSTGRES_USER: patchwork
+            POSTGRES_PASSWORD: ${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U patchwork -d patchwork']
+            interval: 5s
+            timeout: 3s
+            retries: 20
+        volumes:
+            - patchwork-postgres-data:/var/lib/postgresql/data
+        networks:
+            internal:
+
+    patchwork-api:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: api-runtime
+        container_name: patchwork-api
+        restart: unless-stopped
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            NODE_ENV: production
+            LOG_LEVEL: ${LOG_LEVEL:-info}
+            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:-did:example:patchwork}
+            ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            API_HOST: 0.0.0.0
+            API_PORT: 4000
+            API_PUBLIC_ORIGIN: ${PATCHWORK_PUBLIC_ORIGIN:-https://patchwork.subcult.tv}
+            API_DATA_SOURCE: ${API_DATA_SOURCE:-postgres}
+            API_DATABASE_URL: postgresql://patchwork:${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}@patchwork-postgres:5432/patchwork
+        networks:
+            internal:
+            web:
+                aliases:
+                    - patchwork-api
+                    - patchwork-stitch
+
+    patchwork-spool:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: indexer-runtime
+        container_name: patchwork-spool
+        restart: unless-stopped
+        environment:
+            NODE_ENV: production
+            LOG_LEVEL: ${LOG_LEVEL:-info}
+            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:-did:example:patchwork}
+            ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            INDEXER_PORT: 4100
+            INDEXER_FIREHOSE_URL: ${INDEXER_FIREHOSE_URL:-wss://bsky.network}
+        networks:
+            internal:
+            web:
+                aliases:
+                    - patchwork-spool
+                    - patchwork-quilt
+
+    patchwork-thimble:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: moderation-runtime
+        container_name: patchwork-thimble
+        restart: unless-stopped
+        environment:
+            NODE_ENV: production
+            LOG_LEVEL: ${LOG_LEVEL:-info}
+            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:-did:example:patchwork}
+            ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            MODERATION_PORT: 4200
+            MODERATION_WORKER_CONCURRENCY: ${MODERATION_WORKER_CONCURRENCY:-2}
+        networks:
+            internal:
+            web:
+                aliases:
+                    - patchwork-thimble
+
+    patchwork-web:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: web-runtime
+            args:
+                VITE_APP_NAME: Patchwork
+                VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://patchwork.subcult.tv/api}
+        container_name: patchwork-web
+        restart: unless-stopped
+        depends_on:
+            - patchwork-api
+        networks:
+            web:
+                aliases:
+                    - patchwork-web
+
+volumes:
+    patchwork-postgres-data:
+
+networks:
+    internal:
+        driver: bridge
+    web:
+        external: true

@@ -1,0 +1,45 @@
+{
+    "lexicon": 1,
+    "id": "app.patchwork.volunteer.profile",
+    "revision": "1.1.0",
+    "description": "Volunteer profile and availability metadata.",
+    "defs": {
+        "main": {
+            "type": "record",
+            "key": "tid",
+            "record": {
+                "type": "object",
+                "required": [
+                    "$type",
+                    "version",
+                    "displayName",
+                    "capabilities",
+                    "availability",
+                    "contactPreference",
+                    "createdAt"
+                ],
+                "properties": {
+                    "$type": {
+                        "type": "string",
+                        "const": "app.patchwork.volunteer.profile"
+                    },
+                    "version": {
+                        "type": "string",
+                        "enum": ["1.0.0", "1.1.0"]
+                    },
+                    "displayName": { "type": "string", "maxLength": 80 },
+                    "capabilities": { "type": "array" },
+                    "availability": { "type": "string" },
+                    "contactPreference": { "type": "string" },
+                    "skills": { "type": "array" },
+                    "availabilityWindows": { "type": "array" },
+                    "verificationCheckpoints": { "type": "object" },
+                    "matchingPreferences": { "type": "object" },
+                    "notes": { "type": "string", "maxLength": 500 },
+                    "createdAt": { "type": "string", "format": "datetime" },
+                    "updatedAt": { "type": "string", "format": "datetime" }
+                }
+            }
+        }
+    }
+}

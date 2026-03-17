@@ -1,0 +1,35 @@
+{
+    "lexicon": 1,
+    "id": "app.patchwork.moderation.report",
+    "revision": "1.0.0",
+    "description": "Moderation report record for posts/chats/resources.",
+    "defs": {
+        "main": {
+            "type": "record",
+            "key": "tid",
+            "record": {
+                "type": "object",
+                "required": [
+                    "$type",
+                    "version",
+                    "subjectUri",
+                    "reporterDid",
+                    "reason",
+                    "createdAt"
+                ],
+                "properties": {
+                    "$type": {
+                        "type": "string",
+                        "const": "app.patchwork.moderation.report"
+                    },
+                    "version": { "type": "string", "const": "1.0.0" },
+                    "subjectUri": { "type": "string" },
+                    "reporterDid": { "type": "string" },
+                    "reason": { "type": "string" },
+                    "details": { "type": "string", "maxLength": 1000 },
+                    "createdAt": { "type": "string", "format": "datetime" }
+                }
+            }
+        }
+    }
+}

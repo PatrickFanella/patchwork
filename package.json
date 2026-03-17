@@ -1,0 +1,47 @@
+{
+    "name": "patchwork",
+    "version": "0.1.0",
+    "private": true,
+    "workspaces": [
+        "apps/*",
+        "services/*",
+        "packages/*"
+    ],
+    "engines": {
+        "node": ">=20.19.0"
+    },
+    "scripts": {
+        "dev:web": "npm run dev -w @patchwork/web",
+        "dev:api": "npm run dev -w @patchwork/api",
+        "dev:api:postgres": "API_DATA_SOURCE=postgres npm run dev -w @patchwork/api",
+        "dev:indexer": "npm run dev -w @patchwork/indexer",
+        "dev:moderation": "npm run dev -w @patchwork/moderation-worker",
+        "db:up": "docker compose -f docker-compose.postgres.yml up -d postgres",
+        "db:down": "docker compose -f docker-compose.postgres.yml down",
+        "db:migrate": "npm run db:migrate -w @patchwork/api",
+        "db:seed": "npm run db:seed -w @patchwork/api",
+        "build": "npm run build --workspaces --if-present",
+        "lint": "npm run lint --workspaces --if-present",
+        "typecheck": "npm run typecheck --workspaces --if-present",
+        "test": "npm run test --workspaces --if-present",
+        "test:phase7": "npm run test:phase7 --workspaces --if-present",
+        "test:phase8": "npm run test:phase8 --workspaces --if-present",
+        "test:phase8-e2e": "npm run test:phase8-e2e --workspaces --if-present",
+        "check": "npm run lint && npm run typecheck && npm run test"
+    },
+    "devDependencies": {
+        "@tailwindcss/vite": "4.2.1",
+        "@types/node": "22.19.12",
+        "@types/react": "19.2.14",
+        "@types/react-dom": "19.2.3",
+        "@vitejs/plugin-react": "5.1.4",
+        "react": "19.2.4",
+        "react-dom": "19.2.4",
+        "tailwindcss": "4.2.1",
+        "tsx": "4.21.0",
+        "typescript": "5.9.3",
+        "vite": "7.3.1",
+        "vitest": "3.2.4",
+        "zod": "3.25.76"
+    }
+}

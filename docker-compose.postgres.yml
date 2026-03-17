@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: patchwork-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: patchwork
+      POSTGRES_USER: patchwork
+      # DEV ONLY — safe default for local development; never use in production.
+      POSTGRES_PASSWORD: ${PATCHWORK_POSTGRES_PASSWORD:-patchwork}
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U patchwork -d patchwork']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - patchwork-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  patchwork-postgres-data:

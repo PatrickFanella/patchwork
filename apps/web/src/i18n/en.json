@@ -1,0 +1,234 @@
+{
+    "app": {
+        "title": "Patchwork",
+        "skipToContent": "Skip to main content"
+    },
+    "nav": {
+        "ariaLabel": "Primary flows",
+        "home": "Home",
+        "map": "Map",
+        "feed": "Feed",
+        "resources": "Resources",
+        "volunteer": "Volunteer",
+        "posting": "Posting",
+        "chat": "Chat"
+    },
+    "dashboard": {
+        "phaseLabel": "Mutual aid shell \u00b7 phase 8",
+        "safetyBadge": "Safety guardrails active",
+        "heading": "{{appTitle}}",
+        "description": "Coordinate urgent neighborhood support with map, feed, posting, resource, chat, and volunteer workflows in one privacy-first interface.",
+        "openMapTriage": "Open map triage",
+        "openPostingForm": "Open posting form",
+        "openChatHandoff": "Open chat handoff",
+        "liveResponsePosture": "Live response posture",
+        "requestsTriaged24h": "Requests triaged (24h)",
+        "requestsTriaged24hValue": "127",
+        "medianResponse": "Median response",
+        "medianResponseValue": "11m",
+        "verifiedVolunteers": "Verified volunteers",
+        "verifiedVolunteersValue": "42",
+        "discoveryShellTitle": "Discovery shell",
+        "discoveryShellDescription": "Search support requests by category and route to the safest nearby response path.",
+        "searchRequests": "Search requests",
+        "findNearby": "Find nearby",
+        "createPost": "Create post",
+        "openLiveFeed": "Open live feed",
+        "serviceBoundariesTitle": "Service boundaries online",
+        "apiShellAt": "API shell at",
+        "indexerShellAt": "Indexer shell at",
+        "moderationWorkerShellAt": "Moderation worker shell at",
+        "architectureDocs": "architecture docs",
+        "architectureDocsDescription": "See {{link}} for bounded contexts and ADR rationale.",
+        "quickRouteHandoffsTitle": "Quick route handoffs",
+        "openSection": "Open {{title}}"
+    },
+    "discovery": {
+        "title": "Discovery filters",
+        "searchText": "Search text",
+        "searchPlaceholder": "Search title, description, or area",
+        "feedTab": "Feed tab",
+        "category": "Category",
+        "status": "Status",
+        "minimumUrgency": "Minimum urgency",
+        "radiusMeters": "Radius (m)",
+        "centerLat": "Center lat",
+        "centerLng": "Center lng",
+        "resetFilters": "Reset filters",
+        "filtersPersist": "Filters persist in the URL for sharable triage context."
+    },
+    "map": {
+        "heading": "Map triage",
+        "description": "Approximate-area clustering with privacy-safe radii and direct handoff actions.",
+        "dbBackedApi": "DB-backed API",
+        "fallbackDataset": "Fallback dataset",
+        "apiSyncIssue": "API sync issue: {{message}}",
+        "clusterOverviewTitle": "Cluster overview",
+        "noClusters": "No clusters for current filters. Try widening radius or clearing category/status chips.",
+        "clusterRequests": "{{count}} requests \u00b7 Max urgency {{urgency}}",
+        "requestMarkersTitle": "Request markers",
+        "noRequests": "No requests in selected area. Set a wider radius or switch to latest feed tab.",
+        "urgencyLabel": "Urgency {{level}}",
+        "openTriageDrawer": "Open triage drawer",
+        "mapDetailDrawerTitle": "Map detail drawer",
+        "closeDrawer": "Close drawer",
+        "requestsInArea": "{{count}} requests in approximate area"
+    },
+    "feed": {
+        "heading": "Feed operations",
+        "description": "Manage lifecycle transitions and launch handoffs directly from feed cards.",
+        "liveRequestFeedTitle": "Live request feed",
+        "noRequestsMatch": "No requests match the current filters. Reset filters or publish a new request.",
+        "resetFeedFilters": "Reset feed filters",
+        "createRequest": "Create request",
+        "contactHelper": "Contact helper",
+        "escalateUrgency": "Escalate urgency",
+        "closeRequest": "Close request",
+        "updatedAt": "Updated {{date}}"
+    },
+    "posting": {
+        "heading": "Create request",
+        "description": "Shared posting form with taxonomy, accessibility tags, and geoprivacy enforcement.",
+        "formTitle": "Posting form",
+        "titleLabel": "Title",
+        "descriptionLabel": "Description",
+        "categoryLabel": "Category",
+        "urgencyLabel": "Urgency",
+        "accessibilityTags": "Accessibility tags (comma-separated)",
+        "latitudeLabel": "Latitude",
+        "longitudeLabel": "Longitude",
+        "precisionMetersLabel": "Precision meters",
+        "timeWindowStart": "Time window start",
+        "timeWindowEnd": "Time window end",
+        "publishing": "Publishing\u2026",
+        "publishRequest": "Publish request",
+        "openFeed": "Open feed",
+        "unableToPresist": "Unable to persist request: {{error}}",
+        "createdPost": "Created post {{id}} and persisted via API/DB."
+    },
+    "resources": {
+        "heading": "Resource directory",
+        "description": "Overlay verified services on map context and launch intake handoffs quickly.",
+        "directoryFiltersTitle": "Directory filters",
+        "allCategories": "All categories",
+        "overlayCardsTitle": "Overlay + cards",
+        "tryBroadening": "Try broadening radius/category filters or switching aid category.",
+        "clearDirectoryCategory": "Clear directory category",
+        "areaPending": "Area pending",
+        "hoursUnavailable": "Hours unavailable",
+        "eligibilityUnavailable": "Eligibility details unavailable.",
+        "openDetails": "Open details",
+        "startIntake": "Start intake",
+        "resourceDetailTitle": "Resource detail",
+        "close": "Close"
+    },
+    "volunteer": {
+        "heading": "Volunteer onboarding",
+        "description": "Capture capabilities, availability, and verification checkpoints for safe matching.",
+        "profileDraftTitle": "Volunteer profile draft",
+        "didLabel": "DID",
+        "displayNameLabel": "Display name",
+        "availabilityLabel": "Availability",
+        "contactPreferenceLabel": "Contact preference",
+        "capabilitiesLabel": "Capabilities",
+        "skillsLabel": "Skills (comma-separated)",
+        "availabilityWindowsLabel": "Availability windows",
+        "preferredCategoriesLabel": "Preferred categories",
+        "preferredUrgenciesLabel": "Preferred urgencies",
+        "maxDistanceLabel": "Max distance (km)",
+        "acceptLateNight": "Accept late-night handoffs",
+        "identityCheck": "Identity check",
+        "safetyTraining": "Safety training",
+        "communityReference": "Community reference",
+        "saveProfile": "Save volunteer profile",
+        "approved": "Approved {{count}}",
+        "pending": "Pending {{count}}",
+        "rejected": "Rejected {{count}}",
+        "fullyVerified": "Fully verified"
+    },
+    "chat": {
+        "heading": "Chat handoff",
+        "description": "Post-linked 1:1 initiation with permission checks and recipient-capability fallback handling.",
+        "launchControlsTitle": "Launch controls",
+        "initiatorHasPermission": "Initiator has permission",
+        "forceCapabilityFallback": "Force capability fallback",
+        "initiatorDid": "Initiator DID: {{did}}",
+        "pendingIntent": "Pending intent \u00b7 {{title}}",
+        "recipientSource": "Recipient: {{recipient}} \u00b7 Source: {{source}}",
+        "noPendingIntent": "No pending chat intent. Start from Map or Feed \"Contact helper\".",
+        "launchHandoffChat": "Launch handoff chat",
+        "resetState": "Reset state",
+        "launchStatusTitle": "Launch status",
+        "state": "State: {{status}}"
+    },
+    "shellSections": {
+        "map": {
+            "title": "Map",
+            "description": "Clustered, approximate-area discovery with quick triage."
+        },
+        "feed": {
+            "title": "Feed",
+            "description": "Latest + nearby request stream with lifecycle actions."
+        },
+        "resources": {
+            "title": "Resources",
+            "description": "Directory overlays and partner resources."
+        },
+        "volunteer": {
+            "title": "Volunteer",
+            "description": "Volunteer onboarding and profile management."
+        },
+        "legalTerms": {
+            "title": "Terms of Service",
+            "description": "Platform terms of service and user agreement."
+        },
+        "legalPrivacy": {
+            "title": "Privacy Policy",
+            "description": "How we collect, use, and protect your data."
+        },
+        "legalCommunityGuidelines": {
+            "title": "Community Guidelines",
+            "description": "Expected behaviour, prohibited content, and enforcement."
+        }
+    },
+    "categories": {
+        "food": "Food",
+        "shelter": "Shelter",
+        "medical": "Medical",
+        "transport": "Transport",
+        "legal": "Legal",
+        "mental-health": "Mental Health",
+        "childcare": "Childcare",
+        "other": "Other",
+        "food-bank": "Food Bank",
+        "clinic": "Clinic",
+        "legal-aid": "Legal Aid",
+        "hotline": "Hotline"
+    },
+    "urgency": {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+    },
+    "status": {
+        "open": "Open",
+        "in-progress": "In progress",
+        "resolved": "Resolved",
+        "closed": "Closed"
+    },
+    "formatting": {
+        "dateShort": "{{date, shortDate}}",
+        "dateLong": "{{date, longDate}}",
+        "number": "{{value, number}}",
+        "currency": "{{value, currency}}"
+    },
+    "a11y": {
+        "languageSwitcher": "Language",
+        "currentLanguage": "Current language: {{language}}",
+        "loadingContent": "Loading content",
+        "navigationLandmark": "Primary navigation",
+        "mainContent": "Main content",
+        "filterResults": "Filter results updated"
+    }
+}

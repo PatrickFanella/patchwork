@@ -1,0 +1,22 @@
+{
+    "$type": "app.patchwork.volunteer.profile",
+    "version": "1.1.0",
+    "displayName": "Alex Rivera",
+    "capabilities": ["transport", "food-delivery"],
+    "availability": "within-24h",
+    "contactPreference": "chat-or-call",
+    "skills": ["route planning", "meal delivery"],
+    "availabilityWindows": ["weekday_evenings", "weekend_mornings"],
+    "verificationCheckpoints": {
+        "identityCheck": "approved",
+        "safetyTraining": "approved",
+        "communityReference": "pending"
+    },
+    "matchingPreferences": {
+        "preferredCategories": ["food", "transport"],
+        "preferredUrgencies": ["medium", "high", "critical"],
+        "maxDistanceKm": 18,
+        "acceptsLateNight": true
+    },
+    "createdAt": "2026-02-26T10:30:00.000Z"
+}

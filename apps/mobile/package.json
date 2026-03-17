@@ -1,0 +1,18 @@
+{
+    "name": "@patchwork/mobile",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "lint": "npm run typecheck",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@patchwork/shared": "file:../../packages/shared",
+        "zod": "3.25.76"
+    }
+}

@@ -1,0 +1,18 @@
+{
+    "name": "@patchwork/indexer",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "npm run typecheck",
+        "start": "tsx src/index.ts",
+        "lint": "npm run typecheck",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "test": "vitest run",
+        "test:phase8": "vitest run src/phase8.test.ts"
+    },
+    "dependencies": {
+        "@patchwork/shared": "0.1.0"
+    }
+}

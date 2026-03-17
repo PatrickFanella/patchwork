@@ -1,0 +1,49 @@
+{
+    "lexicon": 1,
+    "id": "app.patchwork.directory.resource",
+    "revision": "1.1.0",
+    "description": "Resource directory listing record.",
+    "defs": {
+        "main": {
+            "type": "record",
+            "key": "tid",
+            "record": {
+                "type": "object",
+                "required": [
+                    "$type",
+                    "version",
+                    "name",
+                    "category",
+                    "serviceArea",
+                    "contact",
+                    "verificationStatus",
+                    "createdAt"
+                ],
+                "properties": {
+                    "$type": {
+                        "type": "string",
+                        "const": "app.patchwork.directory.resource"
+                    },
+                    "version": {
+                        "type": "string",
+                        "enum": ["1.0.0", "1.1.0"]
+                    },
+                    "name": { "type": "string", "maxLength": 120 },
+                    "category": { "type": "string" },
+                    "serviceArea": { "type": "string", "maxLength": 120 },
+                    "contact": { "type": "object" },
+                    "verificationStatus": { "type": "string" },
+                    "location": { "type": "object" },
+                    "openHours": { "type": "string", "maxLength": 200 },
+                    "eligibilityNotes": {
+                        "type": "string",
+                        "maxLength": 500
+                    },
+                    "operationalStatus": { "type": "string" },
+                    "createdAt": { "type": "string", "format": "datetime" },
+                    "updatedAt": { "type": "string", "format": "datetime" }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "$type": "app.patchwork.volunteer.profile",
+    "version": "1.0.0",
+    "displayName": "Alex Rivera",
+    "capabilities": [],
+    "availability": "within-24h",
+    "contactPreference": "chat-or-call",
+    "createdAt": "2026-02-26T10:30:00.000Z"
+}

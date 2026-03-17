@@ -1,0 +1,41 @@
+{
+    "lexicon": 1,
+    "id": "app.patchwork.aid.post",
+    "revision": "1.0.0",
+    "description": "Aid request/offer post record.",
+    "defs": {
+        "main": {
+            "type": "record",
+            "key": "tid",
+            "record": {
+                "type": "object",
+                "required": [
+                    "$type",
+                    "version",
+                    "title",
+                    "description",
+                    "category",
+                    "urgency",
+                    "status",
+                    "location",
+                    "createdAt"
+                ],
+                "properties": {
+                    "$type": {
+                        "type": "string",
+                        "const": "app.patchwork.aid.post"
+                    },
+                    "version": { "type": "string", "const": "1.0.0" },
+                    "title": { "type": "string", "maxLength": 140 },
+                    "description": { "type": "string", "maxLength": 5000 },
+                    "category": { "type": "string" },
+                    "urgency": { "type": "string" },
+                    "status": { "type": "string" },
+                    "location": { "type": "object" },
+                    "createdAt": { "type": "string", "format": "datetime" },
+                    "updatedAt": { "type": "string", "format": "datetime" }
+                }
+            }
+        }
+    }
+}
