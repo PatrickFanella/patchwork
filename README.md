@@ -1,6 +1,6 @@
 # Patchwork
 
-Patchwork is a full-stack mutual aid platform built on the AT Protocol. I designed it as a portfolio project to demonstrate practical product engineering across frontend, backend, data flow, moderation, testing, and deployment.
+Patchwork is a full-stack mutual aid platform built on the AT Protocol. It serves as a portfolio project that demonstrates practical product engineering across frontend, backend, data flow, moderation, testing, and deployment.
 
 ## What this project demonstrates
 
@@ -20,7 +20,7 @@ Patchwork is a full-stack mutual aid platform built on the AT Protocol. I design
 
 ## Why it matters
 
-This project highlights the kind of engineering work I enjoy most: building polished user-facing experiences, backing them with well-structured services, and supporting them with strong testing and operational discipline. It reflects hands-on experience with modern JavaScript tooling, systems thinking, and product-focused delivery.
+This project demonstrates building polished user-facing experiences, backing them with well-structured services, and supporting them with strong testing and operational discipline. It reflects hands-on experience with modern JavaScript tooling, systems thinking, and product-focused delivery.
 
 ## Repository overview
 
