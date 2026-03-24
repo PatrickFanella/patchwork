@@ -102,7 +102,7 @@ jobs:
                     -t patchwork-web:ci .
 
             - name: Trivy container scan — API
-              uses: aquasecurity/trivy-action@0.28.0
+              uses: aquasecurity/trivy-action@0.35.0
               with:
                   image-ref: patchwork-api:ci
                   format: table
@@ -111,7 +111,7 @@ jobs:
                   output: trivy-api-report.txt
 
             - name: Trivy container scan — Web
-              uses: aquasecurity/trivy-action@0.28.0
+              uses: aquasecurity/trivy-action@0.35.0
               if: success() || failure()
               with:
                   image-ref: patchwork-web:ci
