@@ -61,11 +61,11 @@
 - Rewrite: `docs/test-traceability.md`
 - Modify: `docs/operations/evidence/quality-review.md`
 
-- [ ] Classify every suite as domain unit, fixture service, database integration, HTTP integration, browser E2E, or external protocol evidence.
-- [ ] Map current AT OAuth, record, durability, block/report, lifecycle, and ingestion behavior.
-- [ ] State which layers run locally and in each CI job.
-- [ ] Replace aggregate-count readiness claims with per-layer results.
-- [ ] Commit as `docs(test): rebuild layered traceability map`.
+- [x] Classify every suite as domain unit, fixture service, database integration, HTTP integration, browser E2E, or external protocol evidence.
+- [x] Map current AT OAuth, record, durability, block/report, lifecycle, and ingestion behavior.
+- [x] State which layers run locally and in each CI job.
+- [x] Replace aggregate-count readiness claims with per-layer results.
+- [x] Commit as `docs(test): rebuild layered traceability map`.
 
 ### Task 5: Consolidate duplicate mandatory gates and verify the overhaul
 

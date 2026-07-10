@@ -4,7 +4,7 @@ Reviewed: 2026-07-10
 
 ## Summary
 
-- Verdict: **With fixes**
+- Verdict: **Overhaul in progress; principal classification gaps fixed**
 - Scope: the complete local test matrix at commit `afe05e9`, plus test-suite structure, CI wiring, and traceability documentation.
 - Result after repairing one test-harness defect: **1,994 Vitest tests, 9 contract-path tests, and 33 Chromium tests passed**.
 - Inventory: 116 test/spec files containing about 29,854 lines, compared with about 45,317 lines of non-test TypeScript/TSX.
@@ -23,7 +23,7 @@ Reviewed: 2026-07-10
 | Workspace Vitest suite with PostgreSQL enabled | 1,994 passed, 0 skipped | Included OAuth persistence and core operational-state integration tests. |
 | Contract-path Vitest suite | 9 passed | Imports API service factories directly; it does not exercise HTTP, process startup, or PostgreSQL. |
 | Playwright Chromium accessibility suite | 33 passed | Initial run was blocked by a missing browser binary; after installing the declared browser, one Node/page-context test defect was found and repaired. |
-| Coverage instrumentation | Not available | No `@vitest/coverage-v8` dependency, coverage script, thresholds, or CI coverage artifact exists. |
+| Coverage instrumentation | Added during overhaul | V8 emits text, JSON summary, and LCOV reports; CI uploads the artifact without an arbitrary threshold. |
 | Live PDS exercise | Not rerun | The two-account CRUD evidence remains manual and redacted; it is not part of the automated suite. |
 
 ## Strengths
@@ -34,7 +34,9 @@ Reviewed: 2026-07-10
 - Browser coverage checks keyboard navigation, landmarks, form labels, focus behavior, ARIA semantics, and route-level image alternatives.
 - The test-harness failure was distinct from product behavior and is now fixed in `apps/web/e2e/accessibility.spec.ts`.
 
-## Issues
+## Original issues
+
+The following findings triggered the overhaul. Items 1-3 and 5 are now addressed; item 4 is mitigated by layered reporting and remains an ongoing consolidation concern.
 
 ### Important
 
@@ -82,4 +84,12 @@ Reviewed: 2026-07-10
 4. Add non-blocking V8 coverage reporting.
 5. Consolidate redundant phase/fixture tests only after coverage and mutation evidence shows they add no distinct protection.
 
-Roadmap implementation should remain paused until the first three items are addressed or consciously deferred.
+## Overhaul status
+
+- PostgreSQL tests now have a dedicated command and mandatory CI environment.
+- A real Node HTTP/PostgreSQL lifecycle test now covers cookies, identity, restart persistence, retry idempotency, and ownership denial.
+- The old direct-service suite is explicitly classified as service integration rather than E2E.
+- V8 coverage is installed and uploaded without an arbitrary threshold. Initial coverage is 80.74% statements and 67.38% branches.
+- `docs/test-traceability.md` now reports evidence by execution layer.
+
+The remaining overhaul item is removal of duplicate mandatory phase gates followed by a complete matrix rerun.

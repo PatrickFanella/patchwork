@@ -1,269 +1,117 @@
-# Requirement-to-Test Traceability Map
+# Patchwork layered test traceability
 
-This document maps each platform requirement to the test suites that cover it.
-It serves as the Phase 8 (P8.1) traceability artifact for the automated test matrix.
+Updated: 2026-07-10
 
-## Coverage Areas
+This document describes what each test layer actually executes. Test counts are reported by layer because fixture-heavy unit coverage is not equivalent to PostgreSQL, HTTP, browser, or live AT Protocol evidence.
 
-| Area | Requirement IDs | Test files |
-|---|---|---|
-| Schema validation | P2.1 | `packages/at-lexicons/src/lexicons.test.ts` · `services/api/src/phase8.test.ts` · `services/indexer/src/phase8.test.ts` |
-| Identity / DID auth | P2.2 | `packages/shared/src/identity.test.ts` |
-| Record CRUD + tombstone | P2.3, P2.4 | `packages/shared/src/records.test.ts` |
-| Firehose ingestion | P3.1 | `packages/shared/src/firehose.test.ts` · `services/indexer/src/phase3.test.ts` · `services/indexer/src/phase8.test.ts` |
-| Discovery index | P3.2, P3.3 | `packages/shared/src/discovery.test.ts` |
-| Ranking pipeline | P3.4 | `packages/shared/src/ranking.test.ts` · `services/api/src/phase8.test.ts` |
-| Query API | P3.5 | `services/api/src/phase3.test.ts` |
-| Chat routing | P5 | `packages/shared/src/messaging.test.ts` · `services/api/src/phase5.test.ts` · `services/api/src/phase8.test.ts` |
-| Resource directory + volunteer onboarding | P6 | `packages/shared/src/volunteer-onboarding.test.ts` · `services/api/src/phase6.test.ts` |
-| Moderation queue + policy | P7.1 | `packages/shared/src/moderation.test.ts` · `services/moderation-worker/src/phase7.test.ts` · `services/moderation-worker/src/phase8.test.ts` |
-| Privacy / geo redaction | P7.2 | `packages/shared/src/privacy.test.ts` · `services/api/src/phase8.test.ts` · `services/moderation-worker/src/phase8.test.ts` |
-| Anti-spam hardening | P7.3 | `services/api/src/phase7.test.ts` |
-| Service contracts | P8.1 | `packages/shared/src/contracts.test.ts` · `services/api/src/phase8.test.ts` · `services/indexer/src/phase8.test.ts` · `services/moderation-worker/src/phase8.test.ts` |
-| Runtime startup guards | W2 #98 | `packages/shared/src/config.test.ts` |
-| SLI metrics | W2 #104 | `packages/shared/src/alerting.test.ts` |
-| Rate limiting / CORS | W2 #103 | `services/api/src/rate-limiter.test.ts` · `services/api/src/cors.test.ts` |
-| Moderation console | W2 #112 | `services/api/src/lifecycle-service.test.ts` |
-| Unified inbox | W2 #118 | `services/api/src/inbox-service.test.ts` |
-| Feedback + reporting | W2 #130 | `services/api/src/feedback-service.test.ts` |
-| Offline sync | W2 #129 | `packages/shared/src/offline-sync.test.ts` |
-| E2E contract path | W3 #99 | `apps/web/e2e/request-lifecycle.test.ts` · `apps/web/e2e/accessibility.spec.ts` |
+## Test layers
 
----
+| Layer | Purpose | Command | External dependency | CI location |
+| --- | --- | --- | --- | --- |
+| Domain/unit | Pure rules, validators, state machines, presentation helpers | `npm test` | None | `quality-gates` |
+| Fixture service integration | Multiple in-process services using deterministic fixtures | `npm run test:integration:service -w @patchwork/web` | None | `e2e-production` |
+| PostgreSQL integration | Migrations, persistence, restart, rollback, idempotency | `npm run test:integration:postgres -w @patchwork/api` | PostgreSQL 16 and `TEST_DATABASE_URL` | `e2e-production` |
+| HTTP/PostgreSQL integration | Real Node HTTP server, cookies, JSON boundary, durable lifecycle state | Included in API PostgreSQL integration | PostgreSQL 16 | `e2e-production` |
+| Browser E2E | Rendered web application, focus, keyboard, landmarks, ARIA | `npm run test:e2e -w @patchwork/web` | Playwright Chromium | `quality-gates` |
+| Diagnostic coverage | Finds unexecuted production code; no arbitrary global threshold | `npm run test:coverage` | None | `quality-gates`, uploaded artifact |
+| External AT protocol | Disposable accounts against the staging PDS | Manual controlled exercise | Home-network staging PDS | Redacted evidence only |
 
-## Detailed Mapping
+## Current verified baseline
 
-### P2.1 – AT Protocol lexicon schemas
+| Layer | Result |
+| --- | --- |
+| Domain/unit with database variables enabled | 1,994 passed, 0 skipped |
+| Direct lifecycle service integration | 9 passed |
+| PostgreSQL integration after HTTP test addition | 11 passed |
+| Browser Chromium accessibility | 33 passed |
+| Coverage | 80.74% statements, 67.38% branches, 76.95% functions, 81.39% lines |
+| External AT protocol | Two-account create/read/update/close/delete and ownership denial verified manually |
 
-| Requirement | Test | File |
-|---|---|---|
-| All v1 lexicon documents defined | `defines all required v1 lexicon documents` | `packages/at-lexicons/src/lexicons.test.ts` |
-| Valid fixtures pass validation | `accepts valid fixtures for each record type` | `packages/at-lexicons/src/lexicons.test.ts` |
-| Invalid fixtures are rejected | `rejects invalid fixtures for each record type` | `packages/at-lexicons/src/lexicons.test.ts` |
-| Phase 8 aid post fixture validates | `validates phase 8 aid post fixture against lexicon schema` | `services/api/src/phase8.test.ts` |
-| Phase 8 directory fixture validates | `phase 8 directory resource fixture passes schema validation` | `services/indexer/src/phase8.test.ts` |
+Counts can change as tests are consolidated. Readiness depends on covered boundaries, not the aggregate.
 
-### P2.2 – DID auth / identity
+## Critical behavior matrix
 
-| Requirement | Test | File |
-|---|---|---|
-| Login with handle creates session | `loginWithHandle creates a new session with JWT tokens` | `packages/shared/src/identity.test.ts` |
-| Handle resolution failure | `failed handle resolution returns HANDLE_RESOLUTION_FAILED` | `packages/shared/src/identity.test.ts` |
-| Token refresh | `refreshIfNeeded refreshes tokens before expiry` | `packages/shared/src/identity.test.ts` |
-| Expired session error | `expired refresh token returns SESSION_EXPIRED` | `packages/shared/src/identity.test.ts` |
+| Capability | Domain/unit | Fixture service | PostgreSQL | HTTP | Browser | External AT | Remaining gap |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| AT OAuth adapter | `packages/at-client/src/oauth-client.test.ts` | — | OAuth state/session restart tests | Auth route unit/service tests | Auth UX models only | OAuth metadata verified; browser callback not yet demonstrated | Real browser OAuth callback |
+| Aid-post repository CRUD | Lexicon and record-client tests | Command service tests | Session persistence only | Command route tests | Posting form and API-client tests | Two-account lifecycle evidence | Automated disposable-PDS job |
+| AT wire encoding | Integer coordinate adapter tests | — | — | — | — | Live staging PDS accepted records | Other custom record families |
+| Lifecycle rules | `packages/shared/src/lifecycle.test.ts` | `lifecycle-service.integration.test.ts` | Restart, retry, rollback, audit | `lifecycle-transition-handler.postgres.test.ts` | Lifecycle UI is fixture-oriented | — | Durable assignment/handoff and query timeline |
+| Blocks and reports | Service validation tests | Older chat safety fixtures | Repository retention/deletion tests | Authenticated route wiring lacks full HTTP test | Chat safety UX fixtures | — | Cross-request enforcement |
+| Discovery | Firehose, ranking, discovery rule tests | Phase fixture pipeline | Discovery events persist | Query service tests do not use live ingestion | Map/feed UI and accessibility | — | Live stream to projection database |
+| Moderation | Policy and queue state tests | Worker fixture services | Schema exists in API DB only | — | Console UX fixtures | — | PostgreSQL worker stores and crash recovery |
+| Privacy | Geo floor and redaction tests | Fixture response checks | Audit payload redaction | HTTP boundary avoids actor override | Accessibility only | Redacted lifecycle evidence | Retention enforcement jobs |
 
-### P2.3 / P2.4 – Record CRUD + tombstone
+## Suite ownership and classification
 
-| Requirement | Test | File |
-|---|---|---|
-| Create record | `createRecord validates payload and returns active state` | `packages/shared/src/records.test.ts` |
-| Update with status transition | `updateRecord enforces valid aid-post status transitions` | `packages/shared/src/records.test.ts` |
-| Delete emits tombstone | `deleteRecord emits a deterministic tombstone event` | `packages/shared/src/records.test.ts` |
-| Tombstone prevents resurrection | `tombstoned record cannot be resurrected` | `packages/shared/src/records.test.ts` |
-| Event round-trip | `mutation events serialise and deserialise deterministically` | `packages/shared/src/records.test.ts` |
+### Domain and unit suites
 
-### P3.1 – Firehose ingestion
+- `packages/shared/src/*.test.ts`: domain rules and deterministic models. These provide most of the raw test count.
+- `packages/at-lexicons/src/lexicons.test.ts`: local JSON lexicon loading and validation.
+- `packages/at-client/src/*.test.ts`: official AT SDK adapter behavior and stable error mapping.
+- `apps/web/src/*.test.ts(x)`: UX models, API client parsing, accessibility helpers, and component rendering.
+- `apps/mobile/src/*.test.ts`: mobile API, navigation, push, and offline behavior.
+- `services/*/src/*.test.ts`: service behavior, including many fixture-backed models.
 
-| Requirement | Test | File |
-|---|---|---|
-| Process fixture stream | `ingest processes fixture streams deterministically` | `packages/shared/src/firehose.test.ts` |
-| Replay determinism | `replay returns identical results across reruns` | `packages/shared/src/firehose.test.ts` |
-| Malformed events classified | `ingest classifies malformed events` | `packages/shared/src/firehose.test.ts` |
-| Normalise AT URI | `normalizeFirehoseEvent extracts author DID from AT URI` | `packages/shared/src/firehose.test.ts` |
-| Pipeline ingest stats | `ingests fixture stream and updates index stats` | `services/indexer/src/phase3.test.ts` |
-| Pipeline replay | `supports deterministic replay for fixture streams` | `services/indexer/src/phase3.test.ts` |
-| Phase 8 ingest – zero failures | `ingests phase 8 fixture events with zero failures` | `services/indexer/src/phase8.test.ts` |
-| Phase 8 ingest – index stats | `updates index stats accurately after phase 8 ingestion` | `services/indexer/src/phase8.test.ts` |
-| Phase 8 replay determinism | `reproduces identical metrics on deterministic replay` | `services/indexer/src/phase8.test.ts` |
+### Direct service integration
 
-### P3.2 / P3.3 – Discovery index
+`apps/web/e2e/lifecycle-service.integration.test.ts` imports API service factories directly. It verifies cross-service lifecycle and feedback behavior, but deliberately does not claim HTTP, authentication, process, or database coverage.
 
-| Requirement | Test | File |
-|---|---|---|
-| Create/update/delete lifecycle | `DiscoveryIndexStore handles create/update/delete lifecycle` | `packages/shared/src/discovery.test.ts` |
-| Map query hides exact coords | `map queries never expose exact coordinates` | `packages/shared/src/discovery.test.ts` |
-| Stable pagination | `queryFeed returns deterministic pagination` | `packages/shared/src/discovery.test.ts` |
-| Directory filters | `queryDirectory applies category and status filters` | `packages/shared/src/discovery.test.ts` |
+### PostgreSQL and HTTP integration
 
-### P3.4 – Ranking
+The mandatory API integration command runs:
 
-| Requirement | Test | File |
-|---|---|---|
-| Distance band scoring | `scores distance bands deterministically` | `packages/shared/src/ranking.test.ts` |
-| Combined score | `combines distance, recency, and trust into a stable score` | `packages/shared/src/ranking.test.ts` |
-| Tie-breaking | `keeps tie ordering deterministic using updatedAt then URI` | `packages/shared/src/ranking.test.ts` |
-| Phase 8 ordering | `ranks phase 8 cards deterministically with closest/freshest first` | `services/api/src/phase8.test.ts` |
-| Score stability across calls | `produces stable scores across independent calls` | `services/api/src/phase8.test.ts` |
+- `services/api/src/auth/session-repository.postgres.test.ts`
+- `services/api/src/db/core-operational-state.test.ts`
+- `services/api/src/http/lifecycle-transition-handler.postgres.test.ts`
 
-### P5 – Chat routing
+These tests require `TEST_DATABASE_URL`. They verify encrypted OAuth persistence, browser-session revocation, migrations, restart survival, command idempotency, transaction rollback, audit redaction, subject deletion, HTTP parsing, session-derived identity, ownership denial, and server restart/readback.
 
-| Requirement | Test | File |
-|---|---|---|
-| Post-linked chat context | `createPostLinkedChatContext creates deterministic conversation URI` | `packages/shared/src/messaging.test.ts` |
-| Routing rule matching | `DeterministicRoutingAssistant matches scenario to rule` | `packages/shared/src/messaging.test.ts` |
-| Fallback when no AT capability | `exposes explicit fallback notice when recipient lacks AT-native capability` | `services/api/src/phase5.test.ts` |
-| Idempotent conversation creation | `re-uses existing conversation for the same aid post and participants` | `services/api/src/phase8.test.ts` |
-| Map-surface initiation | `initiates a deterministic conversation context from the map surface` | `services/api/src/phase8.test.ts` |
+### Browser E2E
 
-### P7.1 – Moderation queue + policy
+`apps/web/e2e/accessibility.spec.ts` starts the Vite web application and runs in Chromium. It verifies skip links, landmarks, keyboard operation, Escape behavior, labels, ARIA semantics, focus management, route announcements, and image alternatives.
 
-| Requirement | Test | File |
-|---|---|---|
-| Enqueue review | `enqueueReview adds item with context` | `packages/shared/src/moderation.test.ts` |
-| Apply policy action | `applyPolicyAction updates visibility and queue state` | `packages/shared/src/moderation.test.ts` |
-| Appeal lifecycle | `appeal lifecycle: open → review → resolved` | `packages/shared/src/moderation.test.ts` |
-| Audit trail | `listAuditTrail tracks all state changes` | `packages/shared/src/moderation.test.ts` |
-| Contract-shaped enqueue | `enqueues a subject matching the ModerationReviewRequestedEvent contract shape` | `services/moderation-worker/src/phase8.test.ts` |
-| State machine via API | `applies policy actions following the contract-defined state machine` | `services/moderation-worker/src/phase8.test.ts` |
-| Audit accumulation | `accumulates audit trail entries for each policy action` | `services/moderation-worker/src/phase8.test.ts` |
+### External protocol evidence
 
-### P7.2 – Privacy / geo redaction
+`docs/operations/evidence/phase-2/at-record-lifecycle.md` records the disposable two-account staging-PDS exercise. Tokens and passwords are intentionally absent. This evidence is valuable but manual and must not be counted as an automated test.
 
-| Requirement | Test | File |
-|---|---|---|
-| Minimum geo precision | `enforceMinimumGeoPrecisionKm enforces 1km floor` | `packages/shared/src/privacy.test.ts` |
-| Redact DID/URI in text | `redactSensitiveText replaces DIDs and AT URIs` | `packages/shared/src/privacy.test.ts` |
-| Redact structured log | `redactLogData recursively redacts structured payloads` | `packages/shared/src/privacy.test.ts` |
-| Log retention constant | `log retention constant matches the documented 7-day policy` | `services/moderation-worker/src/phase8.test.ts` |
-| Phase 8 log redaction | `redacts DID and URI fields from phase 8 log payload` | `services/api/src/phase8.test.ts` |
-| Query geo precision ≥ 1 km | `query map results never expose sub-1km geo precision` | `services/api/src/phase8.test.ts` |
-| Moderation log redaction | `redacts DID and URI fields from moderation log payloads` | `services/moderation-worker/src/phase8.test.ts` |
+## Coverage interpretation
 
-### P7.3 – Anti-spam
+Coverage is diagnostic. The initial report identifies strong execution in shared domain modules and fixture services, but weaker coverage at important runtime boundaries, including:
 
-| Requirement | Test | File |
-|---|---|---|
-| Duplicate chat blocked + signal | `blocks repeated duplicate chat payloads and emits suspicious pattern signal` | `services/api/src/phase7.test.ts` |
-| DUPLICATE_BLOCKED response code | `reports duplicate-block response code once threshold exceeded` | `services/api/src/phase7.test.ts` |
+- `apps/web/src/features/frontend-shell.tsx`
+- `services/api/src/http/lifecycle-transition-handler.ts` in the no-database coverage job
+- PostgreSQL block/report/audit repositories outside the database job
+- indexer checkpoint and metrics runtime paths
 
-### P8.1 – Service contracts (this issue)
+CI uploads `coverage/coverage-summary.json`, LCOV, and the HTML-compatible data needed by coverage tools. No global threshold is enforced until fixture-heavy code and production runtime code are separated into meaningful targets.
 
-| Requirement | Test | File |
-|---|---|---|
-| CONTRACT_VERSION format | `CONTRACT_VERSION is a semver-prefixed phase identifier` | `packages/shared/src/contracts.test.ts` |
-| API request/response stubs | `serviceContractStubs.api satisfies ApiQueryAidRequest/Response shapes` | `packages/shared/src/contracts.test.ts` |
-| Chat initiation stubs | `serviceContractStubs.api chat initiation satisfies shapes` | `packages/shared/src/contracts.test.ts` |
-| Indexer event stub | `serviceContractStubs.indexer event satisfies FirehoseNormalizedEvent shape` | `packages/shared/src/contracts.test.ts` |
-| Moderation event stub | `serviceContractStubs.moderationWorker event satisfies ModerationReviewRequestedEvent shape` | `packages/shared/src/contracts.test.ts` |
-| ServiceEvent union discrimination | `ServiceEvent union discriminates correctly on the type field` | `packages/shared/src/contracts.test.ts` |
-| Phase 8 fixture type compliance | `phase 8 fixture stubs satisfy ApiQueryAidRequest and ApiChatInitiationRequest shapes` | `packages/shared/src/contracts.test.ts` |
+## Compatibility suites
 
----
+Phase 7 and Phase 8 commands remain available for targeted diagnosis:
 
-## Fixture Index
+- `npm run test:phase7`
+- `npm run test:phase8`
+- `npm run test:phase8-e2e`
 
-The following deterministic fixture exports are available from `@patchwork/shared` for use across all test suites:
+Their files are already included in the main unit suite. CI should not run them again as separate mandatory gates unless a future change makes them select unique tests.
 
-| Export | Domain | Description |
-|---|---|---|
-| `PHASE8_NOW_ISO` | All | Fixed "now" timestamp anchor |
-| `PHASE8_EPOCH_ISO` | All | Fixed epoch baseline |
-| `PHASE8_VALID_AID_POST` | Schema (P2.1) | Valid aid post record |
-| `PHASE8_VALID_VOLUNTEER_PROFILE` | Schema (P2.1) | Valid volunteer profile record |
-| `PHASE8_VALID_CONVERSATION_META` | Schema (P2.1) | Valid conversation meta record |
-| `PHASE8_VALID_MODERATION_REPORT` | Schema (P2.1) | Valid moderation report record |
-| `PHASE8_VALID_DIRECTORY_RESOURCE` | Schema (P2.1) | Valid directory resource record |
-| `buildPhase8FixtureFirehoseEvents()` | Ingestion (P3.1) | 3-event deterministic firehose stream |
-| `PHASE8_RANKING_CARDS` | Ranking (P3.4) | Cards with known ordering at `PHASE8_NOW_ISO` |
-| `PHASE8_PRIVACY_LOG_PAYLOAD` | Privacy (P7.2) | Unredacted log payload for redaction tests |
-| `PHASE8_CHAT_REQUEST` | Routing (P5) | Deterministic chat initiation request |
-| `PHASE8_MAP_QUERY_REQUEST` | Routing / API | Deterministic map query request |
-| `PHASE8_FIREHOSE_EVENT` | Contracts (P8.1) | Contract-shaped `FirehoseNormalizedEvent` |
-| `PHASE8_MODERATION_EVENT` | Contracts (P8.1) | Contract-shaped `ModerationReviewRequestedEvent` |
-
----
-
-## Running the Phase 8 Test Suite
+## Local full-matrix procedure
 
 ```sh
-# Run all workspaces
-npm run test:phase8
+npm run lint
+npm run typecheck
+npm test
 
-# Run per workspace
-npm run test:phase8 -w @patchwork/shared
-npm run test:phase8 -w @patchwork/api
-npm run test:phase8 -w @patchwork/indexer
-npm run test:phase8 -w @patchwork/moderation-worker
-```
+# With disposable PostgreSQL and TEST_DATABASE_URL configured:
+npm run db:migrate -w @patchwork/api
+npm run test:integration:postgres -w @patchwork/api
 
-All tests are deterministic and require no external services or environment variables.
-
----
-
-## Wave 2 — Issue-to-Test Mapping
-
-| Issue | Title | Test files |
-|---|---|---|
-| #98 | Runtime startup guards | `packages/shared/src/config.test.ts` |
-| #103 | Rate limiting + CORS | `services/api/src/rate-limiter.test.ts` · `services/api/src/cors.test.ts` |
-| #104 | SLI metrics | `packages/shared/src/alerting.test.ts` |
-| #112 | Moderation console + SOPs | `services/api/src/lifecycle-service.test.ts` |
-| #118 | Unified inbox | `services/api/src/inbox-service.test.ts` |
-| #129 | Offline sync | `packages/shared/src/offline-sync.test.ts` |
-| #130 | Feedback + reporting | `services/api/src/feedback-service.test.ts` |
-
----
-
-## Wave 3 (#99) — E2E Contract-Path Tests
-
-### Detailed Mapping
-
-| Requirement | Test | File |
-|---|---|---|
-| Full lifecycle happy path (open -> archived) | `walks open -> triaged -> assigned -> in_progress -> resolved -> archived` | `apps/web/e2e/request-lifecycle.test.ts` |
-| Transition status pairs | `each transition produces correct previous and current status` | `apps/web/e2e/request-lifecycle.test.ts` |
-| Assignment + accept + handoff | `assigns, accepts, and completes handoff with metadata` | `apps/web/e2e/request-lifecycle.test.ts` |
-| Lifecycle query reflects metadata | `lifecycle query reflects assignment and handoff metadata` | `apps/web/e2e/request-lifecycle.test.ts` |
-| Post-handoff feedback loop | `submits feedback after handoff and retrieves summary` | `apps/web/e2e/request-lifecycle.test.ts` |
-| Transition guard — invalid skip | `rejects skip from open to in_progress` | `apps/web/e2e/request-lifecycle.test.ts` |
-| Transition guard — role check | `rejects requester trying to triage` | `apps/web/e2e/request-lifecycle.test.ts` |
-| Transition guard — archived terminal | `rejects all transitions out of archived` | `apps/web/e2e/request-lifecycle.test.ts` |
-| Decline + reassignment | `decline reverts to triaged and allows reassignment` | `apps/web/e2e/request-lifecycle.test.ts` |
-| Route-level a11y (per route) | `<route> page has main landmark and skip-link target` | `apps/web/e2e/accessibility.spec.ts` |
-| Image alt attributes (per route) | `<route> page has no missing alt attributes on images` | `apps/web/e2e/accessibility.spec.ts` |
-| Keyboard tab order | `tab order on home page reaches main interactive elements` | `apps/web/e2e/accessibility.spec.ts` |
-| Escape key overlay dismiss | `Escape key dismisses any visible overlay on map route` | `apps/web/e2e/accessibility.spec.ts` |
-
-### E2E Test Matrix
-
-| Scenario | Lifecycle | Assignment | Feedback | a11y | CI job |
-|---|---|---|---|---|---|
-| Happy path: open -> archived | Y | Y | Y | — | `e2e-production` |
-| Transition guards (invalid paths) | Y | — | — | — | `e2e-production` |
-| Decline + reassignment | Y | Y | — | — | `e2e-production` |
-| Route a11y validation (7 routes) | — | — | — | Y | `quality-gates` |
-| Keyboard navigation | — | — | — | Y | `quality-gates` |
-
-### Running Production-Like Tests Locally
-
-```sh
-# 1. Start Postgres via docker-compose
-npm run db:up
-
-# 2. Run database migrations
-npm run db:migrate
-
-# 3. Run the E2E contract-path lifecycle tests
-npm run test:e2e:contract -w @patchwork/web
-
-# 4. Run the Phase 8.2 E2E tests (firehose + discovery + chat)
-npm run test:phase8-e2e
-
-# 5. Run the Playwright accessibility + browser E2E tests
-npx playwright install --with-deps chromium
+npm run test:integration:service -w @patchwork/web
+npx playwright install chromium
 npm run test:e2e -w @patchwork/web
-
-# 6. Tear down Postgres
-npm run db:down
+npm run test:coverage
+npm audit --audit-level=high
 ```
 
-To simulate the full CI production-like environment:
-
-```sh
-export NODE_ENV=production
-export API_DATA_SOURCE=postgres
-export API_DATABASE_URL=postgresql://patchwork:patchwork@localhost:5432/patchwork
-npm run db:up && npm run db:migrate
-npm run test:e2e:contract -w @patchwork/web
-npm run test:phase8-e2e
-```
+The external staging-PDS exercise is intentionally separate from this routine and requires controlled disposable credentials.
