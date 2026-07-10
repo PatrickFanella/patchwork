@@ -36,25 +36,25 @@
                         "type": "object",
                         "additionalProperties": false,
                         "required": [
-                            "latitude",
-                            "longitude",
-                            "precisionKm"
+                            "latitudeE6",
+                            "longitudeE6",
+                            "precisionMeters"
                         ],
                         "properties": {
-                            "latitude": {
-                                "type": "number",
-                                "minimum": -90,
-                                "maximum": 90
+                            "latitudeE6": {
+                                "type": "integer",
+                                "minimum": -90000000,
+                                "maximum": 90000000
                             },
-                            "longitude": {
-                                "type": "number",
-                                "minimum": -180,
-                                "maximum": 180
+                            "longitudeE6": {
+                                "type": "integer",
+                                "minimum": -180000000,
+                                "maximum": 180000000
                             },
-                            "precisionKm": {
-                                "type": "number",
-                                "minimum": 1,
-                                "maximum": 50
+                            "precisionMeters": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 50000
                             },
                             "areaLabel": {
                                 "type": "string",

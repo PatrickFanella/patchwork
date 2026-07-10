@@ -9,6 +9,78 @@ import type { OAuthSessionHandle } from './oauth-client.js';
 
 const COLLECTION = recordNsid.aidPost;
 const ALPHA_MINIMUM_PRECISION_KM = 1;
+const MICRODEGREES_PER_DEGREE = 1_000_000;
+const METRES_PER_KILOMETRE = 1_000;
+
+type AtAidPostRecord = Omit<AidPostRecord, 'location'> & {
+    location: {
+        latitudeE6: number;
+        longitudeE6: number;
+        precisionMeters: number;
+        areaLabel?: string;
+    };
+};
+
+export const encodeAidPostForAt = (record: AidPostRecord): AtAidPostRecord => ({
+    ...record,
+    location: {
+        latitudeE6: Math.round(
+            record.location.latitude * MICRODEGREES_PER_DEGREE,
+        ),
+        longitudeE6: Math.round(
+            record.location.longitude * MICRODEGREES_PER_DEGREE,
+        ),
+        precisionMeters: Math.round(
+            record.location.precisionKm * METRES_PER_KILOMETRE,
+        ),
+        ...(record.location.areaLabel === undefined
+            ? {}
+            : { areaLabel: record.location.areaLabel }),
+    },
+});
+
+export const decodeAidPostFromAt = (input: unknown): AidPostRecord => {
+    if (typeof input !== 'object' || input === null) {
+        return validateAidPost(input);
+    }
+
+    const record = input as Record<string, unknown>;
+    const location = record['location'];
+    if (typeof location !== 'object' || location === null) {
+        return validateAidPost(input);
+    }
+
+    const encoded = location as Record<string, unknown>;
+    const latitudeE6 = encoded['latitudeE6'];
+    const longitudeE6 = encoded['longitudeE6'];
+    const precisionMeters = encoded['precisionMeters'];
+    if (
+        typeof latitudeE6 !== 'number' ||
+        !Number.isInteger(latitudeE6) ||
+        typeof longitudeE6 !== 'number' ||
+        !Number.isInteger(longitudeE6) ||
+        typeof precisionMeters !== 'number' ||
+        !Number.isInteger(precisionMeters)
+    ) {
+        return validateAidPost(input);
+    }
+
+    const {
+        latitudeE6: _latitude,
+        longitudeE6: _longitude,
+        precisionMeters: _precision,
+        ...rest
+    } = encoded;
+    return validateAidPost({
+        ...record,
+        location: {
+            ...rest,
+            latitude: latitudeE6 / MICRODEGREES_PER_DEGREE,
+            longitude: longitudeE6 / MICRODEGREES_PER_DEGREE,
+            precisionKm: precisionMeters / METRES_PER_KILOMETRE,
+        },
+    });
+};
 
 export interface CreateRecordInput {
     repo: string;
@@ -165,15 +237,26 @@ export const createAgentRecordTransport = (
     return {
         did: session.did,
         createRecord: async input => {
-            const response = await agent.com.atproto.repo.createRecord(input);
+            const response = await agent.com.atproto.repo.createRecord({
+                ...input,
+                record: encodeAidPostForAt(input.record),
+                validate: false,
+            });
             return response.data;
         },
         getRecord: async input => {
             const response = await agent.com.atproto.repo.getRecord(input);
-            return response.data;
+            return {
+                ...response.data,
+                value: decodeAidPostFromAt(response.data.value),
+            };
         },
         putRecord: async input => {
-            const response = await agent.com.atproto.repo.putRecord(input);
+            const response = await agent.com.atproto.repo.putRecord({
+                ...input,
+                record: encodeAidPostForAt(input.record),
+                validate: false,
+            });
             return response.data;
         },
         deleteRecord: async input => {

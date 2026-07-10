@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { type AidPostRecord } from '@patchwork/at-lexicons';
 import {
     AidPostRecordClient,
+    decodeAidPostFromAt,
+    encodeAidPostForAt,
     type AtRecordTransport,
 } from './index.js';
 
@@ -40,6 +42,17 @@ const transport = (): AtRecordTransport => ({
 });
 
 describe('AidPostRecordClient', () => {
+    it('encodes decimal coordinates as AT-compatible integers and decodes them', () => {
+        const encoded = encodeAidPostForAt(validRecord);
+
+        expect(encoded.location).toEqual({
+            latitudeE6: 41_880_000,
+            longitudeE6: -87_630_000,
+            precisionMeters: 1_000,
+        });
+        expect(decodeAidPostFromAt(encoded)).toEqual(validRecord);
+    });
+
     it('validates and creates an aid-post record in the authenticated repository', async () => {
         const at = transport();
         const client = new AidPostRecordClient(at);

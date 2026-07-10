@@ -166,7 +166,7 @@ flowchart LR
 - [x] Preserve the existing approximate-area privacy contract and reject exact-coordinate fields.
 - [x] Require compare-and-swap revision information for update and close operations.
 - [x] Return stable conflict, invalid-record, unauthenticated, forbidden, and upstream-unavailable error codes.
-- [ ] Demonstrate create, read, update, close, and delete against two disposable test-PDS accounts.
+- [x] Demonstrate create, read, update, close, and delete against two disposable test-PDS accounts. See `docs/operations/evidence/phase-2/at-record-lifecycle.md`.
 - [x] Commit as `feat(records): complete real AT aid-post lifecycle`.
 
 **Phase 2 exit gate:** A disposable AT account can sign in, publish an aid post to its repository, update it, close it, and delete it; another account cannot mutate it. Evidence includes record URIs and redacted request results, never tokens.
