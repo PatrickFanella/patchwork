@@ -1,5 +1,10 @@
 # Patchwork Full-App Feature Completion Plan
 
+> Historical expansion plan: issue definitions and completion language in this
+> file describe intended outcomes, not verified runtime readiness. Expansion is
+> frozen by the 2026-07-10 continuation roadmap until the durable alpha gate is
+> met. See `docs/architecture/current-state-matrix.md` for current status.
+
 This roadmap extends beyond production hardening and focuses on product completeness:
 
 - fully implemented core user journeys,

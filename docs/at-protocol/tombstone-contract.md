@@ -1,5 +1,10 @@
 # Tombstone/delete propagation contract (Phase 2 / P2.4)
 
+> Alpha clarification: ADR 0003 is authoritative. The tombstone below is an
+> internal normalized domain event, not a record published to a user repository.
+> Repository deletion observed or confirmed from the PDS is the deletion
+> authority.
+
 This document defines delete semantics for downstream ingestion consumers.
 
 ## Module
@@ -31,12 +36,16 @@ A deleted record is represented as:
 
 - Delete propagation emits exactly one canonical tombstone payload for a URI.
 - Mutation event serialization round-trips through JSON parser/validator.
-- Consumers can treat tombstone payload as authoritative removal signal.
+- Consumers can treat a tombstone payload as a normalized removal instruction
+  after repository deletion has been observed or confirmed; the internal
+  payload is not independent repository authority.
 
 ## Caveats
 
 - Query endpoint behavior and ranking/index effects are Phase 3 concerns.
 - This phase defines mutation contract guarantees only.
+- The alpha must remove the active public projection and fulfillment secrets on
+  repository deletion; it may retain only policy-approved private audit data.
 
 ## Test evidence
 

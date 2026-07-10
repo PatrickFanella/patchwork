@@ -1,5 +1,10 @@
 ## Plan: Patchwork v1 (AT-Native Mutual Aid Hub) (Vite + React + TypeScript + Tailwind)
 
+> Historical plan: this document records the intended v1 design, not current
+> runtime maturity. Use `docs/architecture/current-state-matrix.md` for current
+> implementation status and the 2026-07-10 continuation roadmap for active
+> sequencing.
+
 Build a web-first, fully AT Protocol-native mutual aid hub with map + feed + 1:1 chat, plus resource directory and volunteer onboarding.
 
 Frontend stack is fixed to **Vite + React + TypeScript + Tailwind CSS**.

@@ -1,91 +1,82 @@
-# Service boundaries and ownership
+# Patchwork service boundaries
 
-## apps/web
+This document defines the target boundaries for the continuation alpha. ADR 0003 governs data placement; the current-state matrix records how far the implementation is from these boundaries.
 
-- Renders user-facing map/feed/posting surfaces.
-- Uses API contracts only; does not directly consume indexer/worker internals.
+## `apps/web`
 
-## apps/mobile
+- Initiates AT OAuth through `services/api`; it does not handle refresh tokens.
+- Sends authenticated aid-post commands and renders map/feed queries.
+- Collects public approximate location separately from optional private fulfillment location.
+- Never talks directly to the indexer, moderation worker, database, or Jetstream.
+- Does not fall back to fixtures in staging or production.
 
-- Native iOS/Android client built with React Native.
-- Consumes shared API contracts from `packages/shared` via `@patchwork/shared`.
-- Mobile-specific contracts (device info, push notifications, offline sync) defined in shared package.
-- Navigation model maps core mobile flows to tab-based structure with deep link support.
+## `services/api`
 
-## services/api
+- Terminates the Patchwork HTTP boundary and derives principals from real AT sessions.
+- Owns encrypted session persistence and authenticated command authorization.
+- Writes aid-post records to the user’s PDS through `packages/at-client`.
+- Reads rebuildable discovery projections but does not edit them as record authority.
+- Owns private lifecycle, block, report, exact-location, idempotency, and audit repositories.
+- Sends durable moderation work through a PostgreSQL-backed queue.
+- Exposes no token, exact-location, report-evidence, or operator-note data in public responses.
 
-- Responsible for synchronous request/response APIs.
-- Owns identity flow boundaries and external client contract compatibility.
-- Owns chat anti-spam safety evaluation and safety metrics exposure.
+## `services/indexer`
 
-## services/indexer
+- Consumes filtered `app.patchwork.aid.post` operations from Jetstream through a provider-neutral event-source interface.
+- Reconciles/backfills repository state rather than treating a stream cursor as complete authority.
+- Validates lexicons and geoprivacy policy before writing projections.
+- Transactionally stores normalized projections, delete state, dead letters, and cursor progress.
+- Does not own sessions, private request workflow, moderation decisions, or exact location.
 
-- Responsible for ingestion normalization and read-model indexing.
-- Produces/consumes event contracts defined in shared package.
+## `services/moderation-worker`
 
-## services/moderation-worker
+- Claims durable moderation jobs with crash-safe leases and idempotent decisions.
+- Owns private case processing and append-only moderation audit entries.
+- Changes Patchwork visibility and safety state, not user repository records.
+- Emits aggregate/redacted metrics and never exposes raw evidence through health endpoints.
 
-- Responsible for asynchronous moderation queue views and policy action workflows.
-- Owns moderation decision/event + appeal audit boundaries.
+## `packages/at-client`
 
-## packages/shared
+- Wraps the official AT OAuth and repository clients.
+- Resolves session/PDS operations and performs aid-post create, get, update, and delete.
+- Returns Patchwork-owned result and error types so AT SDK types do not leak across the codebase.
+- Contains no product workflow, projection, moderation, or UI logic.
 
-- Shared env/config contract and validation.
-- Shared cross-service contracts and event interfaces.
-- Shared moderation queue domain, anti-spam logic primitives, and privacy redaction utilities.
-- Multi-region tenant model, routing policies, failover configuration, and data residency rules.
-- Integrations marketplace contracts, connector SDK framework, retry policies, and sync flow types.
+## `packages/at-lexicons`
 
-## Multi-region topology
+- Stores canonical public record definitions and validators.
+- Enforces the alpha aid-post public-location constraints.
+- Retains deferred schemas for compatibility/design history without enabling runtime writes.
 
-### Region model
+## `packages/shared`
 
-The platform supports six deployment regions: `us-east`, `us-west`, `eu-west`, `eu-central`, `ap-southeast`, `ap-northeast`. Each tenant is assigned a primary region and a set of allowed regions.
+- Owns transport-neutral domain contracts, validation helpers, privacy/redaction rules, and configuration schemas.
+- Contains no database clients, HTTP server state, official AT clients, or browser framework code.
+- Keeps public and private data contracts structurally distinct.
 
-### Tenant partitioning
+## PostgreSQL ownership
 
-- Each tenant is bound to a primary region where data is stored by default.
-- Data residency policies (`region-locked`, `region-preferred`, `global`) control where tenant data may reside.
-- Tenant boundary enforcement validates every request against allowed regions and tenant status.
+Logical schemas or clearly separated table groups enforce ownership:
 
-### Routing
+| Data | Writer | Reader |
+| --- | --- | --- |
+| OAuth sessions | API | API only |
+| Command/idempotency audit | API | API and authorized operators |
+| Public discovery projection | Indexer | API |
+| Stream cursor and dead letters | Indexer | Indexer and authorized operators |
+| Private lifecycle, blocks, reports, exact location | API | API and narrowly authorized moderation paths |
+| Moderation queue and case audit | API enqueue; moderation worker decisions | Moderation worker and authorized operator API |
 
-- Four routing strategies are supported: `primary-only`, `nearest-region`, `weighted-round-robin`, `failover-chain`.
-- Region endpoints have configurable weights and active/inactive status.
-- The `failover-chain` strategy walks a configured ordered list of backup regions when the primary is unhealthy.
+Services use separate database roles in staging and production. A service must not gain write access to another service’s tables merely because the alpha uses one PostgreSQL cluster.
 
-### Failover
+## Cross-service contracts
 
-- Automatic failover is triggered when consecutive health check failures exceed a configurable threshold.
-- Failover events are recorded in an audit trail for observability and incident review.
-- Manual failover mode allows operators to control region switching explicitly.
-- Failback occurs automatically when a previously unhealthy region recovers.
+- API-to-PDS writes are synchronous commands with idempotency and explicit partial-failure results.
+- Repository-to-indexer delivery is asynchronous and eventually consistent.
+- API-to-moderation delivery is a durable database queue until a separate broker is justified.
+- Indexer-to-API discovery integration is PostgreSQL read-model access with projection-freshness metadata.
+- No service infers successful downstream work from an in-memory event or an HTTP `200` health response.
 
-### Policy overrides
+## Deferred services and topology
 
-- Region-specific policy overrides allow tenants to adjust rate limits, data retention, moderation rules, feature flags, and compliance settings per region.
-- Overrides can have expiration dates and are scoped to specific policy categories.
-
-## Integrations architecture
-
-### Connector framework
-
-- Connectors implement a standard `ConnectorContract` interface: `initialize`, `syncInbound`, `syncOutbound`, `healthCheck`, `shutdown`.
-- Each connector has a definition (registry entry) and can have multiple instances deployed per tenant.
-- Sync flows support inbound (pull from external) and outbound (push to external) directions.
-
-### Retry and audit
-
-- Configurable retry policies: `fixed-delay`, `exponential-backoff`, `linear-backoff`.
-- All connector lifecycle events and sync operations are recorded in an integration audit trail.
-- Failed syncs record error messages and retry counts for debugging.
-
-### Marketplace
-
-- Connector definitions can be published as marketplace listings with display metadata, tags, ratings, and install counts.
-- Listing statuses progress through `draft` -> `published` -> `deprecated` -> `removed`.
-
-### Production connectors
-
-1. **Crisis Line Connector** (`crisis-line-v1`): Bidirectional integration with crisis hotlines (988 Suicide & Crisis Lifeline). Supports inbound referral pull and outbound crisis escalation.
-2. **Community 311 Connector** (`community-311-v1`): Bidirectional integration with municipal 311 service systems. Supports inbound service request pull and outbound community need reporting.
+The existing mobile, multi-region, connector, notification, scheduling, group, matching, reputation, organization, and richer chat models do not define deployed alpha services. Reintroducing one requires an evidence-backed post-alpha slice with explicit persistence, authorization, privacy, and operational ownership.

@@ -1,8 +1,18 @@
 # Patchwork
 
-AT Protocol-native mutual aid platform with a web client, query API, ingestion/indexing pipeline, and moderation worker.
+Prototype for an intended AT Protocol-native mutual aid platform with a web client, query API, ingestion/indexing pipeline, and moderation worker.
 
 This monorepo is designed for fast local development with deterministic fixtures, strong type contracts, and CI quality gates.
+
+## Current maturity
+
+Patchwork is a **pre-alpha prototype**, not a deployable AT Protocol service. Its
+domain contracts, lexicons, UI models, and deterministic tests are substantial,
+but real AT OAuth, repository writes, live stream ingestion, and most durable
+service state are not yet implemented. The authoritative subsystem inventory is
+[`docs/architecture/current-state-matrix.md`](docs/architecture/current-state-matrix.md),
+and continuation work is sequenced by the
+[`2026-07-10 continuation roadmap`](docs/superpowers/plans/2026-07-10-patchwork-continuation-roadmap.md).
 
 ## What’s in this repo
 
@@ -134,6 +144,7 @@ Monitoring:
 
 ## Architecture and protocol docs
 
+- `docs/superpowers/plans/2026-07-10-patchwork-continuation-roadmap.md` — authoritative continuation roadmap from pre-alpha prototype to a durable AT Protocol alpha
 - `docs/architecture/domain-map.md`
 - `docs/architecture/service-boundaries.md`
 - `docs/architecture/adr/0001-v1-stack-and-domain-boundaries.md`

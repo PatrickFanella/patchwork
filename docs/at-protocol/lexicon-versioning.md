@@ -4,6 +4,10 @@ This document defines the v1 AT Lexicon schema set, constraints, and evolution p
 
 ## v1 schema set
 
+> Alpha scope: only `app.patchwork.aid.post` is enabled for runtime repository
+> writes. The other schemas remain deferred design/compatibility artifacts under
+> ADR 0003 and must not be treated as active product capabilities.
+
 Records are currently published at:
 
 - `app.patchwork.aid.post`
@@ -42,7 +46,8 @@ Key constraints:
 - `description`: 1..5000 chars
 - `urgency`: `low | medium | high | critical`
 - `status`: `open | in-progress | resolved | closed`
-- `location.precisionKm`: 0.1..50
+- `location.precisionKm`: the legacy validator accepts 0.1..50; the alpha public
+  policy requires 1..50 and the validator must be tightened before real writes
 
 ### `app.patchwork.volunteer.profile`
 

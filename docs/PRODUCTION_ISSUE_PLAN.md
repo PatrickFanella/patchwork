@@ -1,5 +1,10 @@
 # Patchwork MVP → Full Production Issue Plan
 
+> Historical readiness plan: the criteria remain useful, but prior issue or
+> test completion does not establish that the current runtime satisfies them.
+> Use `docs/architecture/current-state-matrix.md` for present maturity and the
+> 2026-07-10 continuation roadmap for active work.
+
 This plan translates current repository state into an executable GitHub backlog.
 
 ## Current baseline (validated in-repo)
