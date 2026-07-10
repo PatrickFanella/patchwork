@@ -20,6 +20,7 @@ import {
     AuthorizationError,
     requireCapability,
 } from './authorization-guard.js';
+import type { LifecycleRepository } from './db/lifecycle-repository.js';
 
 /**
  * In-memory store for request statuses and timelines.
@@ -105,6 +106,7 @@ export interface HandoffSuccessResponse {
 }
 
 const transitionInputSchema = z.object({
+    commandId: z.string().min(1).max(200).optional(),
     postUri: z
         .string()
         .min(1, 'postUri is required')
@@ -185,6 +187,8 @@ const toValidationError = (
 export class LifecycleService {
     private readonly records = new Map<string, RequestLifecycleRecord>();
 
+    constructor(private readonly repository?: LifecycleRepository) {}
+
     /**
      * Register a post with initial 'open' status. Called when a post is
      * created so the lifecycle service can track it.
@@ -247,7 +251,7 @@ export class LifecycleService {
             }
         }
 
-        return this.executeTransition(input);
+        return this.executeTransition(input, authCtx);
     }
 
     /**
@@ -810,9 +814,13 @@ export class LifecycleService {
         return this.records.get(postUri);
     }
 
-    private executeTransition(
+    private async executeTransition(
         input: TransitionInput,
-    ): LifecycleTransitionResult {
+        authCtx?: AuthorizationContext,
+    ): Promise<LifecycleTransitionResult> {
+        if (this.repository) {
+            return this.executeDurableTransition(input, authCtx);
+        }
         // Auto-register if the post is not yet tracked
         if (!this.records.has(input.postUri)) {
             this.registerPost(input.postUri);
@@ -875,8 +883,138 @@ export class LifecycleService {
             },
         };
     }
+
+    private async executeDurableTransition(
+        input: TransitionInput,
+        authCtx?: AuthorizationContext,
+    ): Promise<LifecycleTransitionResult> {
+        const repository = this.repository;
+        if (!repository) {
+            throw new Error('DURABLE_LIFECYCLE_REPOSITORY_MISSING');
+        }
+        if (!authCtx) {
+            return {
+                statusCode: 401,
+                body: {
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'A durable lifecycle transition requires authentication.',
+                    },
+                },
+            };
+        }
+        if (!input.commandId) {
+            return {
+                statusCode: 400,
+                body: {
+                    error: {
+                        code: 'COMMAND_ID_REQUIRED',
+                        message: 'commandId is required for durable transitions.',
+                    },
+                },
+            };
+        }
+
+        const actorRole: LifecycleRole =
+            authCtx.role === 'volunteer' ? 'volunteer'
+            : authCtx.role === 'moderator' ? 'moderator'
+            : authCtx.role === 'admin' || authCtx.role === 'super_admin' ? 'admin'
+            : 'requester';
+        const now = input.now ?? new Date().toISOString();
+        let workflow = await repository.get(input.postUri);
+        if (!workflow) {
+            const repositoryOwner = /^at:\/\/(did:[^/]+)\//.exec(
+                input.postUri,
+            )?.[1];
+            if (repositoryOwner !== authCtx.actorDid) {
+                return {
+                    statusCode: 403,
+                    body: {
+                        error: {
+                            code: 'FORBIDDEN',
+                            message: 'Only the repository owner can register lifecycle state.',
+                        },
+                    },
+                };
+            }
+            await repository.register({
+                commandId: `register:${input.postUri}`,
+                postUri: input.postUri,
+                requesterDid: authCtx.actorDid,
+                createdAt: now,
+            });
+            workflow = await repository.get(input.postUri);
+        }
+        if (!workflow) {
+            throw new Error('REQUEST_WORKFLOW_REGISTER_FAILED');
+        }
+        if (
+            actorRole === 'requester' &&
+            workflow.requesterDid !== authCtx.actorDid
+        ) {
+            return {
+                statusCode: 403,
+                body: {
+                    error: {
+                        code: 'FORBIDDEN',
+                        message: 'A requester can transition only their own request.',
+                    },
+                },
+            };
+        }
+
+        const previousStatus = workflow.currentStatus as RequestStatus;
+        const targetStatus = input.targetStatus as RequestStatus;
+        const validation = canTransition(previousStatus, targetStatus, actorRole);
+        if (!validation.valid) {
+            return {
+                statusCode: 403,
+                body: {
+                    error: {
+                        code: validation.code,
+                        message: validation.message,
+                        details: { previousStatus, targetStatus, actorRole },
+                    },
+                },
+            };
+        }
+        const transition = createStatusTransition({
+            from: previousStatus,
+            to: targetStatus,
+            actorDid: authCtx.actorDid,
+            actorRole,
+            timestamp: now,
+            reason: input.reason,
+        });
+        await repository.transition({
+            commandId: input.commandId,
+            postUri: input.postUri,
+            actorDid: authCtx.actorDid,
+            actorRole,
+            fromStatus: previousStatus,
+            toStatus: targetStatus,
+            occurredAt: now,
+            reason: input.reason,
+            auditRetentionUntil: new Date(
+                new Date(now).getTime() + 365 * 24 * 60 * 60 * 1000,
+            ).toISOString(),
+        });
+        return {
+            statusCode: 200,
+            body: {
+                postUri: input.postUri,
+                previousStatus,
+                currentStatus: targetStatus,
+                transition,
+                timeline: [transition],
+                updatedAt: now,
+            },
+        };
+    }
 }
 
-export const createLifecycleService = (): LifecycleService => {
-    return new LifecycleService();
+export const createLifecycleService = (
+    repository?: LifecycleRepository,
+): LifecycleService => {
+    return new LifecycleService(repository);
 };

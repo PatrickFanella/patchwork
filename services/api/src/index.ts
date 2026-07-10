@@ -38,6 +38,7 @@ import { selectLimiter, extractClientIp } from './rate-limiter.js';
 import { createAuthorizationContext } from './authorization-guard.js';
 import { PostgresBlockRepository } from './db/block-repository.js';
 import { PostgresReportRepository } from './db/report-repository.js';
+import { PostgresLifecycleRepository } from './db/lifecycle-repository.js';
 import { BlockService } from './block-service.js';
 import { ReportService } from './report-service.js';
 
@@ -64,7 +65,6 @@ const chatService = createFixtureChatService();
 const verificationService = createFixtureVerificationService();
 const settingsService = createFixtureSettingsService();
 const volunteerService = createFixtureVolunteerService();
-const lifecycleService = createLifecycleService();
 const attachmentService = createAttachmentService();
 const fixtureAuthService =
     config.NODE_ENV === 'test' ? createFixtureAuthService() : undefined;
@@ -85,6 +85,9 @@ const reportService =
     postgresPool ?
         new ReportService(new PostgresReportRepository(postgresPool))
     :   undefined;
+const lifecycleService = createLifecycleService(
+    postgresPool ? new PostgresLifecycleRepository(postgresPool) : undefined,
+);
 
 const atAuthRuntime =
     config.NODE_ENV === 'test' ?
@@ -1034,11 +1037,37 @@ export const createApiServer = () => {
             requestUrl.pathname === '/aid/post/transition'
         ) {
             void readJsonBody(request)
-                .then(body => lifecycleService.transitionFromBody(body))
+                .then(async body => {
+                    if (!postgresPool) {
+                        return lifecycleService.transitionFromBody(body);
+                    }
+                    if (!atAuthRuntime) {
+                        throw new AtClientError(
+                            'SESSION_EXPIRED',
+                            'AT authentication is unavailable.',
+                        );
+                    }
+                    const sessionToken = readSessionCookie(request);
+                    if (!sessionToken) {
+                        throw new AtClientError(
+                            'SESSION_EXPIRED',
+                            'The Patchwork browser session is missing.',
+                        );
+                    }
+                    const session = await atAuthRuntime.service.current(sessionToken);
+                    return lifecycleService.transitionFromBody(
+                        body,
+                        createAuthorizationContext(session.did, 'user'),
+                    );
+                })
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
                 .catch(error => {
+                    if (error instanceof AtClientError) {
+                        writeAtAuthError(response, error);
+                        return;
+                    }
                     writeJson(response, 500, {
                         error: {
                             code: 'UNHANDLED_ROUTE_ERROR',

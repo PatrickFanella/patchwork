@@ -200,7 +200,7 @@ flowchart LR
 - Create: `services/api/src/report-service.ts`
 - Test: `services/api/src/durable-core-services.test.ts`
 
-Progress: authenticated PostgreSQL-backed block and report services are wired at `POST /blocks` and `POST /reports`; lifecycle, assignment/handoff, and shared transactional audit wiring remain.
+Progress: authenticated PostgreSQL-backed block and report services are wired at `POST /blocks` and `POST /reports`. The lifecycle transition route now injects `PostgresLifecycleRepository`, requires a browser session and command ID, derives its actor from that session, and writes the transition plus audit event atomically. Assignment/handoff persistence and role resolution remain.
 
 - [ ] Inject repository interfaces into lifecycle, block, report, and audit services.
 - [ ] Keep in-memory repositories in test fixtures only.

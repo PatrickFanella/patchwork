@@ -17,6 +17,7 @@ const createTransactionalPool = () => {
         .mockResolvedValueOnce({
             rows: [{ post_uri: 'at://did:plc:alice/app.patchwork.aid.post/1', current_status: 'open' }],
         })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ transition_id: '7' }] })
         .mockResolvedValueOnce({ rows: [] });
     const release = vi.fn();
@@ -46,8 +47,10 @@ describe('PostgresLifecycleRepository', () => {
             'BEGIN',
             expect.stringContaining('command_id'),
             expect.stringContaining('FOR UPDATE'),
+            expect.stringContaining('command_id'),
             expect.stringContaining('INSERT INTO request_transition_events'),
             expect.stringContaining('UPDATE request_workflows'),
+            expect.stringContaining('INSERT INTO operational_audit_events'),
             'COMMIT',
         ]);
         expect(release).toHaveBeenCalledOnce();
@@ -117,6 +120,13 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             applied: false,
             transitionId: applied.transitionId,
         });
+        const auditCount = await pool.query<{ count: string }>(
+            `SELECT COUNT(*)::text AS count
+             FROM operational_audit_events
+             WHERE command_id = $1`,
+            ['audit:durable-transition'],
+        );
+        expect(auditCount.rows[0]?.count).toBe('1');
 
         await expect(
             lifecycle.transition({

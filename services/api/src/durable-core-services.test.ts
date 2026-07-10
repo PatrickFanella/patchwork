@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAuthorizationContext } from './authorization-guard.js';
 import { BlockService } from './block-service.js';
 import { ReportService } from './report-service.js';
+import { createLifecycleService } from './lifecycle-service.js';
 
 describe('durable core services', () => {
     it('derives the blocker exclusively from the authenticated session', async () => {
@@ -61,6 +62,51 @@ describe('durable core services', () => {
         });
         expect(repository.create).toHaveBeenCalledWith(
             expect.objectContaining({ reporterDid: 'did:plc:alice' }),
+        );
+    });
+
+    it('persists lifecycle transitions using the authenticated actor', async () => {
+        const repository = {
+            register: vi.fn().mockResolvedValue(true),
+            get: vi
+                .fn()
+                .mockResolvedValueOnce(undefined)
+                .mockResolvedValueOnce({
+                    postUri:
+                        'at://did:plc:alice/app.patchwork.aid.post/durable-service',
+                    requesterDid: 'did:plc:alice',
+                    currentStatus: 'open',
+                    createdAt: '2026-07-10T23:02:00.000Z',
+                    updatedAt: '2026-07-10T23:02:00.000Z',
+                }),
+            transition: vi
+                .fn()
+                .mockResolvedValue({ applied: true, transitionId: '31' }),
+            deleteSubject: vi.fn(),
+        };
+        const service = createLifecycleService(repository);
+
+        const result = await service.transitionFromBody(
+            {
+                commandId: 'transition-command-1',
+                postUri:
+                    'at://did:plc:alice/app.patchwork.aid.post/durable-service',
+                targetStatus: 'resolved',
+                actorDid: 'did:plc:mallory',
+                actorRole: 'requester',
+                now: '2026-07-10T23:03:00.000Z',
+            },
+            createAuthorizationContext('did:plc:alice', 'user'),
+        );
+
+        expect(result.statusCode).toBe(200);
+        expect(repository.transition).toHaveBeenCalledWith(
+            expect.objectContaining({
+                commandId: 'transition-command-1',
+                actorDid: 'did:plc:alice',
+                fromStatus: 'open',
+                toStatus: 'resolved',
+            }),
         );
     });
 });

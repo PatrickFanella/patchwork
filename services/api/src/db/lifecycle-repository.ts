@@ -4,10 +4,12 @@ export interface LifecycleTransitionCommand {
     commandId: string;
     postUri: string;
     actorDid: string;
+    actorRole?: string;
     fromStatus: string;
     toStatus: string;
     occurredAt: string;
     reason?: string;
+    auditRetentionUntil?: string;
 }
 
 export interface LifecycleTransitionOutcome {
@@ -29,6 +31,15 @@ export interface RequestWorkflow {
     currentStatus: string;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface LifecycleRepository {
+    register(input: RegisterWorkflowInput): Promise<boolean>;
+    get(postUri: string): Promise<RequestWorkflow | undefined>;
+    transition(
+        command: LifecycleTransitionCommand,
+    ): Promise<LifecycleTransitionOutcome>;
+    deleteSubject(postUri: string): Promise<boolean>;
 }
 
 interface TransitionRow {
@@ -53,7 +64,7 @@ const withTransaction = async <T>(
     }
 };
 
-export class PostgresLifecycleRepository {
+export class PostgresLifecycleRepository implements LifecycleRepository {
     constructor(private readonly pool: Pool) {}
 
     async register(input: RegisterWorkflowInput): Promise<boolean> {
@@ -138,6 +149,19 @@ export class PostgresLifecycleRepository {
             if (!current) {
                 throw new Error('REQUEST_WORKFLOW_NOT_FOUND');
             }
+            const concurrentDuplicate = await client.query<TransitionRow>(
+                `SELECT transition_id
+                 FROM request_transition_events
+                 WHERE command_id = $1`,
+                [command.commandId],
+            );
+            const concurrentlyInserted = concurrentDuplicate.rows[0];
+            if (concurrentlyInserted) {
+                return {
+                    applied: false,
+                    transitionId: String(concurrentlyInserted.transition_id),
+                };
+            }
             if (current.current_status !== command.fromStatus) {
                 throw new Error('LIFECYCLE_REVISION_CONFLICT');
             }
@@ -164,6 +188,26 @@ export class PostgresLifecycleRepository {
                  SET current_status = $2, updated_at = $3
                  WHERE post_uri = $1`,
                 [command.postUri, command.toStatus, command.occurredAt],
+            );
+
+            await client.query(
+                `INSERT INTO operational_audit_events (
+                    command_id, actor_did, action, subject_uri, payload,
+                    retention_until, occurred_at
+                 ) VALUES ($1, $2, 'request.transitioned', $3, $4::jsonb, $5, $6)
+                 ON CONFLICT (command_id) DO NOTHING`,
+                [
+                    `audit:${command.commandId}`,
+                    command.actorDid,
+                    command.postUri,
+                    JSON.stringify({
+                        fromStatus: command.fromStatus,
+                        toStatus: command.toStatus,
+                        actorRole: command.actorRole,
+                    }),
+                    command.auditRetentionUntil ?? command.occurredAt,
+                    command.occurredAt,
+                ],
             );
 
             const transition = inserted.rows[0];
