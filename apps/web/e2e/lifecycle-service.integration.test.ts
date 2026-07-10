@@ -1,6 +1,5 @@
 /**
- * Wave 3 (#99) — E2E contract-path integration test for the aid request
- * lifecycle.
+ * Direct service integration test for the aid request lifecycle.
  *
  * Exercises the complete happy-path lifecycle via the LifecycleService and
  * FeedbackService, validating every state transition and the post-handoff
@@ -9,8 +8,9 @@
  *   open -> triaged -> assigned -> in_progress -> resolved -> archived
  *          + assignment accept + handoff complete + feedback submission
  *
- * Runs under vitest (not Playwright) so it can import service factories
- * directly and type definitions from @patchwork/shared.
+ * This deliberately imports service factories directly. It does not exercise
+ * HTTP, authentication, process startup, or PostgreSQL; those boundaries are
+ * covered by the API PostgreSQL integration suite.
  */
 
 import { describe, expect, it, beforeEach } from 'vitest';

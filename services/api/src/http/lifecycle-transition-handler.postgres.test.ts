@@ -1,0 +1,147 @@
+import { readFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import { once } from 'node:events';
+import { Pool } from 'pg';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { PostgresLifecycleRepository } from '../db/lifecycle-repository.js';
+import { createLifecycleService } from '../lifecycle-service.js';
+import { createLifecycleTransitionHandler } from './lifecycle-transition-handler.js';
+
+const databaseUrl = process.env.TEST_DATABASE_URL;
+const describeWithPostgres = databaseUrl ? describe : describe.skip;
+
+const startServer = async (pool: Pool): Promise<{ server: Server; baseUrl: string }> => {
+    const handler = createLifecycleTransitionHandler({
+        service: createLifecycleService(new PostgresLifecycleRepository(pool)),
+        resolveSession: async token => {
+            if (token !== 'alice-session') throw new Error('invalid test session');
+            return { did: 'did:plc:alice', role: 'user' };
+        },
+    });
+    const server = createServer((request, response) => {
+        const url = new URL(request.url ?? '/', 'http://localhost');
+        if (!handler(request, response, url)) {
+            response.writeHead(404).end();
+        }
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('missing address');
+    return { server, baseUrl: `http://127.0.0.1:${address.port}` };
+};
+
+const stopServer = async (server: Server): Promise<void> => {
+    server.close();
+    await once(server, 'close');
+};
+
+describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+
+    beforeAll(async () => {
+        const migration = await readFile(
+            new URL('../db/migrations/0003_core_operational_state.sql', import.meta.url),
+            'utf8',
+        );
+        await pool.query(migration);
+        await pool.query(
+            'TRUNCATE operational_audit_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
+        );
+    });
+
+    afterAll(async () => {
+        await pool.end();
+    });
+
+    it('persists an authenticated transition across HTTP server restart', async () => {
+        const request = {
+            commandId: 'http-transition-1',
+            postUri: 'at://did:plc:alice/app.patchwork.aid.post/http-1',
+            targetStatus: 'resolved',
+            actorDid: 'did:plc:mallory',
+            actorRole: 'admin',
+            now: '2026-07-10T23:30:00.000Z',
+        };
+        const first = await startServer(pool);
+        const firstResponse = await fetch(`${first.baseUrl}/aid/post/transition`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                cookie: 'patchwork_session=alice-session',
+            },
+            body: JSON.stringify(request),
+        });
+        expect(firstResponse.status).toBe(200);
+        await stopServer(first.server);
+
+        const restarted = await startServer(pool);
+        const retryResponse = await fetch(
+            `${restarted.baseUrl}/aid/post/transition`,
+            {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    cookie: 'patchwork_session=alice-session',
+                },
+                body: JSON.stringify(request),
+            },
+        );
+        expect(retryResponse.status).toBe(200);
+        await stopServer(restarted.server);
+
+        const durable = await pool.query<{
+            actor_did: string;
+            current_status: string;
+            transitions: string;
+            audits: string;
+        }>(
+            `SELECT w.requester_did AS actor_did, w.current_status,
+                    (SELECT COUNT(*)::text FROM request_transition_events) AS transitions,
+                    (SELECT COUNT(*)::text FROM operational_audit_events) AS audits
+             FROM request_workflows w WHERE w.post_uri = $1`,
+            [request.postUri],
+        );
+        expect(durable.rows[0]).toEqual({
+            actor_did: 'did:plc:alice',
+            current_status: 'resolved',
+            transitions: '1',
+            audits: '1',
+        });
+    });
+
+    it('rejects an unauthenticated HTTP transition', async () => {
+        const running = await startServer(pool);
+        const response = await fetch(`${running.baseUrl}/aid/post/transition`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                commandId: 'http-transition-unauthenticated',
+                postUri: 'at://did:plc:alice/app.patchwork.aid.post/http-2',
+                targetStatus: 'resolved',
+            }),
+        });
+        expect(response.status).toBe(401);
+        await stopServer(running.server);
+    });
+
+    it('rejects lifecycle registration for another repository owner', async () => {
+        const running = await startServer(pool);
+        const response = await fetch(`${running.baseUrl}/aid/post/transition`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                cookie: 'patchwork_session=alice-session',
+            },
+            body: JSON.stringify({
+                commandId: 'http-transition-forbidden',
+                postUri: 'at://did:plc:bob/app.patchwork.aid.post/http-3',
+                targetStatus: 'resolved',
+                actorDid: 'did:plc:mallory',
+                actorRole: 'admin',
+            }),
+        });
+        expect(response.status).toBe(403);
+        await stopServer(running.server);
+    });
+});

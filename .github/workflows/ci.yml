@@ -180,8 +180,8 @@ jobs:
             - name: PostgreSQL integration tests
               run: npm run test:integration:postgres -w @patchwork/api
 
-            - name: E2E contract-path lifecycle tests (#99)
-              run: npm run test:e2e:contract -w @patchwork/web
+            - name: Direct lifecycle service integration tests
+              run: npm run test:integration:service -w @patchwork/web
 
             - name: E2E request-to-handoff flow (Phase 8.2)
               run: npm run test:phase8-e2e

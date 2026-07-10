@@ -35,11 +35,11 @@
 - Modify: `apps/web/vitest.e2e.config.ts`
 - Modify: `apps/web/package.json`
 
-- [ ] Export a testable API runtime factory whose dependencies are injected without importing production startup side effects.
-- [ ] Start the HTTP server on an ephemeral port against migrated PostgreSQL.
-- [ ] Exercise authenticated lifecycle registration, transition, retry, forbidden ownership, and restart/readback through HTTP.
-- [ ] Rename the direct-service lifecycle suite and its command so it is not described as E2E.
-- [ ] Commit as `test(api): add real HTTP PostgreSQL lifecycle coverage`.
+- [x] Export a testable lifecycle HTTP handler whose dependencies are injected without importing production startup side effects.
+- [x] Start the HTTP server on an ephemeral port against migrated PostgreSQL.
+- [x] Exercise authenticated lifecycle registration, transition, retry, forbidden ownership, and restart/readback through HTTP.
+- [x] Rename the direct-service lifecycle suite and its command so it is not described as E2E.
+- [x] Commit as `test(api): add real HTTP PostgreSQL lifecycle coverage`.
 
 ### Task 3: Add diagnostic coverage reporting
 
