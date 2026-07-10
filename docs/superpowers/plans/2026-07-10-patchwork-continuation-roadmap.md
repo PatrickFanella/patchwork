@@ -183,12 +183,12 @@ flowchart LR
 - Create: `services/api/src/db/audit-repository.ts`
 - Test: `services/api/src/db/core-operational-state.test.ts`
 
-- [ ] Add idempotent tables for request workflow state, transition events, blocks, reports, and append-only audit events.
-- [ ] Add unique constraints for command idempotency and indexes for actor, subject URI, status, and creation time.
-- [ ] Put retention metadata on private records and exclude exact coordinates and token material from audit payloads.
-- [ ] Test migrations from an empty database and from the prior migration level.
-- [ ] Test restart survival, duplicate command handling, transaction rollback, and subject deletion behavior.
-- [ ] Commit as `feat(db): add durable alpha operational state`.
+- [x] Add idempotent tables for request workflow state, transition events, blocks, reports, and append-only audit events.
+- [x] Add unique constraints for command idempotency and indexes for actor, subject URI, status, and creation time.
+- [x] Put retention metadata on private records and exclude exact coordinates and token material from audit payloads.
+- [x] Test migrations from an empty database and from the prior migration level.
+- [x] Test restart survival, duplicate command handling, transaction rollback, and subject deletion behavior.
+- [x] Commit as `feat(db): add durable alpha operational state`.
 
 ### Task 3.2: Replace in-memory core services
 
