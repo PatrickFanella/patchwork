@@ -143,13 +143,13 @@ flowchart LR
 - Modify: `services/api/package.json`
 - Modify: `packages/shared/src/config.ts`
 
-- [ ] Store only the OAuth state, encrypted token material required by the selected client, DID, handle, expiry, and revocation timestamps.
-- [ ] Add login-start, callback, current-session, refresh, and logout routes using secure HTTP-only cookies.
-- [ ] Remove `createFixtureAuthService()` from non-test API startup.
-- [ ] Reject fixture auth whenever `NODE_ENV=production` or `API_DATA_SOURCE=postgres`.
-- [ ] Test callback-state mismatch, expired state, refresh rotation, logout revocation, missing encryption key, and restart persistence.
-- [ ] Run the new tests against PostgreSQL in `docker-compose.postgres.yml`.
-- [ ] Commit as `feat(auth): persist real AT OAuth sessions`.
+- [x] Store only the OAuth state, encrypted token material required by the selected client, DID, handle, expiry, and revocation timestamps.
+- [x] Add login-start, callback, current-session, refresh, and logout routes using secure HTTP-only cookies.
+- [x] Remove `createFixtureAuthService()` from non-test API startup.
+- [x] Reject fixture auth whenever `NODE_ENV=production` or `API_DATA_SOURCE=postgres`.
+- [x] Test callback-state mismatch, expired state, refresh rotation, logout revocation, missing encryption key, and restart persistence.
+- [x] Run the new tests against PostgreSQL in `docker-compose.postgres.yml`.
+- [x] Commit as `feat(auth): persist real AT OAuth sessions`.
 
 ### Task 2.3: Complete real aid-post CRUD
 

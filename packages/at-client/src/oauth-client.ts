@@ -12,7 +12,7 @@ export interface OAuthCallbackResult {
 }
 
 export interface OAuthAdapter {
-    authorize(handle: string): Promise<URL>;
+    authorize(handle: string, state?: string): Promise<URL>;
     callback(params: URLSearchParams): Promise<OAuthCallbackResult>;
     restore(did: string): Promise<OAuthSessionHandle>;
     revoke(did: string): Promise<void>;
@@ -73,7 +73,8 @@ export class AtSessionClient {
 export const createNodeOAuthAdapter = (
     client: NodeOAuthClient,
 ): OAuthAdapter => ({
-    authorize: handle => client.authorize(handle),
+    authorize: (handle, state) =>
+        client.authorize(handle, state === undefined ? undefined : { state }),
     callback: async params => {
         const result = await client.callback(params);
         return {

@@ -3,6 +3,7 @@ import {
     loadApiConfig,
     validateProductionConfig,
     validateProductionServiceConfig,
+    validateAtAuthRuntimeConfig,
     checkServiceHealth,
 } from './config.js';
 
@@ -54,6 +55,55 @@ describe('config schema', () => {
         } else {
             process.env.ATPROTO_SERVICE_DID = previousDid;
         }
+    });
+});
+
+describe('validateAtAuthRuntimeConfig', () => {
+    it('allows fixture auth only in test mode', () => {
+        expect(() =>
+            validateAtAuthRuntimeConfig({
+                NODE_ENV: 'test',
+                ATPROTO_SERVICE_DID: 'did:example:test-service',
+                API_DATA_SOURCE: 'fixture',
+            }),
+        ).not.toThrow();
+    });
+
+    it('rejects fixture auth outside tests', () => {
+        expect(() =>
+            validateAtAuthRuntimeConfig({
+                NODE_ENV: 'development',
+                ATPROTO_SERVICE_DID: 'did:example:test-service',
+                API_DATA_SOURCE: 'fixture',
+            }),
+        ).toThrow(/API_DATA_SOURCE=postgres/);
+    });
+
+    it('requires OAuth metadata and encryption configuration', () => {
+        expect(() =>
+            validateAtAuthRuntimeConfig({
+                NODE_ENV: 'development',
+                ATPROTO_SERVICE_DID: 'did:example:test-service',
+                API_DATA_SOURCE: 'postgres',
+                DATABASE_URL: 'postgresql://localhost/patchwork',
+            }),
+        ).toThrow(/ATPROTO_OAUTH_CLIENT_ID/);
+    });
+
+    it('accepts a complete persistent OAuth configuration', () => {
+        expect(() =>
+            validateAtAuthRuntimeConfig({
+                NODE_ENV: 'development',
+                ATPROTO_SERVICE_DID: 'did:example:test-service',
+                API_DATA_SOURCE: 'postgres',
+                DATABASE_URL: 'postgresql://localhost/patchwork',
+                ATPROTO_OAUTH_CLIENT_ID:
+                    'https://patchwork.example/oauth/client-metadata.json',
+                ATPROTO_OAUTH_REDIRECT_URI:
+                    'https://patchwork.example/oauth/callback',
+                ATPROTO_SESSION_ENCRYPTION_KEY: 'encoded-key',
+            }),
+        ).not.toThrow();
     });
 });
 

@@ -19,6 +19,8 @@
         "test:phase8-e2e": "vitest run src/phase8-e2e.test.ts"
     },
     "dependencies": {
+        "@atproto/oauth-client-node": "0.4.8",
+        "@patchwork/at-client": "0.1.0",
         "@patchwork/shared": "0.1.0",
         "pg": "^8.19.0"
     },

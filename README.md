@@ -38,19 +38,22 @@ and continuation work is sequenced by the
 - Node.js + TypeScript (monorepo workspaces)
 - React + Vite + Tailwind (web)
 - Vitest + Playwright (unit + browser E2E)
-- Optional local Postgres for API datasource mode
+- PostgreSQL for the API and encrypted AT OAuth session state
 
 ## Prerequisites
 
 - Node.js `>=20.19.0`
 - npm
-- Docker (only needed for Postgres mode)
+- Docker or another PostgreSQL 16 instance
 
 ## Quick start
 
 1. Install dependencies: `npm ci`
 2. Create local env file: copy `.env.example` → `.env`
-3. Start the app surfaces you need:
+3. Generate `ATPROTO_SESSION_ENCRYPTION_KEY` with `openssl rand -base64 32`,
+   set the OAuth client ID and callback URL documented in `.env.example`, and
+   run `npm run db:up && npm run db:migrate`.
+4. Start the app surfaces you need:
     - Web: `npm run dev:web`
     - API: `npm run dev:api`
     - Indexer: `npm run dev:indexer`
@@ -65,10 +68,10 @@ Default local URLs:
 
 ## API datasource modes
 
-The API supports two datasource modes:
+The API retains two datasource modes, but fixture mode is test-only:
 
-- `fixture` (default): deterministic in-memory data for local development
-- `postgres`: local DB-backed mode for integration testing
+- `fixture`: deterministic in-memory data used only under `NODE_ENV=test`
+- `postgres`: required for development and production API startup
 
 ### Postgres mode
 
@@ -76,8 +79,9 @@ The API supports two datasource modes:
 2. Set in `.env`:
     - `API_DATA_SOURCE=postgres`
     - `API_DATABASE_URL=postgresql://patchwork:patchwork@localhost:5432/patchwork`
-3. Seed deterministic data: `npm run db:seed`
-4. Start API in postgres mode: `npm run dev:api:postgres`
+3. Run migrations: `npm run db:migrate`
+4. Optionally seed deterministic discovery data: `npm run db:seed`
+5. Start API in postgres mode: `npm run dev:api`
 
 ### DB-backed frontend mode (Map / Feed / Resources / Posting)
 

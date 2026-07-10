@@ -12,7 +12,7 @@
     },
     "scripts": {
         "dev:web": "npm run dev -w @patchwork/web",
-        "dev:api": "npm run dev -w @patchwork/api",
+        "dev:api": "API_DATA_SOURCE=postgres npm run dev -w @patchwork/api",
         "dev:api:postgres": "API_DATA_SOURCE=postgres npm run dev -w @patchwork/api",
         "dev:indexer": "npm run dev -w @patchwork/indexer",
         "dev:moderation": "npm run dev -w @patchwork/moderation-worker",

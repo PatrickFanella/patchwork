@@ -32,6 +32,16 @@ const optionalUrlField = z
     )
     .optional();
 
+const optionalSecretField = z
+    .preprocess(
+        (value: unknown) =>
+            typeof value === 'string' && value.trim() === '' ?
+                undefined
+            :   value,
+        z.string().min(1).optional(),
+    )
+    .optional();
+
 const apiSchema = baseSchema.merge(atprotoSchema).extend({
     API_HOST: z.string().min(1).default('0.0.0.0'),
     API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
@@ -39,6 +49,9 @@ const apiSchema = baseSchema.merge(atprotoSchema).extend({
     API_DATA_SOURCE: z.enum(['fixture', 'postgres']).default('fixture'),
     API_DATABASE_URL: optionalUrlField,
     DATABASE_URL: optionalUrlField,
+    ATPROTO_OAUTH_CLIENT_ID: optionalUrlField,
+    ATPROTO_OAUTH_REDIRECT_URI: optionalUrlField,
+    ATPROTO_SESSION_ENCRYPTION_KEY: optionalSecretField,
 });
 
 const apiSchemaWithRefinements = apiSchema.superRefine((value, context) => {
@@ -142,7 +155,40 @@ export interface ProductionApiConfig extends ProductionConfigBase {
     API_DATA_SOURCE?: string;
     API_DATABASE_URL?: string;
     DATABASE_URL?: string;
+    ATPROTO_OAUTH_CLIENT_ID?: string;
+    ATPROTO_OAUTH_REDIRECT_URI?: string;
+    ATPROTO_SESSION_ENCRYPTION_KEY?: string;
 }
+
+export interface AtAuthRuntimeConfig extends ProductionApiConfig {
+    API_DATA_SOURCE?: string;
+}
+
+export const validateAtAuthRuntimeConfig = (
+    config: AtAuthRuntimeConfig,
+): void => {
+    if (config.NODE_ENV === 'test') {
+        return;
+    }
+
+    if (config.API_DATA_SOURCE !== 'postgres') {
+        throw new Error(
+            'FATAL: real AT OAuth requires API_DATA_SOURCE=postgres outside tests.',
+        );
+    }
+
+    const required: Array<keyof AtAuthRuntimeConfig> = [
+        'ATPROTO_OAUTH_CLIENT_ID',
+        'ATPROTO_OAUTH_REDIRECT_URI',
+        'ATPROTO_SESSION_ENCRYPTION_KEY',
+    ];
+    const missing = required.filter(key => !config[key]);
+    if (missing.length > 0) {
+        throw new Error(
+            `FATAL: real AT OAuth requires ${missing.join(', ')}.`,
+        );
+    }
+};
 
 /**
  * Validate that a config is safe for production use.

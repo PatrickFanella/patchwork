@@ -53,7 +53,7 @@ dev: dev-web ## Start web app (default local dev surface)
 dev-web: ## Start web app (Vite)
 	$(NPM) run dev:web
 
-dev-api: ## Start API in fixture mode
+dev-api: ## Start API with PostgreSQL and real AT OAuth
 	$(NPM) run dev:api
 
 dev-api-postgres: ## Start API in postgres mode

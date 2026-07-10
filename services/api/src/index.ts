@@ -5,6 +5,7 @@ import {
     CONTRACT_VERSION,
     loadApiConfig,
     validateProductionConfig,
+    validateAtAuthRuntimeConfig,
     checkServiceHealth,
     type ServiceHealth,
     type HealthCheck,
@@ -20,6 +21,9 @@ import {
 import { createFixtureVerificationService } from './verification-service.js';
 import { createFixtureSettingsService } from './settings-service.js';
 import { createFixtureAuthService } from './auth-service.js';
+import { AtClientError } from '@patchwork/at-client';
+import { createAtAuthRuntime } from './auth/runtime.js';
+import { serializeSessionCookie } from './auth/at-auth-service.js';
 import { createFixtureVolunteerService } from './volunteer-service.js';
 import { createLifecycleService } from './lifecycle-service.js';
 import { createAttachmentService } from './aid-post-service.js';
@@ -34,6 +38,7 @@ const config = loadApiConfig();
 
 // Production startup guard — fail fast if misconfigured
 validateProductionConfig(config);
+validateAtAuthRuntimeConfig(config);
 
 const resolveQueryService = async () => {
     if (config.API_DATA_SOURCE !== 'postgres') {
@@ -54,7 +59,8 @@ const settingsService = createFixtureSettingsService();
 const volunteerService = createFixtureVolunteerService();
 const lifecycleService = createLifecycleService();
 const attachmentService = createAttachmentService();
-const authService = createFixtureAuthService();
+const fixtureAuthService =
+    config.NODE_ENV === 'test' ? createFixtureAuthService() : undefined;
 const orgPortalService = createOrgPortalService();
 const inboxService = createInboxService();
 const feedbackService = createFeedbackService();
@@ -65,6 +71,11 @@ const postgresPool =
     config.API_DATA_SOURCE === 'postgres' && databaseUrl
         ? createPostgresPool(databaseUrl)
         : undefined;
+
+const atAuthRuntime =
+    config.NODE_ENV === 'test' ?
+        undefined
+    :   createAtAuthRuntime(config, postgresPool!);
 
 const aidPostService = createAidPostService(queryService, {
     dataSource: config.API_DATA_SOURCE,
@@ -215,6 +226,163 @@ const readJsonBody = (request: IncomingMessage): Promise<unknown> => {
     });
 };
 
+const readSessionCookie = (request: IncomingMessage): string | undefined => {
+    const cookieHeader = request.headers.cookie;
+    if (!cookieHeader) return undefined;
+    for (const cookie of cookieHeader.split(';')) {
+        const [name, ...valueParts] = cookie.trim().split('=');
+        if (name === 'patchwork_session') {
+            return decodeURIComponent(valueParts.join('='));
+        }
+    }
+    return undefined;
+};
+
+const writeAtAuthError = (response: ServerResponse, error: unknown): void => {
+    if (error instanceof AtClientError) {
+        const statusCode =
+            error.code === 'SESSION_EXPIRED' ? 401
+            : error.code === 'UNAUTHORIZED' ? 403
+            : error.code === 'PDS_UNAVAILABLE' ? 503
+            : 400;
+        writeJson(response, statusCode, {
+            error: {
+                code: error.code,
+                message: error.message,
+                retryable: error.retryable,
+            },
+        });
+        return;
+    }
+    writeJson(response, 500, {
+        error: {
+            code: 'AUTH_ERROR',
+            message: 'AT Protocol authentication failed.',
+        },
+    });
+};
+
+const handleRealAuthRoute = (
+    request: IncomingMessage,
+    response: ServerResponse,
+    requestUrl: URL,
+): boolean => {
+    if (!atAuthRuntime) return false;
+
+    if (
+        request.method === 'GET' &&
+        requestUrl.pathname === '/oauth/client-metadata.json'
+    ) {
+        writeJson(response, 200, atAuthRuntime.clientMetadata);
+        return true;
+    }
+
+    const authPaths = new Set([
+        '/oauth/login',
+        '/oauth/callback',
+        '/auth/session',
+        '/auth/refresh',
+    ]);
+    if (!authPaths.has(requestUrl.pathname)) return false;
+
+    void (async () => {
+        try {
+            if (
+                request.method === 'GET' &&
+                requestUrl.pathname === '/oauth/login'
+            ) {
+                const handle = requestUrl.searchParams.get('handle');
+                if (!handle) {
+                    writeJson(response, 400, {
+                        error: {
+                            code: 'INVALID_HANDLE',
+                            message: 'handle is required.',
+                        },
+                    });
+                    return;
+                }
+                const result = await atAuthRuntime.service.beginLogin(
+                    handle,
+                    requestUrl.searchParams.get('returnTo') ?? '/',
+                );
+                response.writeHead(302, { location: result.authorizationUrl });
+                response.end();
+                return;
+            }
+
+            if (
+                request.method === 'GET' &&
+                requestUrl.pathname === '/oauth/callback'
+            ) {
+                const result = await atAuthRuntime.service.completeLogin(
+                    requestUrl.searchParams,
+                );
+                response.writeHead(302, {
+                    location: result.returnTo,
+                    'set-cookie': serializeSessionCookie(
+                        result.sessionToken,
+                        config.NODE_ENV === 'production',
+                    ),
+                });
+                response.end();
+                return;
+            }
+
+            const sessionToken = readSessionCookie(request);
+            if (!sessionToken) {
+                throw new AtClientError(
+                    'SESSION_EXPIRED',
+                    'The Patchwork browser session is missing.',
+                );
+            }
+
+            if (
+                request.method === 'GET' &&
+                requestUrl.pathname === '/auth/session'
+            ) {
+                const current = await atAuthRuntime.service.current(sessionToken);
+                writeJson(response, 200, { session: current });
+                return;
+            }
+
+            if (
+                request.method === 'POST' &&
+                requestUrl.pathname === '/auth/refresh'
+            ) {
+                const refreshed = await atAuthRuntime.service.refresh(sessionToken);
+                writeJson(response, 200, { session: refreshed, refreshed: true });
+                return;
+            }
+
+            if (
+                request.method === 'DELETE' &&
+                requestUrl.pathname === '/auth/session'
+            ) {
+                await atAuthRuntime.service.logout(sessionToken);
+                writeJson(
+                    response,
+                    200,
+                    { deleted: true },
+                    {
+                        'set-cookie': serializeSessionCookie(
+                            '',
+                            config.NODE_ENV === 'production',
+                            0,
+                        ),
+                    },
+                );
+                return;
+            }
+
+            response.writeHead(405, { allow: 'GET, POST, DELETE' });
+            response.end();
+        } catch (error) {
+            writeAtAuthError(response, error);
+        }
+    })();
+    return true;
+};
+
 interface ApiRouteResult {
     statusCode: number;
     body: unknown;
@@ -226,6 +394,9 @@ type ApiRouteHandler =
     | ((requestUrl: URL) => Promise<ApiRouteResult>);
 
 const contractRoutes = [
+    '/oauth/client-metadata.json',
+    '/oauth/login',
+    '/oauth/callback',
     '/query/map',
     '/query/feed',
     '/query/directory',
@@ -292,6 +463,13 @@ const contractRoutes = [
     '/health/ready',
     '/metrics',
 ] as const;
+
+const requireFixtureAuthService = () => {
+    if (!fixtureAuthService) {
+        throw new Error('Fixture auth is available only when NODE_ENV=test.');
+    }
+    return fixtureAuthService;
+};
 
 const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
     '/health': async () => {
@@ -371,9 +549,13 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
     '/aid/post/lifecycle': requestUrl =>
         lifecycleService.queryFromParams(requestUrl.searchParams),
     '/auth/session': requestUrl =>
-        authService.validateSessionFromParams(requestUrl.searchParams),
+        requireFixtureAuthService().validateSessionFromParams(
+            requestUrl.searchParams,
+        ),
     '/auth/refresh': requestUrl =>
-        authService.refreshSessionFromParams(requestUrl.searchParams),
+        requireFixtureAuthService().refreshSessionFromParams(
+            requestUrl.searchParams,
+        ),
     '/org/profile': requestUrl =>
         orgPortalService.getOrg(requestUrl.searchParams),
     '/org/create': requestUrl =>
@@ -483,13 +665,17 @@ export const createApiServer = () => {
             return;
         }
 
+        if (handleRealAuthRoute(request, response, requestUrl)) {
+            return;
+        }
+
         if (
             request.method === 'POST' &&
             requestUrl.pathname === '/auth/session'
         ) {
             void Promise.resolve()
                 .then(() =>
-                    authService.createSessionFromParams(
+                    requireFixtureAuthService().createSessionFromParams(
                         requestUrl.searchParams,
                     ),
                 )
@@ -514,7 +700,7 @@ export const createApiServer = () => {
             request.method === 'DELETE' &&
             requestUrl.pathname === '/auth/session'
         ) {
-            const result = authService.deleteSessionFromParams(
+            const result = requireFixtureAuthService().deleteSessionFromParams(
                 requestUrl.searchParams,
             );
             writeJson(response, result.statusCode, result.body);
