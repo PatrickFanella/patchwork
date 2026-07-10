@@ -92,6 +92,17 @@ The web client now calls API routes directly for discovery + posting surfaces:
 - `GET /query/directory`
 - `GET /aid/post/create`
 
+Authenticated AT repository commands are exposed separately:
+
+- `POST /at/aid-posts`
+- `GET /at/aid-posts?uri=...`
+- `PUT /at/aid-posts`
+- `POST /at/aid-posts/close`
+- `DELETE /at/aid-posts`
+
+The legacy `/aid/post/create` fixture path is available only under
+`NODE_ENV=test` and returns `410` in a non-test runtime.
+
 Recommended local flow:
 
 1. Start Postgres: `npm run db:up`

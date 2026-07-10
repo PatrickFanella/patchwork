@@ -70,6 +70,20 @@ describe('AidPostRecordClient', () => {
         });
     });
 
+    it('rejects private exact-location fields in the public record', async () => {
+        const client = new AidPostRecordClient(transport());
+
+        await expect(
+            client.create({
+                ...validRecord,
+                location: {
+                    ...validRecord.location,
+                    exactLatitude: 41.881234,
+                },
+            }),
+        ).rejects.toMatchObject({ code: 'INVALID_RECORD' });
+    });
+
     it('validates records returned by the PDS', async () => {
         const at = transport();
         vi.mocked(at.getRecord).mockResolvedValueOnce({
@@ -130,6 +144,20 @@ describe('AidPostRecordClient', () => {
             code: 'REVISION_CONFLICT',
             retryable: false,
         });
+    });
+
+    it('prevents the authenticated account from mutating another repository', async () => {
+        const at = transport();
+        const client = new AidPostRecordClient(at);
+
+        await expect(
+            client.update(
+                'at://did:plc:bob/app.patchwork.aid.post/3abc',
+                'bafy-current',
+                validRecord,
+            ),
+        ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+        expect(at.putRecord).not.toHaveBeenCalled();
     });
 
     it('deletes with compare-and-swap', async () => {

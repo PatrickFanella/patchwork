@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     createAidPostViaApi,
+    createAtAidPostViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     initiateChatViaApi,
@@ -216,5 +217,41 @@ describe('api client', () => {
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         expect(body['category']).toBe('transport');
         expect(body['urgency']).toBe('critical');
+    });
+
+    it('creates an authenticated AT aid post with browser credentials', async () => {
+        const record = {
+            $type: 'app.patchwork.aid.post' as const,
+            version: '1.0.0' as const,
+            title: 'Need groceries',
+            description: 'Grocery delivery needed this afternoon.',
+            category: 'food' as const,
+            urgency: 'medium' as const,
+            status: 'open' as const,
+            location: {
+                latitude: 41.88,
+                longitude: -87.63,
+                precisionKm: 1,
+            },
+            createdAt: '2026-07-10T12:00:00.000Z',
+        };
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({
+                uri: 'at://did:plc:alice/app.patchwork.aid.post/3abc',
+                cid: 'bafy-created',
+                record,
+            }, true, 201),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await expect(createAtAidPostViaApi(record)).resolves.toMatchObject({
+            ok: true,
+            data: { cid: 'bafy-created' },
+        });
+        const call = (
+            fetchMock.mock.calls as unknown as Array<[unknown, RequestInit]>
+        )[0];
+        expect(String(call?.[0])).toContain('/at/aid-posts');
+        expect(call?.[1].credentials).toBe('include');
     });
 });

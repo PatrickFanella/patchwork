@@ -29,7 +29,7 @@ const buildCreateParams = () => {
         urgency: 'high',
         latitude: '40.7128',
         longitude: '-74.0060',
-        precisionKm: '0.5',
+        precisionKm: '1',
         now: '2026-02-28T12:00:00.000Z',
         rkey: 'post-test-001',
     });

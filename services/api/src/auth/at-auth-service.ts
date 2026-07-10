@@ -2,6 +2,7 @@ import {
     AtClientError,
     toAtClientError,
     type OAuthAdapter,
+    type OAuthSessionHandle,
 } from '@patchwork/at-client';
 import type { BrowserSessionRepository } from './session-repository.js';
 
@@ -134,6 +135,16 @@ export class AtAuthService {
         } catch (error) {
             await this.browserSessions.revoke(sessionToken);
             throw toAtClientError(error, 'Unable to refresh AT Protocol session.');
+        }
+    }
+
+    async restoreSession(sessionToken: string): Promise<OAuthSessionHandle> {
+        const current = await this.current(sessionToken);
+        try {
+            return await this.oauth.restore(current.did);
+        } catch (error) {
+            await this.browserSessions.revoke(sessionToken);
+            throw toAtClientError(error, 'Unable to restore AT Protocol session.');
         }
     }
 

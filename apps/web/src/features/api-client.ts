@@ -16,6 +16,10 @@ import type {
     SettingsChangeAudit,
     UserSettings,
 } from '@patchwork/shared';
+import {
+    aidPostSchema,
+    type AidPostRecord,
+} from '@patchwork/at-lexicons';
 
 export type ApiDataOrigin = 'api' | 'fallback';
 
@@ -280,6 +284,7 @@ const requestJson = async (
     try {
         const response = await fetch(resolveApiUrl(path, params), {
             method: 'GET',
+            credentials: 'include',
             headers: {
                 accept: 'application/json',
             },
@@ -340,6 +345,7 @@ const requestJsonPost = async (
             resolveApiUrl(path, new URLSearchParams()),
             {
                 method: 'POST',
+                credentials: 'include',
                 headers: {
                     'content-type': 'application/json',
                     accept: 'application/json',
@@ -403,6 +409,7 @@ const requestJsonPut = async (
             resolveApiUrl(path, new URLSearchParams()),
             {
                 method: 'PUT',
+                credentials: 'include',
                 headers: {
                     'content-type': 'application/json',
                     accept: 'application/json',
@@ -439,6 +446,100 @@ const requestJsonPut = async (
     } finally {
         clearTimeout(timeoutId);
     }
+};
+
+const requestJsonDelete = async (
+    path: string,
+    body: unknown,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<unknown>> => {
+    try {
+        const response = await fetch(
+            resolveApiUrl(path, new URLSearchParams()),
+            {
+                method: 'DELETE',
+                credentials: 'include',
+                headers: {
+                    'content-type': 'application/json',
+                    accept: 'application/json',
+                },
+                body: JSON.stringify(body),
+                signal,
+            },
+        );
+        if (response.status === 204) return { ok: true, data: undefined };
+        const payload = await response.json().catch(() => undefined);
+        return response.ok ?
+                { ok: true, data: payload }
+            :   {
+                    ok: false,
+                    error: toErrorMessage(
+                        payload,
+                        `API request failed (${response.status}).`,
+                    ),
+                };
+    } catch (error) {
+        return {
+            ok: false,
+            error:
+                error instanceof Error ?
+                    error.message
+                :   'Unable to reach API endpoint.',
+        };
+    }
+};
+
+export interface AtAidPostResult {
+    uri: string;
+    cid: string;
+    record: AidPostRecord;
+}
+
+const parseAtAidPostResult = (
+    payload: unknown,
+): ApiClientResult<AtAidPostResult> => {
+    if (!isRecord(payload)) {
+        return { ok: false, error: 'Aid-post response was malformed.' };
+    }
+    const uri = readString(payload, 'uri');
+    const cid = readString(payload, 'cid');
+    const record = aidPostSchema.safeParse(payload['record']);
+    if (!uri || !cid || !record.success) {
+        return { ok: false, error: 'Aid-post response was malformed.' };
+    }
+    return { ok: true, data: { uri, cid, record: record.data } };
+};
+
+export const createAtAidPostViaApi = async (
+    record: AidPostRecord,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtAidPostResult>> => {
+    const result = await requestJsonPost('/at/aid-posts', record, signal);
+    return result.ok ? parseAtAidPostResult(result.data) : result;
+};
+
+export const updateAtAidPostViaApi = async (
+    input: { uri: string; expectedCid: string; record: AidPostRecord },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtAidPostResult>> => {
+    const result = await requestJsonPut('/at/aid-posts', input, signal);
+    return result.ok ? parseAtAidPostResult(result.data) : result;
+};
+
+export const closeAtAidPostViaApi = async (
+    input: { uri: string; expectedCid: string; updatedAt: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtAidPostResult>> => {
+    const result = await requestJsonPost('/at/aid-posts/close', input, signal);
+    return result.ok ? parseAtAidPostResult(result.data) : result;
+};
+
+export const deleteAtAidPostViaApi = async (
+    input: { uri: string; expectedCid: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<void>> => {
+    const result = await requestJsonDelete('/at/aid-posts', input, signal);
+    return result.ok ? { ok: true, data: undefined } : result;
 };
 
 // ---------------------------------------------------------------------------

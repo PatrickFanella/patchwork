@@ -62,7 +62,7 @@ const aidPostCreateSchema = z.object({
     urgency: z.enum(['low', 'medium', 'high', 'critical']),
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
-    precisionKm: z.number().min(0.1).max(50).optional(),
+    precisionKm: z.number().min(1).max(50).optional(),
     rkey: z.string().trim().min(1).max(120).optional(),
     now: isoDateTimeSchema.optional(),
     trustScore: z.number().min(0).max(1).optional(),
@@ -194,7 +194,7 @@ export class ApiAidPostService {
             location: {
                 latitude: Number(input.latitude.toFixed(6)),
                 longitude: Number(input.longitude.toFixed(6)),
-                precisionKm: Number((input.precisionKm ?? 0.3).toFixed(3)),
+                precisionKm: Number((input.precisionKm ?? 1).toFixed(3)),
             },
             createdAt: now,
             updatedAt: now,

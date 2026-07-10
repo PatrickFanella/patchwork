@@ -161,13 +161,13 @@ flowchart LR
 - Modify: `packages/at-lexicons/src/lexicons/app.patchwork.aid.post.v1.json`
 - Modify: `docs/at-protocol/lexicon-versioning.md`
 
-- [ ] Implement authenticated create, update, close, and delete commands against the signed-in user’s PDS.
-- [ ] Enforce record ownership from the authenticated DID rather than request parameters.
-- [ ] Preserve the existing approximate-area privacy contract and reject exact-coordinate fields.
-- [ ] Require compare-and-swap revision information for update and close operations.
-- [ ] Return stable conflict, invalid-record, unauthenticated, forbidden, and upstream-unavailable error codes.
+- [x] Implement authenticated create, update, close, and delete commands against the signed-in user’s PDS.
+- [x] Enforce record ownership from the authenticated DID rather than request parameters.
+- [x] Preserve the existing approximate-area privacy contract and reject exact-coordinate fields.
+- [x] Require compare-and-swap revision information for update and close operations.
+- [x] Return stable conflict, invalid-record, unauthenticated, forbidden, and upstream-unavailable error codes.
 - [ ] Demonstrate create, read, update, close, and delete against two disposable test-PDS accounts.
-- [ ] Commit as `feat(records): complete real AT aid-post lifecycle`.
+- [x] Commit as `feat(records): complete real AT aid-post lifecycle`.
 
 **Phase 2 exit gate:** A disposable AT account can sign in, publish an aid post to its repository, update it, close it, and delete it; another account cannot mutate it. Evidence includes record URIs and redacted request results, never tokens.
 

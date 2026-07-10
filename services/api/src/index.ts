@@ -24,6 +24,8 @@ import { createFixtureAuthService } from './auth-service.js';
 import { AtClientError } from '@patchwork/at-client';
 import { createAtAuthRuntime } from './auth/runtime.js';
 import { serializeSessionCookie } from './auth/at-auth-service.js';
+import { AidPostCommandService } from './records/aid-post-command-service.js';
+import { ZodError } from 'zod';
 import { createFixtureVolunteerService } from './volunteer-service.js';
 import { createLifecycleService } from './lifecycle-service.js';
 import { createAttachmentService } from './aid-post-service.js';
@@ -76,6 +78,13 @@ const atAuthRuntime =
     config.NODE_ENV === 'test' ?
         undefined
     :   createAtAuthRuntime(config, postgresPool!);
+
+const aidPostCommandService =
+    atAuthRuntime ?
+        new AidPostCommandService(sessionToken =>
+            atAuthRuntime.aidPostClient(sessionToken),
+        )
+    :   undefined;
 
 const aidPostService = createAidPostService(queryService, {
     dataSource: config.API_DATA_SOURCE,
@@ -383,6 +392,128 @@ const handleRealAuthRoute = (
     return true;
 };
 
+const writeAidPostCommandError = (
+    response: ServerResponse,
+    error: unknown,
+): void => {
+    if (error instanceof AtClientError) {
+        writeAtAuthError(response, error);
+        return;
+    }
+    if (error instanceof ZodError) {
+        writeJson(response, 400, {
+            error: {
+                code: 'INVALID_COMMAND',
+                message: 'The aid-post command payload is invalid.',
+            },
+        });
+        return;
+    }
+    writeJson(response, 500, {
+        error: {
+            code: 'AID_POST_COMMAND_ERROR',
+            message: 'The aid-post command failed.',
+        },
+    });
+};
+
+const handleAidPostCommandRoute = (
+    request: IncomingMessage,
+    response: ServerResponse,
+    requestUrl: URL,
+): boolean => {
+    if (!aidPostCommandService) return false;
+    if (!requestUrl.pathname.startsWith('/at/aid-posts')) return false;
+
+    void (async () => {
+        try {
+            const sessionToken = readSessionCookie(request);
+            if (!sessionToken) {
+                throw new AtClientError(
+                    'SESSION_EXPIRED',
+                    'The Patchwork browser session is missing.',
+                );
+            }
+
+            if (
+                request.method === 'GET' &&
+                requestUrl.pathname === '/at/aid-posts'
+            ) {
+                const uri = requestUrl.searchParams.get('uri');
+                if (!uri) {
+                    writeJson(response, 400, {
+                        error: {
+                            code: 'INVALID_COMMAND',
+                            message: 'uri is required.',
+                        },
+                    });
+                    return;
+                }
+                const result = await aidPostCommandService.get(sessionToken, uri);
+                writeJson(response, 200, result);
+                return;
+            }
+
+            if (
+                request.method === 'POST' &&
+                requestUrl.pathname === '/at/aid-posts'
+            ) {
+                const result = await aidPostCommandService.create(
+                    sessionToken,
+                    await readJsonBody(request),
+                );
+                writeJson(response, 201, result);
+                return;
+            }
+
+            if (
+                request.method === 'PUT' &&
+                requestUrl.pathname === '/at/aid-posts'
+            ) {
+                const result = await aidPostCommandService.update(
+                    sessionToken,
+                    await readJsonBody(request),
+                );
+                writeJson(response, 200, result);
+                return;
+            }
+
+            if (
+                request.method === 'POST' &&
+                requestUrl.pathname === '/at/aid-posts/close'
+            ) {
+                const result = await aidPostCommandService.close(
+                    sessionToken,
+                    await readJsonBody(request),
+                );
+                writeJson(response, 200, result);
+                return;
+            }
+
+            if (
+                request.method === 'DELETE' &&
+                requestUrl.pathname === '/at/aid-posts'
+            ) {
+                await aidPostCommandService.delete(
+                    sessionToken,
+                    await readJsonBody(request),
+                );
+                response.writeHead(204);
+                response.end();
+                return;
+            }
+
+            response.writeHead(405, {
+                allow: 'GET, POST, PUT, DELETE',
+            });
+            response.end();
+        } catch (error) {
+            writeAidPostCommandError(response, error);
+        }
+    })();
+    return true;
+};
+
 interface ApiRouteResult {
     statusCode: number;
     body: unknown;
@@ -397,6 +528,8 @@ const contractRoutes = [
     '/oauth/client-metadata.json',
     '/oauth/login',
     '/oauth/callback',
+    '/at/aid-posts',
+    '/at/aid-posts/close',
     '/query/map',
     '/query/feed',
     '/query/directory',
@@ -542,8 +675,18 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
         verificationService.getAuditTrail(requestUrl.searchParams),
     '/account/settings': requestUrl =>
         settingsService.getSettings(requestUrl.searchParams),
-    '/aid/post/create': requestUrl =>
-        aidPostService.createFromParams(requestUrl.searchParams),
+    '/aid/post/create': async requestUrl =>
+        config.NODE_ENV === 'test' ?
+            await aidPostService.createFromParams(requestUrl.searchParams)
+        :   {
+                statusCode: 410,
+                body: {
+                    error: {
+                        code: 'LEGACY_ROUTE_REMOVED',
+                        message: 'Use authenticated POST /at/aid-posts.',
+                    },
+                },
+            },
     '/aid/post/transition': requestUrl =>
         lifecycleService.transitionFromParams(requestUrl.searchParams),
     '/aid/post/lifecycle': requestUrl =>
@@ -669,6 +812,10 @@ export const createApiServer = () => {
             return;
         }
 
+        if (handleAidPostCommandRoute(request, response, requestUrl)) {
+            return;
+        }
+
         if (
             request.method === 'POST' &&
             requestUrl.pathname === '/auth/session'
@@ -708,6 +855,7 @@ export const createApiServer = () => {
         }
 
         if (
+            config.NODE_ENV === 'test' &&
             request.method === 'POST' &&
             requestUrl.pathname === '/aid/post/create'
         ) {

@@ -1,5 +1,9 @@
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
-import { createNodeOAuthAdapter } from '@patchwork/at-client';
+import {
+    AidPostRecordClient,
+    createAgentRecordTransport,
+    createNodeOAuthAdapter,
+} from '@patchwork/at-client';
 import type { ApiConfig } from '@patchwork/shared';
 import type { Pool } from 'pg';
 import { AtAuthService } from './at-auth-service.js';
@@ -14,6 +18,7 @@ import {
 export interface AtAuthRuntime {
     service: AtAuthService;
     clientMetadata: NodeOAuthClient['clientMetadata'];
+    aidPostClient(sessionToken: string): Promise<AidPostRecordClient>;
 }
 
 export const createAtAuthRuntime = (
@@ -48,11 +53,17 @@ export const createAtAuthRuntime = (
         sessionStore: new PostgresOAuthSessionStore(pool, cipher),
     });
 
-    return {
-        service: new AtAuthService(
+    const service = new AtAuthService(
             createNodeOAuthAdapter(client),
             new PostgresBrowserSessionRepository(pool),
-        ),
+        );
+
+    return {
+        service,
         clientMetadata: client.clientMetadata,
+        aidPostClient: async sessionToken => {
+            const session = await service.restoreSession(sessionToken);
+            return new AidPostRecordClient(createAgentRecordTransport(session));
+        },
     };
 };

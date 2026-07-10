@@ -46,8 +46,7 @@ Key constraints:
 - `description`: 1..5000 chars
 - `urgency`: `low | medium | high | critical`
 - `status`: `open | in-progress | resolved | closed`
-- `location.precisionKm`: the legacy validator accepts 0.1..50; the alpha public
-  policy requires 1..50 and the validator must be tightened before real writes
+- `location.precisionKm`: 1..50 for the alpha public-location policy
 
 ### `app.patchwork.volunteer.profile`
 

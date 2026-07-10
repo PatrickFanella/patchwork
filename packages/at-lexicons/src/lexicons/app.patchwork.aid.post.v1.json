@@ -9,6 +9,7 @@
             "key": "tid",
             "record": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": [
                     "$type",
                     "version",
@@ -31,7 +32,36 @@
                     "category": { "type": "string" },
                     "urgency": { "type": "string" },
                     "status": { "type": "string" },
-                    "location": { "type": "object" },
+                    "location": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "latitude",
+                            "longitude",
+                            "precisionKm"
+                        ],
+                        "properties": {
+                            "latitude": {
+                                "type": "number",
+                                "minimum": -90,
+                                "maximum": 90
+                            },
+                            "longitude": {
+                                "type": "number",
+                                "minimum": -180,
+                                "maximum": 180
+                            },
+                            "precisionKm": {
+                                "type": "number",
+                                "minimum": 1,
+                                "maximum": 50
+                            },
+                            "areaLabel": {
+                                "type": "string",
+                                "maxLength": 120
+                            }
+                        }
+                    },
                     "createdAt": { "type": "string", "format": "datetime" },
                     "updatedAt": { "type": "string", "format": "datetime" }
                 }
