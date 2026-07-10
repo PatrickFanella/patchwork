@@ -14,6 +14,7 @@
         "lint": "npm run typecheck",
         "typecheck": "tsc -p tsconfig.json --noEmit",
         "test": "vitest run",
+        "test:integration:postgres": "vitest run src/auth/session-repository.postgres.test.ts src/db/core-operational-state.test.ts",
         "test:phase7": "vitest run src/phase5.test.ts src/phase7.test.ts",
         "test:phase8": "vitest run src/phase8.test.ts src/capacity-service.test.ts src/performance.test.ts src/load-profile.test.ts",
         "test:phase8-e2e": "vitest run src/phase8-e2e.test.ts"
