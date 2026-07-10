@@ -153,8 +153,11 @@ test.describe('Form accessibility', () => {
             const label = labels.nth(i);
             const forAttr = await label.getAttribute('for');
             if (forAttr) {
-                const input = page.locator(`#${CSS.escape(forAttr)}`);
-                await expect(input).toBeAttached();
+                const inputExists = await page.evaluate(
+                    inputId => document.getElementById(inputId) !== null,
+                    forAttr,
+                );
+                expect(inputExists).toBe(true);
             }
         }
     });
