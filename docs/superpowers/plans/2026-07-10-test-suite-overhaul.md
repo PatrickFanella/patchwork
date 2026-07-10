@@ -74,8 +74,8 @@
 - Modify: `.github/workflows/ci.yml`
 - Modify: `docs/operations/evidence/quality-review.md`
 
-- [ ] Remove duplicate Phase 7/8 runs from the mandatory job when the same files already run under the unit suite.
-- [ ] Keep compatibility commands available for targeted local diagnosis.
-- [ ] Run lint, typecheck, unit/fixture, PostgreSQL integration, service integration, browser E2E, and coverage.
-- [ ] Record exact per-layer results and remaining external/manual gaps.
-- [ ] Commit as `test: complete layered test suite overhaul`.
+- [x] Remove duplicate Phase 7/8 runs from the mandatory job when the same files already run under the unit suite.
+- [x] Keep compatibility commands available for targeted local diagnosis.
+- [x] Run lint, typecheck, unit/fixture, PostgreSQL integration, service integration, browser E2E, and coverage.
+- [x] Record exact per-layer results and remaining external/manual gaps.
+- [x] Commit as `test: complete layered test suite overhaul`.

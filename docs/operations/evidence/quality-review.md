@@ -84,7 +84,7 @@ The following findings triggered the overhaul. Items 1-3 and 5 are now addressed
 4. Add non-blocking V8 coverage reporting.
 5. Consolidate redundant phase/fixture tests only after coverage and mutation evidence shows they add no distinct protection.
 
-## Overhaul status
+## Overhaul result
 
 - PostgreSQL tests now have a dedicated command and mandatory CI environment.
 - A real Node HTTP/PostgreSQL lifecycle test now covers cookies, identity, restart persistence, retry idempotency, and ownership denial.
@@ -92,4 +92,8 @@ The following findings triggered the overhaul. Items 1-3 and 5 are now addressed
 - V8 coverage is installed and uploaded without an arbitrary threshold. Initial coverage is 80.74% statements and 67.38% branches.
 - `docs/test-traceability.md` now reports evidence by execution layer.
 
-The remaining overhaul item is removal of duplicate mandatory phase gates followed by a complete matrix rerun.
+- Duplicate Phase 7 and Phase 8 mandatory executions were removed; their targeted commands remain available.
+- The final distinct-layer matrix passed: lint/typecheck, 1,988 standard tests with 9 database tests intentionally skipped in that layer, 11 PostgreSQL/HTTP tests, 9 service-integration tests, 33 Chromium tests, and diagnostic coverage.
+- High/critical dependency audit findings were eliminated by upgrading Vitest to 4.1.10 and Vite to 7.3.6. One low-severity development-server advisory remains.
+
+Verdict after overhaul: **Ready to resume roadmap implementation**, with live browser OAuth and automated disposable-PDS coverage still tracked as product-integration gaps.

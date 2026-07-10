@@ -20,9 +20,9 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Domain/unit with database variables enabled | 1,994 passed, 0 skipped |
+| Domain/unit with database variables enabled | 1,997 passed, 0 skipped |
 | Direct lifecycle service integration | 9 passed |
-| PostgreSQL integration after HTTP test addition | 11 passed |
+| PostgreSQL integration, including HTTP boundary | 11 passed |
 | Browser Chromium accessibility | 33 passed |
 | Coverage | 80.74% statements, 67.38% branches, 76.95% functions, 81.39% lines |
 | External AT protocol | Two-account create/read/update/close/delete and ownership denial verified manually |

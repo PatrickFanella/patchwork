@@ -30,9 +30,6 @@ jobs:
             - name: Typecheck
               run: npm run typecheck
 
-            - name: Moderation + privacy regression gate (Phase 7)
-              run: npm run test:phase7
-
             - name: Unit tests
               run: npm run test
 
@@ -46,9 +43,6 @@ jobs:
                   name: test-coverage
                   path: coverage/
                   retention-days: 14
-
-            - name: E2E request-to-handoff flow (Phase 8.2)
-              run: npm run test:phase8-e2e
 
             - name: Install Playwright browsers
               run: npx playwright install --with-deps chromium
@@ -193,9 +187,6 @@ jobs:
 
             - name: Direct lifecycle service integration tests
               run: npm run test:integration:service -w @patchwork/web
-
-            - name: E2E request-to-handoff flow (Phase 8.2)
-              run: npm run test:phase8-e2e
 
     # -----------------------------------------------------------------------
     # Wave 4 (#108): Auto-deploy to staging on main push
