@@ -31,7 +31,7 @@
 **Files:**
 - Create: `services/api/src/http-lifecycle.postgres.test.ts`
 - Modify: `services/api/src/index.ts`
-- Move: `apps/web/e2e/request-lifecycle.test.ts` to `services/api/src/lifecycle-service.integration.test.ts`
+- Rename: `apps/web/e2e/request-lifecycle.test.ts` to `apps/web/e2e/lifecycle-service.integration.test.ts`
 - Modify: `apps/web/vitest.e2e.config.ts`
 - Modify: `apps/web/package.json`
 
@@ -75,7 +75,21 @@
 - Modify: `docs/operations/evidence/quality-review.md`
 
 - [x] Remove duplicate Phase 7/8 runs from the mandatory job when the same files already run under the unit suite.
-- [x] Keep compatibility commands available for targeted local diagnosis.
+- [x] Remove obsolete phase compatibility commands after their fixture test files are pruned.
 - [x] Run lint, typecheck, unit/fixture, PostgreSQL integration, service integration, browser E2E, and coverage.
 - [x] Record exact per-layer results and remaining external/manual gaps.
 - [x] Commit as `test: complete layered test suite overhaul`.
+
+### Task 6: Prune expansion prototype tests to the alpha minimum
+
+**Files:**
+- Delete: 55 contract-only, fixture-expansion, and historical phase test files
+- Modify: workspace test scripts and test evidence documentation
+- Create: `docs/operations/evidence/test-pruning-audit.md`
+
+- [x] Attribute every standard test to core alpha, expansion prototype, or historical phase coverage.
+- [x] Delete 1,234 expansion/phase tests instead of hiding them behind legacy commands.
+- [x] Retain AT, auth, aid-post, lifecycle, authorization, privacy, discovery, moderation, database, HTTP, service-integration, and browser protection.
+- [x] Remove obsolete phase test scripts and repair all documentation references.
+- [x] Run the complete layered matrix and record the honest post-pruning coverage baseline.
+- [x] Commit as `test: prune expansion prototypes from alpha suite`.

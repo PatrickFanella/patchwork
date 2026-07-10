@@ -8,7 +8,7 @@ This document captures the Phase 5 implementation scope for roadmap issue #41.
 - Shared Phase 5 tests: `packages/shared/src/messaging.test.ts`
 - API chat adapter: `services/api/src/chat-service.ts`
 - API route wiring: `services/api/src/index.ts`
-- API Phase 5 tests: `services/api/src/phase5.test.ts`
+- The historical Phase 5 wrapper test was removed during pruning; retained coverage lives in shared messaging, API chat, and web chat tests.
 - Web chat UX state model: `apps/web/src/chat-ux.ts`
 - Web chat UX tests: `apps/web/src/chat-ux.test.ts`
 

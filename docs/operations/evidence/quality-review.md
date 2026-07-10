@@ -96,4 +96,6 @@ The following findings triggered the overhaul. Items 1-3 and 5 are now addressed
 - The final distinct-layer matrix passed: lint/typecheck, 1,988 standard tests with 9 database tests intentionally skipped in that layer, 11 PostgreSQL/HTTP tests, 9 service-integration tests, 33 Chromium tests, and diagnostic coverage.
 - High/critical dependency audit findings were eliminated by upgrading Vitest to 4.1.10 and Vite to 7.3.6. One low-severity development-server advisory remains.
 
-Verdict after overhaul: **Ready to resume roadmap implementation**, with live browser OAuth and automated disposable-PDS coverage still tracked as product-integration gaps.
+After the follow-up pruning audit, the standard suite contains 754 tests instead of 1,988. Coverage is now 63.63% statements and 49.08% branches because deferred expansion source remains typechecked but intentionally untested. See `test-pruning-audit.md`.
+
+Verdict after overhaul and pruning: **Ready to resume roadmap implementation**, with live browser OAuth, automated disposable-PDS coverage, and eventual deletion or rebuilding of deferred expansion source still tracked as product gaps.

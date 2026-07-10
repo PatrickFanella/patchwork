@@ -9,9 +9,7 @@
         "start": "tsx src/index.ts",
         "lint": "npm run typecheck",
         "typecheck": "tsc -p tsconfig.json --noEmit",
-        "test": "vitest run",
-        "test:phase7": "vitest run src/phase7.test.ts",
-        "test:phase8": "vitest run src/phase8.test.ts"
+        "test": "vitest run"
     },
     "dependencies": {
         "@patchwork/shared": "0.1.0"

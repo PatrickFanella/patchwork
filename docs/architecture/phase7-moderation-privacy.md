@@ -59,6 +59,6 @@ Regression suites cover:
 
 CI now includes an explicit gate before full unit tests:
 
-- `npm run test:phase7`
+- `npm run test` (the retained core suite includes moderation, messaging safety, privacy, and rate-limit coverage)
 
 This gate must pass for merge readiness.

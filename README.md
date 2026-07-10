@@ -131,10 +131,11 @@ Stop Postgres when done: `npm run db:down`
 
 - Lint: `npm run lint`
 - Typecheck: `npm run typecheck`
-- Unit tests: `npm run test`
-- Moderation/privacy regression suite: `npm run test:phase7`
-- End-to-end contract flow: `npm run test:phase8-e2e`
+- Core alpha tests: `npm run test`
+- PostgreSQL + HTTP integration: `npm run test:integration:postgres -w @patchwork/api`
+- Direct service integration: `npm run test:integration:service -w @patchwork/web`
 - Browser E2E (web): `npm run test:e2e -w @patchwork/web`
+- Diagnostic coverage: `npm run test:coverage`
 - Build all workspaces: `npm run build`
 - Combined local gate: `npm run check`
 

@@ -38,7 +38,7 @@ The alpha explicitly excludes groups, reputation scoring, organization portals, 
 - Begin each implementation task with a failing test or executable acceptance check.
 - Keep fixture implementations available only to unit tests and explicitly named local demo modes.
 - Never allow a production build to silently substitute fixtures after an integration failure.
-- Run `npm run check`, `npm run test:phase7`, `npm run test:phase8`, and `npm run build` before every phase-closing merge.
+- Run `npm run check`, PostgreSQL/HTTP integration, direct service integration, browser E2E, coverage, and `npm run build` before every phase-closing merge.
 - Record phase evidence under `docs/operations/evidence/phase-N/` using committed Markdown summaries without credentials or user data.
 
 ## Target file map
@@ -365,7 +365,7 @@ Progress: authenticated PostgreSQL-backed block and report services are wired at
 
 **Files:**
 - Modify: `apps/web/src/features/frontend-shell.tsx`
-- Modify: `apps/web/e2e/request-lifecycle.test.ts`
+- Modify: `apps/web/e2e/lifecycle-service.integration.test.ts`
 - Create: `apps/web/e2e/at-record-lifecycle.spec.ts`
 - Modify: `apps/web/playwright.config.ts`
 
@@ -478,12 +478,12 @@ npm ci
 npm run lint
 npm run typecheck
 npm run test
-npm run test:phase7
-npm run test:phase8
-npm run test:phase8-e2e
+npm run test:integration:postgres -w @patchwork/api
+npm run test:integration:service -w @patchwork/web
 npm run build
 npx playwright install chromium
 npm run test:e2e -w @patchwork/web
+npm run test:coverage
 npm audit --omit=dev --audit-level=high
 ```
 

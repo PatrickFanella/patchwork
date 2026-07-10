@@ -101,7 +101,6 @@ Tie-breaking order:
 - `packages/shared/src/firehose.test.ts`
 - `packages/shared/src/discovery.test.ts`
 - `packages/shared/src/ranking.test.ts`
-- `services/indexer/src/phase3.test.ts`
-- `services/api/src/phase3.test.ts`
+- Historical Phase 3 fixture tests were removed during the 2026-07-10 pruning pass; retained coverage lives in shared firehose/discovery tests, indexer checkpoint tests, and PostgreSQL query tests.
 
 These cover malformed/partial events, deterministic replay, index lifecycle updates, filter correctness, pagination stability, ranking determinism, and regression-sensitive ordering.

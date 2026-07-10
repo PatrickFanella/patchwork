@@ -20,11 +20,11 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Domain/unit with database variables enabled | 1,997 passed, 0 skipped |
+| Core alpha unit/fixture suite | 754 passed; 9 database cases skipped in this layer |
 | Direct lifecycle service integration | 9 passed |
 | PostgreSQL integration, including HTTP boundary | 11 passed |
 | Browser Chromium accessibility | 33 passed |
-| Coverage | 80.74% statements, 67.38% branches, 76.95% functions, 81.39% lines |
+| Coverage after expansion-test pruning | 63.63% statements, 49.08% branches, 55.17% functions, 64.65% lines |
 | External AT protocol | Two-account create/read/update/close/delete and ownership denial verified manually |
 
 Counts can change as tests are consolidated. Readiness depends on covered boundaries, not the aggregate.
@@ -46,11 +46,11 @@ Counts can change as tests are consolidated. Readiness depends on covered bounda
 
 ### Domain and unit suites
 
-- `packages/shared/src/*.test.ts`: domain rules and deterministic models. These provide most of the raw test count.
+- `packages/shared/src/*.test.ts`: retained alpha domain rules and deterministic models.
 - `packages/at-lexicons/src/lexicons.test.ts`: local JSON lexicon loading and validation.
 - `packages/at-client/src/*.test.ts`: official AT SDK adapter behavior and stable error mapping.
 - `apps/web/src/*.test.ts(x)`: UX models, API client parsing, accessibility helpers, and component rendering.
-- `apps/mobile/src/*.test.ts`: mobile API, navigation, push, and offline behavior.
+- `apps/mobile`: contract-only source is typechecked; its prototype tests were removed from the alpha gate.
 - `services/*/src/*.test.ts`: service behavior, including many fixture-backed models.
 
 ### Direct service integration
@@ -77,7 +77,7 @@ These tests require `TEST_DATABASE_URL`. They verify encrypted OAuth persistence
 
 ## Coverage interpretation
 
-Coverage is diagnostic. The initial report identifies strong execution in shared domain modules and fixture services, but weaker coverage at important runtime boundaries, including:
+Coverage is diagnostic. The post-pruning drop is intentional: it exposes how much unshipped expansion source remains without alpha release protection. Retained gaps at important runtime boundaries include:
 
 - `apps/web/src/features/frontend-shell.tsx`
 - `services/api/src/http/lifecycle-transition-handler.ts` in the no-database coverage job
@@ -86,15 +86,9 @@ Coverage is diagnostic. The initial report identifies strong execution in shared
 
 CI uploads `coverage/coverage-summary.json`, LCOV, and the HTML-compatible data needed by coverage tools. No global threshold is enforced until fixture-heavy code and production runtime code are separated into meaningful targets.
 
-## Compatibility suites
+## Deferred expansion code
 
-Phase 7 and Phase 8 commands remain available for targeted diagnosis:
-
-- `npm run test:phase7`
-- `npm run test:phase8`
-- `npm run test:phase8-e2e`
-
-Their files are already included in the main unit suite. CI should not run them again as separate mandatory gates unless a future change makes them select unique tests.
+Tests for contract-only or fixture-only expansion systems were removed from the active repository on 2026-07-10. Their TypeScript remains subject to lint, typecheck, and build. A deferred feature must receive tests at the appropriate persistence and external boundary when it is selected for implementation; the old fixture corpus should not be restored wholesale.
 
 ## Local full-matrix procedure
 
