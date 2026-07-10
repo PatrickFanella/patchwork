@@ -22,7 +22,7 @@ This document supersedes the sequencing assumptions in `docs/IMPLEMENTATION_PLAN
 The alpha includes only:
 
 - real AT sign-in and session refresh;
-- create, read, update, close, and delete for `app.patchwork.aid.post.v1` records;
+- create, read, update, close, and delete for `app.patchwork.aid.post` records;
 - live ingestion into a durable PostgreSQL projection;
 - privacy-preserving map and feed discovery;
 - a minimal request lifecycle and report/block path;
@@ -124,13 +124,13 @@ flowchart LR
 - Modify: `package.json`
 - Modify: `package-lock.json`
 
-- [ ] Add the current official AT Protocol OAuth/client packages and pin versions through the lockfile.
-- [ ] Define `AtSessionClient` with login initiation, callback completion, refresh, and logout operations; do not expose user passwords to Patchwork.
-- [ ] Define `AidPostRecordClient` with create, get, update, and delete operations for `app.patchwork.aid.post.v1`.
-- [ ] Adapt repository responses into existing `@patchwork/at-lexicons` validation before returning them to callers.
-- [ ] Write mocked transport tests for successful writes, stale revision conflicts, invalid records, expired sessions, PDS unavailability, and deletes.
-- [ ] Run `npm run test -w @patchwork/at-client && npm run typecheck -w @patchwork/at-client`.
-- [ ] Commit as `feat(at): add OAuth and aid-post repository client`.
+- [x] Add the current official AT Protocol OAuth/client packages and pin versions through the lockfile.
+- [x] Define `AtSessionClient` with login initiation, callback completion, refresh, and logout operations; do not expose user passwords to Patchwork.
+- [x] Define `AidPostRecordClient` with create, get, update, and delete operations for `app.patchwork.aid.post`.
+- [x] Adapt repository responses into existing `@patchwork/at-lexicons` validation before returning them to callers.
+- [x] Write mocked transport tests for successful writes, stale revision conflicts, invalid records, expired sessions, PDS unavailability, and deletes.
+- [x] Run `npm run test -w @patchwork/at-client && npm run typecheck -w @patchwork/at-client`.
+- [x] Commit as `feat(at): add OAuth and aid-post repository client`.
 
 ### Task 2.2: Add real session persistence and API auth
 

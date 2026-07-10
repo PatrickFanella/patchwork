@@ -22,6 +22,7 @@ and continuation work is sequenced by the
 - `services/moderation-worker` — moderation/trust-safety worker
 - `packages/shared` — shared contracts, config/env schemas, utilities
 - `packages/at-lexicons` — AT lexicon schemas, fixtures, and validators
+- `packages/at-client` — isolated official AT OAuth and repository client adapters (not yet wired into API startup)
 
 ## Patchwork component naming
 
