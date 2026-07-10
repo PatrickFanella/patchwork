@@ -16,7 +16,12 @@ export interface CreateReportResult {
     reportId: string;
 }
 
-export class PostgresReportRepository {
+export interface ReportRepository {
+    create(input: CreateReportInput): Promise<CreateReportResult>;
+    deleteSubject(subjectUri: string, deletedAt: string): Promise<number>;
+}
+
+export class PostgresReportRepository implements ReportRepository {
     constructor(private readonly pool: Pool) {}
 
     async create(input: CreateReportInput): Promise<CreateReportResult> {

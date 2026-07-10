@@ -35,6 +35,11 @@ import { createFeedbackService } from './feedback-service.js';
 import { createReputationService } from './reputation-service.js';
 import { getCorsHeaders } from './cors.js';
 import { selectLimiter, extractClientIp } from './rate-limiter.js';
+import { createAuthorizationContext } from './authorization-guard.js';
+import { PostgresBlockRepository } from './db/block-repository.js';
+import { PostgresReportRepository } from './db/report-repository.js';
+import { BlockService } from './block-service.js';
+import { ReportService } from './report-service.js';
 
 const config = loadApiConfig();
 
@@ -73,6 +78,13 @@ const postgresPool =
     config.API_DATA_SOURCE === 'postgres' && databaseUrl
         ? createPostgresPool(databaseUrl)
         : undefined;
+
+const blockService =
+    postgresPool ? new BlockService(new PostgresBlockRepository(postgresPool)) : undefined;
+const reportService =
+    postgresPool ?
+        new ReportService(new PostgresReportRepository(postgresPool))
+    :   undefined;
 
 const atAuthRuntime =
     config.NODE_ENV === 'test' ?
@@ -415,6 +427,49 @@ const writeAidPostCommandError = (
             message: 'The aid-post command failed.',
         },
     });
+};
+
+const handleDurableSafetyRoute = (
+    request: IncomingMessage,
+    response: ServerResponse,
+    requestUrl: URL,
+): boolean => {
+    const isBlock = request.method === 'POST' && requestUrl.pathname === '/blocks';
+    const isReport =
+        request.method === 'POST' && requestUrl.pathname === '/reports';
+    if (!isBlock && !isReport) return false;
+
+    void (async () => {
+        try {
+            if (!atAuthRuntime || !blockService || !reportService) {
+                writeJson(response, 503, {
+                    error: {
+                        code: 'DURABLE_CORE_UNAVAILABLE',
+                        message: 'Durable safety services are unavailable.',
+                    },
+                });
+                return;
+            }
+            const sessionToken = readSessionCookie(request);
+            if (!sessionToken) {
+                throw new AtClientError(
+                    'SESSION_EXPIRED',
+                    'The Patchwork browser session is missing.',
+                );
+            }
+            const session = await atAuthRuntime.service.current(sessionToken);
+            const auth = createAuthorizationContext(session.did, 'user');
+            const body = await readJsonBody(request);
+            const result =
+                isBlock ?
+                    await blockService.block(body, auth)
+                :   await reportService.report(body, auth);
+            writeJson(response, result.statusCode, result.body);
+        } catch (error) {
+            writeAtAuthError(response, error);
+        }
+    })();
+    return true;
 };
 
 const handleAidPostCommandRoute = (
@@ -813,6 +868,10 @@ export const createApiServer = () => {
         }
 
         if (handleAidPostCommandRoute(request, response, requestUrl)) {
+            return;
+        }
+
+        if (handleDurableSafetyRoute(request, response, requestUrl)) {
             return;
         }
 

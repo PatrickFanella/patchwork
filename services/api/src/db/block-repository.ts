@@ -14,7 +14,13 @@ export interface CreateBlockResult {
     blockId: string;
 }
 
-export class PostgresBlockRepository {
+export interface BlockRepository {
+    create(input: CreateBlockInput): Promise<CreateBlockResult>;
+    isBlocked(blockerDid: string, subjectDid: string): Promise<boolean>;
+    deleteSubject(subjectDid: string, deletedAt: string): Promise<number>;
+}
+
+export class PostgresBlockRepository implements BlockRepository {
     constructor(private readonly pool: Pool) {}
 
     async create(input: CreateBlockInput): Promise<CreateBlockResult> {
