@@ -49,11 +49,11 @@
 - Create: `vitest.coverage.config.ts`
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] Install `@vitest/coverage-v8` matching Vitest 3.2.4.
-- [ ] Add `test:coverage` with text, JSON summary, and LCOV output.
-- [ ] Exclude generated files, fixtures, migrations, and test files from coverage.
-- [ ] Upload coverage as a CI artifact without introducing an arbitrary global threshold.
-- [ ] Commit as `test: add diagnostic V8 coverage reporting`.
+- [x] Install `@vitest/coverage-v8` matching the upgraded Vitest 4.1.10 test runner.
+- [x] Add `test:coverage` with text, JSON summary, and LCOV output.
+- [x] Exclude generated files, fixtures, migrations, and test files from coverage.
+- [x] Upload coverage as a CI artifact without introducing an arbitrary global threshold.
+- [x] Commit as `test: add diagnostic V8 coverage reporting`.
 
 ### Task 4: Replace the legacy traceability map with layered evidence
 

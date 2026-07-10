@@ -24,6 +24,7 @@
         "lint": "npm run lint --workspaces --if-present",
         "typecheck": "npm run typecheck --workspaces --if-present",
         "test": "npm run test --workspaces --if-present",
+        "test:coverage": "vitest run --config vitest.coverage.config.ts --coverage",
         "test:phase7": "npm run test:phase7 --workspaces --if-present",
         "test:phase8": "npm run test:phase8 --workspaces --if-present",
         "test:phase8-e2e": "npm run test:phase8-e2e --workspaces --if-present",
@@ -35,13 +36,14 @@
         "@types/react": "19.2.14",
         "@types/react-dom": "19.2.3",
         "@vitejs/plugin-react": "5.1.4",
+        "@vitest/coverage-v8": "4.1.10",
         "react": "19.2.4",
         "react-dom": "19.2.4",
         "tailwindcss": "4.2.1",
         "tsx": "4.21.0",
         "typescript": "5.9.3",
-        "vite": "7.3.1",
-        "vitest": "3.2.4",
+        "vite": "7.3.6",
+        "vitest": "4.1.10",
         "zod": "3.25.76"
     }
 }

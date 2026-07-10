@@ -36,6 +36,17 @@ jobs:
             - name: Unit tests
               run: npm run test
 
+            - name: Diagnostic coverage report
+              run: npm run test:coverage
+
+            - name: Upload coverage report
+              uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: test-coverage
+                  path: coverage/
+                  retention-days: 14
+
             - name: E2E request-to-handoff flow (Phase 8.2)
               run: npm run test:phase8-e2e
 
