@@ -87,13 +87,34 @@ services:
             LOG_LEVEL: ${LOG_LEVEL:-info}
             ATPROTO_SERVICE_DID: ${STAGING_ATPROTO_SERVICE_DID:?Set STAGING_ATPROTO_SERVICE_DID in .env}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            DATABASE_URL: postgresql://patchwork:${PATCHWORK_STAGING_POSTGRES_PASSWORD:?Set PATCHWORK_STAGING_POSTGRES_PASSWORD in .env}@patchwork-staging-postgres:5432/patchwork
             MODERATION_PORT: 4200
             MODERATION_WORKER_CONCURRENCY: ${MODERATION_WORKER_CONCURRENCY:-2}
+        depends_on:
+            postgres:
+                condition: service_healthy
+            patchwork-moderation-migrations:
+                condition: service_completed_successfully
         networks:
             staging-internal:
             staging-web:
                 aliases:
                     - patchwork-staging-thimble
+
+    patchwork-moderation-migrations:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: moderation-runtime
+        restart: "no"
+        command: ['npm', 'run', 'db:migrate', '-w', '@patchwork/moderation-worker']
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            DATABASE_URL: postgresql://patchwork:${PATCHWORK_STAGING_POSTGRES_PASSWORD:?Set PATCHWORK_STAGING_POSTGRES_PASSWORD in .env}@patchwork-staging-postgres:5432/patchwork
+        networks:
+            staging-internal:
 
     patchwork-web:
         build:

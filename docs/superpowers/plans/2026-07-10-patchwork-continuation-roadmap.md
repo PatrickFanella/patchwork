@@ -218,22 +218,18 @@ Progress: authenticated PostgreSQL-backed block and report services are wired at
 - Modify: `services/moderation-worker/src/index.ts`
 - Test: `services/moderation-worker/src/durable-queue.test.ts`
 
-Progress: migration `002_durable_moderation.sql` adds leases, attempts,
-next-attempt scheduling, stable failure codes, and terminal-failure state.
-`PostgresModerationQueueStore` now enqueues durable work, uses
-`FOR UPDATE SKIP LOCKED` to give concurrent workers distinct claims, enforces
-lease ownership on acknowledgement/failure, schedules retries, records terminal
-failures, and recovers work after lease expiry. Durable audit operations and
-production runtime wiring remain. `PostgresModerationAuditStore` now applies
-the shared policy transition and immutable audit record in one transaction,
-with pre-lock and post-lock idempotency checks for concurrent delivery.
+Progress: the production runtime requires PostgreSQL, verifies its schema before
+listening, and uses durable queue and audit services. A checksummed one-shot
+migration runner applies the moderation schema from empty, replays cleanly, and
+is a successful-completion dependency of the worker in production and staging
+Compose. Development and tests may still opt into the explicit fixture runtime.
 
 - [x] Implement claim-with-lease queue processing using `FOR UPDATE SKIP LOCKED`.
 - [x] Persist attempts, next-attempt time, terminal failure, policy decision, and audit history.
 - [x] Make policy application idempotent by command ID.
-- [ ] Fail production startup if PostgreSQL-backed stores cannot initialize.
-- [ ] Test worker crash after claim, lease expiry, retry backoff, duplicate delivery, and audit persistence.
-- [ ] Commit as `feat(moderation): add durable queue and audit stores`.
+- [x] Fail production startup if PostgreSQL-backed stores cannot initialize.
+- [x] Test worker crash after claim, lease expiry, retry backoff, duplicate delivery, and audit persistence.
+- [x] Commit the durable moderation work as focused verified slices.
 
 **Phase 3 exit gate:** Sessions, lifecycle events, blocks, reports, and moderation cases survive service restarts; duplicate commands do not duplicate effects.
 

@@ -7,15 +7,11 @@ import {
     type ModerationDecisionEvent,
     type ServiceHealth,
     type HealthCheck,
+    type ModerationPolicyAction,
     SliCollector,
 } from '@patchwork/shared';
-import {
-    createFixtureModerationWorkerService,
-    type ModerationWorkerServiceOptions,
-} from './moderation-service.js';
-import { InMemoryQueueStore } from './queue-store.js';
-import { InMemoryAuditStore } from './audit-store.js';
 import { ModerationMetrics } from './metrics.js';
+import { createModerationRuntime } from './moderation-runtime.js';
 
 const config = loadModerationWorkerConfig();
 
@@ -25,50 +21,28 @@ validateProductionServiceConfig(config);
 const databaseUrl = process.env.DATABASE_URL;
 
 const metrics = new ModerationMetrics();
-
-const serviceOptions: ModerationWorkerServiceOptions = (() => {
-    if (databaseUrl) {
-        // Production mode: would use Postgres-backed stores.
-        // For now, fall back to in-memory stores that persist within process lifetime.
-        console.log(
-            '[moderation-worker] DATABASE_URL detected; using in-memory stores (Postgres stores planned).',
-        );
-    }
-
-    // Dev/test mode (and current prod fallback): in-memory stores with metrics.
-    const queueStore = new InMemoryQueueStore();
-    const auditStore = new InMemoryAuditStore();
-    return { queueStore, auditStore, metrics };
-})();
-
-const moderationService = createFixtureModerationWorkerService(serviceOptions);
+const runtime = await createModerationRuntime({
+    nodeEnv: config.NODE_ENV,
+    ...(databaseUrl ? { databaseUrl } : {}),
+    metrics,
+});
+const durableService = runtime.mode === 'postgres' ? runtime.service : undefined;
+const fixtureService = runtime.mode === 'fixture' ? runtime.service : undefined;
 
 const sliCollector = new SliCollector();
 
 const buildModerationHealthChecks = (): HealthCheck[] => {
-    const store = serviceOptions.queueStore;
-    if (!store) {
-        return [
-            {
-                name: 'queue_store',
-                check: () => ({
-                    status: 'degraded' as const,
-                    message: 'No queue store configured',
-                }),
-            },
-        ];
-    }
     return [
         {
             name: 'queue_store',
-            check: () => {
+            check: async () => {
                 try {
-                    // Verify queue store is operational by listing pending items
-                    store.listPending();
+                    if (runtime.mode === 'postgres') await runtime.queue.assertReady();
+                    else runtime.queue.listPending();
                     return { status: 'ok' as const };
                 } catch {
                     return {
-                        status: 'degraded' as const,
+                        status: 'not_ready' as const,
                         message: 'Queue store unreachable',
                     };
                 }
@@ -113,6 +87,27 @@ type ModerationRouteHandler = (
     requestUrl: URL,
 ) => ModerationRouteResult | Promise<ModerationRouteResult>;
 
+const required = (params: URLSearchParams, key: string): string => {
+    const value = params.get(key)?.trim();
+    if (!value) throw new Error(`Missing required parameter: ${key}`);
+    return value;
+};
+
+const policyAction = (value: string): ModerationPolicyAction => {
+    const actions: ModerationPolicyAction[] = [
+        'delist',
+        'suspend-visibility',
+        'restore-visibility',
+        'open-appeal',
+        'start-appeal-review',
+        'resolve-appeal-upheld',
+        'resolve-appeal-rejected',
+    ];
+    const action = actions.find(candidate => candidate === value);
+    if (!action) throw new Error('Unsupported moderation policy action.');
+    return action;
+};
+
 const routeHandlers: Readonly<Record<string, ModerationRouteHandler>> = {
     '/health': async () => {
         const result = await checkServiceHealth(
@@ -152,16 +147,48 @@ const routeHandlers: Readonly<Record<string, ModerationRouteHandler>> = {
         statusCode: 200,
         body: sampleDecision,
     }),
-    '/moderation/queue/enqueue': requestUrl =>
-        moderationService.enqueueFromParams(requestUrl.searchParams),
-    '/moderation/queue': requestUrl =>
-        moderationService.listQueueFromParams(requestUrl.searchParams),
-    '/moderation/policy/apply': requestUrl =>
-        moderationService.applyPolicyFromParams(requestUrl.searchParams),
-    '/moderation/state': requestUrl =>
-        moderationService.getStateFromParams(requestUrl.searchParams),
-    '/moderation/audit': requestUrl =>
-        moderationService.listAuditFromParams(requestUrl.searchParams),
+    '/moderation/queue/enqueue': async requestUrl => {
+        if (!durableService) return fixtureService!.enqueueFromParams(requestUrl.searchParams);
+        const item = await durableService.enqueue({
+            subjectUri: required(requestUrl.searchParams, 'subjectUri'),
+            reason: required(requestUrl.searchParams, 'reason'),
+            requestedAt: requestUrl.searchParams.get('requestedAt') ?? undefined,
+        });
+        return { statusCode: 200, body: { item } };
+    },
+    '/moderation/queue': async requestUrl => {
+        if (!durableService) return fixtureService!.listQueueFromParams(requestUrl.searchParams);
+        const items = await durableService.listQueue();
+        return { statusCode: 200, body: { total: items.length, results: items } };
+    },
+    '/moderation/policy/apply': async requestUrl => {
+        if (!durableService) return fixtureService!.applyPolicyFromParams(requestUrl.searchParams);
+        const item = await durableService.applyPolicy({
+            subjectUri: required(requestUrl.searchParams, 'subjectUri'),
+            actorDid: required(requestUrl.searchParams, 'actorDid'),
+            action: policyAction(required(requestUrl.searchParams, 'action')),
+            reason: required(requestUrl.searchParams, 'reason'),
+            occurredAt: required(requestUrl.searchParams, 'occurredAt'),
+            idempotencyKey: required(requestUrl.searchParams, 'idempotencyKey'),
+        });
+        return { statusCode: 200, body: { item } };
+    },
+    '/moderation/state': async requestUrl => {
+        if (!durableService) return fixtureService!.getStateFromParams(requestUrl.searchParams);
+        const subjectUri = required(requestUrl.searchParams, 'subjectUri');
+        const item = await durableService.getState(subjectUri);
+        return {
+            statusCode: item ? 200 : 404,
+            body: item ? { item } : { error: { code: 'QUEUE_ITEM_NOT_FOUND' } },
+        };
+    },
+    '/moderation/audit': async requestUrl => {
+        if (!durableService) return fixtureService!.listAuditFromParams(requestUrl.searchParams);
+        const entries = await durableService.listAudit(
+            required(requestUrl.searchParams, 'subjectUri'),
+        );
+        return { statusCode: 200, body: { total: entries.length, results: entries } };
+    },
 };
 
 const writeJson = (
@@ -213,6 +240,12 @@ const server = createServer((request, response) => {
     }
 
     writeJson(response, 404, { error: 'Not Found' });
+});
+
+process.on('SIGTERM', () => {
+    server.close(() => {
+        void runtime.close();
+    });
 });
 
 server.listen(config.MODERATION_PORT, '0.0.0.0', () => {

@@ -1,8 +1,6 @@
 -- Migration: 001_create_moderation_tables
 -- Creates durable moderation queue and audit tables for the moderation worker.
 
-BEGIN;
-
 -- Moderation queue items table
 -- Stores the current state of each moderation subject.
 CREATE TABLE IF NOT EXISTS moderation_queue_items (
@@ -51,5 +49,3 @@ CREATE INDEX IF NOT EXISTS idx_moderation_audit_actor_did ON moderation_audit_re
 CREATE INDEX IF NOT EXISTS idx_moderation_audit_action ON moderation_audit_records (action);
 CREATE INDEX IF NOT EXISTS idx_moderation_audit_occurred_at ON moderation_audit_records (occurred_at);
 CREATE INDEX IF NOT EXISTS idx_moderation_audit_idempotency ON moderation_audit_records (idempotency_key);
-
-COMMIT;

@@ -327,6 +327,54 @@ export interface ModerationReviewQueueOptions {
     auditStore?: ModerationAuditStore;
 }
 
+export const buildModerationQueueItem = (
+    input: EnqueueModerationReviewInput,
+    existing: ModerationQueueItem | null = null,
+): ModerationQueueItem => {
+    const subjectUri = atUriSchema.parse(input.subjectUri);
+    const reason = input.reason.trim();
+    if (reason.length === 0) {
+        throw new ModerationPolicyError(
+            'INVALID_POLICY_INPUT',
+            'Moderation reason is required.',
+            { subjectUri },
+        );
+    }
+    const requestedAt = isoDateTimeSchema.parse(
+        input.requestedAt ?? new Date().toISOString(),
+    );
+    if (existing) {
+        return {
+            ...existing,
+            reasons:
+                existing.reasons.includes(reason)
+                    ? [...existing.reasons]
+                    : [...existing.reasons, reason],
+            latestReason: reason,
+            reportCount: existing.reportCount + 1,
+            queueStatus: 'queued',
+            requestedAt,
+            updatedAt: requestedAt,
+            context: mergeContext(existing.context, input.context ?? {}),
+        };
+    }
+    return {
+        queueId: toQueueId(subjectUri),
+        subjectUri,
+        subjectType: subjectTypeFromUri(subjectUri),
+        reasons: [reason],
+        latestReason: reason,
+        reportCount: 1,
+        queueStatus: 'queued',
+        visibility: 'visible',
+        appealState: 'none',
+        createdAt: requestedAt,
+        requestedAt,
+        updatedAt: requestedAt,
+        context: mergeContext({}, input.context ?? {}),
+    };
+};
+
 export class ModerationReviewQueue {
     private readonly queueBySubject = new Map<string, ModerationQueueItem>();
     private readonly auditTrail: ModerationPolicyAuditEntry[] = [];
@@ -340,61 +388,14 @@ export class ModerationReviewQueue {
 
     enqueueReview(input: EnqueueModerationReviewInput): ModerationQueueItem {
         const subjectUri = atUriSchema.parse(input.subjectUri);
-        const reason = input.reason.trim();
-        if (reason.length === 0) {
-            throw new ModerationPolicyError(
-                'INVALID_POLICY_INPUT',
-                'Moderation reason is required.',
-                { subjectUri },
-            );
-        }
-
-        const requestedAt = isoDateTimeSchema.parse(
-            input.requestedAt ?? new Date().toISOString(),
-        );
-
         const existing =
             this.queueStore?.peek(subjectUri) ??
             this.queueBySubject.get(subjectUri) ??
             null;
-        if (existing) {
-            const next: ModerationQueueItem = {
-                ...existing,
-                reasons:
-                    existing.reasons.includes(reason) ?
-                        [...existing.reasons]
-                    :   [...existing.reasons, reason],
-                latestReason: reason,
-                reportCount: existing.reportCount + 1,
-                queueStatus: 'queued',
-                requestedAt,
-                updatedAt: requestedAt,
-                context: mergeContext(existing.context, input.context ?? {}),
-            };
-            this.queueBySubject.set(subjectUri, next);
-            this.queueStore?.enqueue(next);
-            return deepClone(next);
-        }
-
-        const created: ModerationQueueItem = {
-            queueId: toQueueId(subjectUri),
-            subjectUri,
-            subjectType: subjectTypeFromUri(subjectUri),
-            reasons: [reason],
-            latestReason: reason,
-            reportCount: 1,
-            queueStatus: 'queued',
-            visibility: 'visible',
-            appealState: 'none',
-            createdAt: requestedAt,
-            requestedAt,
-            updatedAt: requestedAt,
-            context: mergeContext({}, input.context ?? {}),
-        };
-
-        this.queueBySubject.set(subjectUri, created);
-        this.queueStore?.enqueue(created);
-        return deepClone(created);
+        const item = buildModerationQueueItem(input, existing);
+        this.queueBySubject.set(subjectUri, item);
+        this.queueStore?.enqueue(item);
+        return deepClone(item);
     }
 
     enqueueSignal(

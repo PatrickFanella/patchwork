@@ -95,6 +95,29 @@ export class PostgresModerationQueueStore {
         );
     }
 
+    async get(subjectUri: string): Promise<ModerationQueueItem | null> {
+        const result = await this.pool.query<ModerationQueueRow>(
+            'SELECT * FROM moderation_queue_items WHERE subject_uri = $1',
+            [subjectUri],
+        );
+        const row = result.rows[0];
+        return row ? toItem(row) : null;
+    }
+
+    async list(): Promise<ModerationQueueItem[]> {
+        const result = await this.pool.query<ModerationQueueRow>(
+            `SELECT * FROM moderation_queue_items
+             ORDER BY requested_at ASC, subject_uri ASC`,
+        );
+        return result.rows.map(toItem);
+    }
+
+    async assertReady(): Promise<void> {
+        await this.pool.query(
+            `SELECT queue_id, attempts FROM moderation_queue_items LIMIT 1`,
+        );
+    }
+
     async claim(
         command: ClaimModerationWorkCommand,
     ): Promise<ModerationQueueItem | null> {

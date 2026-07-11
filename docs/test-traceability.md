@@ -100,6 +100,7 @@ npm test
 # With disposable PostgreSQL and TEST_DATABASE_URL configured:
 npm run db:migrate -w @patchwork/api
 npm run test:integration:postgres -w @patchwork/api
+TEST_DATABASE_URL=postgresql://... npm test -w @patchwork/moderation-worker
 
 npm run test:integration:service -w @patchwork/web
 npx playwright install chromium
