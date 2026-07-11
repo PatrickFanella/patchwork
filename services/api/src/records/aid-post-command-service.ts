@@ -17,6 +17,16 @@ export type AidPostClientFactory = (
     sessionToken: string,
 ) => Promise<AidPostClient>;
 
+export interface AidPostDeletionReconciler {
+    reconcileDeletion(command: {
+        commandId: string;
+        postUri: string;
+        actorDid: string;
+        occurredAt: string;
+        auditRetentionUntil: string;
+    }): Promise<unknown>;
+}
+
 const uriSchema = z.string().regex(/^at:\/\/[^/]+\/app\.patchwork\.aid\.post\/[^/]+$/);
 
 const mutationReferenceSchema = z.object({
@@ -33,7 +43,10 @@ const closeCommandSchema = mutationReferenceSchema.extend({
 });
 
 export class AidPostCommandService {
-    constructor(private readonly clientFactory: AidPostClientFactory) {}
+    constructor(
+        private readonly clientFactory: AidPostClientFactory,
+        private readonly deletionReconciler?: AidPostDeletionReconciler,
+    ) {}
 
     async create(
         sessionToken: string,
@@ -83,5 +96,18 @@ export class AidPostCommandService {
         const command = mutationReferenceSchema.parse(input);
         const client = await this.clientFactory(sessionToken);
         await client.delete(command.uri, command.expectedCid);
+        if (this.deletionReconciler) {
+            const occurredAt = new Date().toISOString();
+            const actorDid = command.uri.slice('at://'.length).split('/')[0]!;
+            await this.deletionReconciler.reconcileDeletion({
+                commandId: `record-delete:${command.uri}:${command.expectedCid}`,
+                postUri: command.uri,
+                actorDid,
+                occurredAt,
+                auditRetentionUntil: new Date(
+                    new Date(occurredAt).getTime() + 365 * 24 * 60 * 60 * 1000,
+                ).toISOString(),
+            });
+        }
     }
 }

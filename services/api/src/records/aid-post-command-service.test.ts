@@ -86,7 +86,8 @@ describe('AidPostCommandService', () => {
 
     it('deletes with compare-and-swap', async () => {
         const at = client();
-        const service = new AidPostCommandService(async () => at);
+        const reconciler = { reconcileDeletion: vi.fn().mockResolvedValue({}) };
+        const service = new AidPostCommandService(async () => at, reconciler);
 
         await service.delete('browser-session', {
             uri: 'at://did:plc:alice/app.patchwork.aid.post/3abc',
@@ -97,5 +98,27 @@ describe('AidPostCommandService', () => {
             'at://did:plc:alice/app.patchwork.aid.post/3abc',
             'bafy-current',
         );
+        expect(reconciler.reconcileDeletion).toHaveBeenCalledWith(
+            expect.objectContaining({
+                commandId: expect.stringContaining('bafy-current'),
+                postUri: 'at://did:plc:alice/app.patchwork.aid.post/3abc',
+                actorDid: 'did:plc:alice',
+            }),
+        );
+    });
+
+    it('does not reconcile local state when PDS deletion fails', async () => {
+        const at = client();
+        vi.mocked(at.delete).mockRejectedValue(new Error('stale CID'));
+        const reconciler = { reconcileDeletion: vi.fn() };
+        const service = new AidPostCommandService(async () => at, reconciler);
+
+        await expect(
+            service.delete('browser-session', {
+                uri: 'at://did:plc:alice/app.patchwork.aid.post/3abc',
+                expectedCid: 'bafy-stale',
+            }),
+        ).rejects.toThrow('stale CID');
+        expect(reconciler.reconcileDeletion).not.toHaveBeenCalled();
     });
 });

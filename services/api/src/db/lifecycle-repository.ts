@@ -108,6 +108,19 @@ export interface LifecycleAssignmentExpiryOutcome {
     currentStatus: RequestStatus;
 }
 
+export interface LifecycleDeletionCommand {
+    commandId: string;
+    postUri: string;
+    actorDid: string;
+    occurredAt: string;
+    auditRetentionUntil: string;
+}
+
+export interface LifecycleDeletionOutcome {
+    applied: boolean;
+    removed: boolean;
+}
+
 export interface LifecycleRepository {
     register(input: RegisterWorkflowInput): Promise<boolean>;
     get(postUri: string): Promise<RequestWorkflow | undefined>;
@@ -124,6 +137,9 @@ export interface LifecycleRepository {
     expireAssignment(
         command: LifecycleAssignmentExpiryCommand,
     ): Promise<LifecycleAssignmentExpiryOutcome>;
+    reconcileDeletion(
+        command: LifecycleDeletionCommand,
+    ): Promise<LifecycleDeletionOutcome>;
     deleteSubject(postUri: string): Promise<boolean>;
 }
 
@@ -808,6 +824,48 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
                 assignment,
                 currentStatus: 'triaged',
             };
+        });
+    }
+
+    async reconcileDeletion(
+        command: LifecycleDeletionCommand,
+    ): Promise<LifecycleDeletionOutcome> {
+        return withTransaction(this.pool, async client => {
+            const duplicate = await client.query<{
+                payload: { removed?: boolean };
+            }>(
+                `SELECT payload FROM operational_audit_events
+                 WHERE command_id = $1 AND action = 'request.record_deleted'`,
+                [command.commandId],
+            );
+            const existing = duplicate.rows[0];
+            if (existing) {
+                return {
+                    applied: false,
+                    removed: existing.payload.removed === true,
+                };
+            }
+
+            const deleted = await client.query(
+                'DELETE FROM request_workflows WHERE post_uri = $1',
+                [command.postUri],
+            );
+            const removed = deleted.rowCount === 1;
+            await client.query(
+                `INSERT INTO operational_audit_events (
+                    command_id, actor_did, action, subject_uri, payload,
+                    retention_until, occurred_at
+                 ) VALUES ($1, $2, 'request.record_deleted', $3, $4::jsonb, $5, $6)`,
+                [
+                    command.commandId,
+                    command.actorDid,
+                    command.postUri,
+                    JSON.stringify({ removed }),
+                    command.auditRetentionUntil,
+                    command.occurredAt,
+                ],
+            );
+            return { applied: true, removed };
         });
     }
 }

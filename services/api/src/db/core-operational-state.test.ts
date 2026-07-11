@@ -496,6 +496,62 @@ describeWithPostgres('core operational PostgreSQL state', () => {
         });
     });
 
+    it('reconciles confirmed record deletion and retains one audit marker', async () => {
+        const deletedUri =
+            'at://did:plc:alice/app.patchwork.aid.post/deleted-workflow';
+        await lifecycle.register({
+            commandId: 'register-deleted-workflow',
+            postUri: deletedUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-10T23:35:00.000Z',
+        });
+        await lifecycle.transition({
+            commandId: 'triage-deleted-workflow',
+            postUri: deletedUri,
+            actorDid: 'did:plc:coordinator',
+            actorRole: 'coordinator',
+            fromStatus: 'open',
+            toStatus: 'triaged',
+            occurredAt: '2026-07-10T23:35:10.000Z',
+        });
+        await lifecycle.assign({
+            commandId: 'assign-deleted-workflow',
+            postUri: deletedUri,
+            assignerDid: 'did:plc:coordinator',
+            assigneeDid: 'did:plc:volunteer',
+            occurredAt: '2026-07-10T23:35:20.000Z',
+            timeoutMs: 1_800_000,
+        });
+        const command = {
+            commandId: 'reconcile-delete:bafy-deleted-workflow',
+            postUri: deletedUri,
+            actorDid: 'did:plc:alice',
+            occurredAt: '2026-07-10T23:36:00.000Z',
+            auditRetentionUntil: '2027-07-10T23:36:00.000Z',
+        };
+
+        await expect(lifecycle.reconcileDeletion(command)).resolves.toEqual({
+            applied: true,
+            removed: true,
+        });
+        await expect(
+            new PostgresLifecycleRepository(pool).reconcileDeletion(command),
+        ).resolves.toEqual({ applied: false, removed: true });
+        await expect(lifecycle.get(deletedUri)).resolves.toBeUndefined();
+        const assignmentRows = await pool.query<{ count: string }>(
+            `SELECT COUNT(*)::text AS count FROM request_assignment_events
+             WHERE post_uri = $1`,
+            [deletedUri],
+        );
+        expect(assignmentRows.rows[0]?.count).toBe('0');
+        const auditRows = await pool.query<{ count: string }>(
+            `SELECT COUNT(*)::text AS count FROM operational_audit_events
+             WHERE command_id = $1 AND action = 'request.record_deleted'`,
+            [command.commandId],
+        );
+        expect(auditRows.rows[0]?.count).toBe('1');
+    });
+
     it('soft-deletes private block/report subject data', async () => {
         await blocks.create({
             commandId: 'block-1',

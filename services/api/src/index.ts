@@ -86,9 +86,9 @@ const reportService =
     postgresPool ?
         new ReportService(new PostgresReportRepository(postgresPool))
     :   undefined;
-const lifecycleService = createLifecycleService(
-    postgresPool ? new PostgresLifecycleRepository(postgresPool) : undefined,
-);
+const lifecycleRepository =
+    postgresPool ? new PostgresLifecycleRepository(postgresPool) : undefined;
+const lifecycleService = createLifecycleService(lifecycleRepository);
 
 const atAuthRuntime =
     config.NODE_ENV === 'test' ?
@@ -97,8 +97,9 @@ const atAuthRuntime =
 
 const aidPostCommandService =
     atAuthRuntime ?
-        new AidPostCommandService(sessionToken =>
-            atAuthRuntime.aidPostClient(sessionToken),
+        new AidPostCommandService(
+            sessionToken => atAuthRuntime.aidPostClient(sessionToken),
+            lifecycleRepository,
         )
     :   undefined;
 

@@ -53,3 +53,9 @@ A deleted record is represented as:
     - tombstone deterministic creation
     - round-trip mutation serialization/deserialization
     - regression protection against deleted record resurfacing
+- `services/api/src/records/aid-post-command-service.test.ts`
+    - local reconciliation runs only after confirmed PDS deletion
+    - failed compare-and-swap deletion does not remove local state
+- `services/api/src/db/core-operational-state.test.ts`
+    - workflow and fulfillment state are removed while one audit marker remains
+    - reconciliation retry does not duplicate effects

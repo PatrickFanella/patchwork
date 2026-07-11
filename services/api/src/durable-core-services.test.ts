@@ -87,6 +87,7 @@ describe('durable core services', () => {
             respondToAssignment: vi.fn(),
             completeHandoff: vi.fn(),
             expireAssignment: vi.fn(),
+            reconcileDeletion: vi.fn(),
             deleteSubject: vi.fn(),
         };
         const service = createLifecycleService(repository);
@@ -123,6 +124,7 @@ describe('durable core services', () => {
             respondToAssignment: vi.fn(),
             completeHandoff: vi.fn(),
             expireAssignment: vi.fn(),
+            reconcileDeletion: vi.fn(),
             deleteSubject: vi.fn(),
             get: vi.fn().mockResolvedValue({
                 postUri:
@@ -189,6 +191,7 @@ describe('durable core services', () => {
             respondToAssignment: vi.fn(),
             completeHandoff: vi.fn(),
             expireAssignment: vi.fn(),
+            reconcileDeletion: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
@@ -236,6 +239,7 @@ describe('durable core services', () => {
             }),
             completeHandoff: vi.fn(),
             expireAssignment: vi.fn(),
+            reconcileDeletion: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
@@ -297,6 +301,7 @@ describe('durable core services', () => {
                 currentStatus: 'resolved',
             }),
             expireAssignment: vi.fn(),
+            reconcileDeletion: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
@@ -378,6 +383,7 @@ describe('durable core services', () => {
                 },
                 currentStatus: 'triaged',
             }),
+            reconcileDeletion: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
