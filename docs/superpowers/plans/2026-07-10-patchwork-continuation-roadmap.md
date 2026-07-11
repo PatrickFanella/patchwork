@@ -203,11 +203,11 @@ flowchart LR
 Progress: authenticated PostgreSQL-backed block and report services are wired at `POST /blocks` and `POST /reports`. Lifecycle transitions and timelines are durable. Migrations `0005_lifecycle_assignments.sql`, `0006_assignment_responses.sql`, and `0007_lifecycle_handoffs.sql` add atomic, idempotent assignment, response, handoff, and timeout processing plus transition and audit writes. These routes restore the session and ignore request-supplied actor identity; timeout checks use deterministic command IDs. Confirmed PDS deletion reconciles private workflow state after compare-and-swap succeeds, cascades fulfillment data, and retains one idempotent audit marker. Migration `0008_platform_roles.sql` provides operator-provisioned DID roles with a safe `user` default; durable HTTP authorization resolves the role on every request. Migrations `0009_public_status_sync.sql` and `0010_public_sync_state.sql` plus `POST /at/aid-posts/status/reconcile` let the record author derive public status from durable workflow state, track `pending`/`failed`/`synced` attempts with stable error codes, update through PDS compare-and-swap, and retain the returned CID and one audit checkpoint. Automatic stream-driven reconciliation remains.
 
 - [x] Inject repository interfaces into lifecycle, block, report, and audit services.
-- [ ] Keep in-memory repositories in test fixtures only.
+- [x] Keep in-memory repositories in test fixtures only.
 - [x] Wrap state transition plus audit emission in one database transaction.
 - [x] Derive the actor exclusively from the authenticated session.
-- [ ] Test process restart, concurrent transitions, idempotent retry, forbidden transition, and deleted-record reconciliation.
-- [ ] Commit as `feat(api): replace core in-memory state with Postgres`.
+- [x] Test process restart, concurrent transitions, idempotent retry, forbidden transition, and deleted-record reconciliation.
+- [x] Commit the durable core-service replacement as a sequence of verified vertical slices.
 
 ### Task 3.3: Make moderation durable
 

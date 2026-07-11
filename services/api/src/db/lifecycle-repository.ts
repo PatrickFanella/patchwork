@@ -450,6 +450,24 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
             );
             const current = workflow.rows[0];
             if (!current) throw new Error('REQUEST_WORKFLOW_NOT_FOUND');
+            const concurrentDuplicate = await client.query<{
+                assignment_event_id: string | number;
+                assignment: AssignmentRecord;
+            }>(
+                `SELECT assignment_event_id, assignment
+                 FROM request_assignment_events WHERE command_id = $1`,
+                [command.commandId],
+            );
+            const concurrentlyInserted = concurrentDuplicate.rows[0];
+            if (concurrentlyInserted) {
+                return {
+                    applied: false,
+                    assignmentEventId: String(
+                        concurrentlyInserted.assignment_event_id,
+                    ),
+                    assignment: concurrentlyInserted.assignment,
+                };
+            }
             if (!['triaged', 'assigned', 'in_progress'].includes(current.current_status)) {
                 throw new Error('ASSIGNMENT_TRANSITION_NOT_ALLOWED');
             }

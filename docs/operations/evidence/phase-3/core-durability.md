@@ -13,6 +13,9 @@ Date: 2026-07-11
   public-sync checkpoints use command-level idempotency.
 - Public synchronization stores only stable failure codes and exposes
   `pending`, `failed`, and `synced` state to lifecycle queries.
+- Competing transitions serialize on the workflow row so only one revision
+  wins, and simultaneous delivery of one assignment command produces one
+  assignment event.
 - Blocks and reports derive their actor from the authenticated session and use
   PostgreSQL retention/deletion behavior.
 - Platform roles resolve by authenticated DID and default to `user`.
@@ -31,9 +34,6 @@ the replay skipped all ten, and 20 PostgreSQL/HTTP integration tests passed.
 
 ## Remaining before the Phase 3 exit gate
 
-- Prove concurrent lifecycle commands against PostgreSQL, not only sequential
-  conflict and retry behavior.
-- Ensure fixture repositories cannot start in production paths.
 - Implement durable moderation queue and audit stores, including crash-safe
   leases and retry behavior.
 - Connect automatic repository-event reconciliation during the live-indexer

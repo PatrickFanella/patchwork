@@ -269,6 +269,44 @@ describeWithPostgres('core operational PostgreSQL state', () => {
         });
     });
 
+    it('serializes competing transitions so only one revision wins', async () => {
+        const concurrentUri =
+            'at://did:plc:alice/app.patchwork.aid.post/concurrent-transition';
+        await lifecycle.register({
+            commandId: 'register-concurrent-transition',
+            postUri: concurrentUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-10T22:41:30.000Z',
+        });
+
+        const outcomes = await Promise.allSettled([
+            lifecycle.transition({
+                commandId: 'concurrent-transition-triaged',
+                postUri: concurrentUri,
+                actorDid: 'did:plc:alice',
+                actorRole: 'requester',
+                fromStatus: 'open',
+                toStatus: 'triaged',
+                occurredAt: '2026-07-10T22:42:00.000Z',
+            }),
+            new PostgresLifecycleRepository(pool).transition({
+                commandId: 'concurrent-transition-resolved',
+                postUri: concurrentUri,
+                actorDid: 'did:plc:alice',
+                actorRole: 'requester',
+                fromStatus: 'open',
+                toStatus: 'resolved',
+                occurredAt: '2026-07-10T22:42:00.000Z',
+            }),
+        ]);
+
+        expect(outcomes.filter(outcome => outcome.status === 'fulfilled')).toHaveLength(1);
+        expect(outcomes.filter(outcome => outcome.status === 'rejected')).toHaveLength(1);
+        const stored = await lifecycle.get(concurrentUri);
+        expect(stored?.timeline).toHaveLength(1);
+        expect(['triaged', 'resolved']).toContain(stored?.currentStatus);
+    });
+
     it('stores only sanitized append-only audit payloads', async () => {
         await audit.append({
             commandId: 'audit-1',
@@ -335,6 +373,50 @@ describeWithPostgres('core operational PostgreSQL state', () => {
                 status: 'pending',
             },
         });
+    });
+
+    it('deduplicates simultaneous delivery of the same assignment command', async () => {
+        const concurrentUri =
+            'at://did:plc:alice/app.patchwork.aid.post/concurrent-assignment';
+        await lifecycle.register({
+            commandId: 'register-concurrent-assignment',
+            postUri: concurrentUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-10T22:44:00.000Z',
+        });
+        await lifecycle.transition({
+            commandId: 'triage-concurrent-assignment',
+            postUri: concurrentUri,
+            actorDid: 'did:plc:coordinator',
+            actorRole: 'coordinator',
+            fromStatus: 'open',
+            toStatus: 'triaged',
+            occurredAt: '2026-07-10T22:45:00.000Z',
+        });
+        const command = {
+            commandId: 'assign-concurrent-volunteer',
+            postUri: concurrentUri,
+            assignerDid: 'did:plc:coordinator',
+            assigneeDid: 'did:plc:volunteer',
+            occurredAt: '2026-07-10T22:46:00.000Z',
+            timeoutMs: 1_800_000,
+        };
+
+        const outcomes = await Promise.all([
+            lifecycle.assign(command),
+            new PostgresLifecycleRepository(pool).assign(command),
+        ]);
+
+        expect(outcomes.map(outcome => outcome.applied).sort()).toEqual([
+            false,
+            true,
+        ]);
+        const rows = await pool.query<{ count: string }>(
+            `SELECT COUNT(*)::text AS count FROM request_assignment_events
+             WHERE command_id = $1`,
+            [command.commandId],
+        );
+        expect(rows.rows[0]?.count).toBe('1');
     });
 
     it('persists assignment acceptance and deduplicates retries', async () => {
