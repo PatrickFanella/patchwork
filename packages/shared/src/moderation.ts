@@ -221,7 +221,7 @@ const mergeContext = (
     };
 };
 
-const applyTransition = (
+export const applyModerationTransition = (
     current: ModerationQueueItem,
     action: ModerationPolicyAction,
 ): ModerationAuditStateSnapshot => {
@@ -469,7 +469,7 @@ export class ModerationReviewQueue {
             appealState: current.appealState,
         };
 
-        const nextState = applyTransition(current, input.action);
+        const nextState = applyModerationTransition(current, input.action);
 
         const updated: ModerationQueueItem = {
             ...current,

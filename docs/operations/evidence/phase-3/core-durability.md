@@ -34,8 +34,7 @@ the replay skipped all ten, and 20 PostgreSQL/HTTP integration tests passed.
 
 ## Remaining before the Phase 3 exit gate
 
-- Implement durable moderation queue and audit stores, including crash-safe
-  leases and retry behavior.
+- Wire the durable moderation queue and audit stores into production startup.
 - Connect automatic repository-event reconciliation during the live-indexer
   phase; the current public-status command is author initiated.
 
@@ -46,5 +45,7 @@ concurrent moderation workers claiming distinct queued subjects through
 `FOR UPDATE SKIP LOCKED`. This proves the claim primitive only; the production
 worker remains fixture-backed. Follow-up PostgreSQL tests prove ownership-checked
 acknowledgement/failure, retry backoff, terminal exclusion, and recovery at the
-lease-expiry boundary. Durable audit/policy transactions and runtime wiring
-remain.
+lease-expiry boundary. Durable audit/policy transactions were then verified:
+queue state and immutable audit insert commit atomically,
+sequential and concurrent duplicate commands return one recorded action, and a
+new repository instance reads the same trail. Production runtime wiring remains.

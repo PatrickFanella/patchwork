@@ -224,11 +224,13 @@ next-attempt scheduling, stable failure codes, and terminal-failure state.
 `FOR UPDATE SKIP LOCKED` to give concurrent workers distinct claims, enforces
 lease ownership on acknowledgement/failure, schedules retries, records terminal
 failures, and recovers work after lease expiry. Durable audit operations and
-production runtime wiring remain.
+production runtime wiring remain. `PostgresModerationAuditStore` now applies
+the shared policy transition and immutable audit record in one transaction,
+with pre-lock and post-lock idempotency checks for concurrent delivery.
 
 - [x] Implement claim-with-lease queue processing using `FOR UPDATE SKIP LOCKED`.
-- [ ] Persist attempts, next-attempt time, terminal failure, policy decision, and audit history.
-- [ ] Make policy application idempotent by command ID.
+- [x] Persist attempts, next-attempt time, terminal failure, policy decision, and audit history.
+- [x] Make policy application idempotent by command ID.
 - [ ] Fail production startup if PostgreSQL-backed stores cannot initialize.
 - [ ] Test worker crash after claim, lease expiry, retry backoff, duplicate delivery, and audit persistence.
 - [ ] Commit as `feat(moderation): add durable queue and audit stores`.
