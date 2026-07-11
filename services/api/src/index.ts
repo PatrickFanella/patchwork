@@ -805,7 +805,7 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
         reputationService.getReputationFromParams(requestUrl.searchParams),
     '/reputation/signals': requestUrl =>
         reputationService.getSignalsFromParams(requestUrl.searchParams),
-    '/aid/post/timeout-check': requestUrl => {
+    '/aid/post/timeout-check': async requestUrl => {
         const postUri = requestUrl.searchParams.get('postUri');
         if (!postUri) {
             return {
@@ -813,9 +813,11 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
                 body: { error: { code: 'INVALID_INPUT', message: 'postUri is required.' } },
             };
         }
-        return lifecycleService.checkAssignmentTimeout(
+        return lifecycleService.checkAssignmentTimeoutAsync(
             postUri,
-            requestUrl.searchParams.get('now') ?? undefined,
+            postgresPool
+                ? undefined
+                : requestUrl.searchParams.get('now') ?? undefined,
         );
     },
     '/aid/post/attachments': requestUrl =>

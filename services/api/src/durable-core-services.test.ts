@@ -86,6 +86,7 @@ describe('durable core services', () => {
             assign: vi.fn(),
             respondToAssignment: vi.fn(),
             completeHandoff: vi.fn(),
+            expireAssignment: vi.fn(),
             deleteSubject: vi.fn(),
         };
         const service = createLifecycleService(repository);
@@ -121,6 +122,7 @@ describe('durable core services', () => {
             assign: vi.fn(),
             respondToAssignment: vi.fn(),
             completeHandoff: vi.fn(),
+            expireAssignment: vi.fn(),
             deleteSubject: vi.fn(),
             get: vi.fn().mockResolvedValue({
                 postUri:
@@ -186,6 +188,7 @@ describe('durable core services', () => {
             }),
             respondToAssignment: vi.fn(),
             completeHandoff: vi.fn(),
+            expireAssignment: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
@@ -232,6 +235,7 @@ describe('durable core services', () => {
                 currentStatus: 'in_progress',
             }),
             completeHandoff: vi.fn(),
+            expireAssignment: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
@@ -292,6 +296,7 @@ describe('durable core services', () => {
                 },
                 currentStatus: 'resolved',
             }),
+            expireAssignment: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
@@ -334,5 +339,66 @@ describe('durable core services', () => {
                 },
             },
         });
+    });
+
+    it('checks assignment timeout through the durable repository', async () => {
+        const repository = {
+            register: vi.fn(),
+            get: vi.fn().mockResolvedValue({
+                postUri:
+                    'at://did:plc:alice/app.patchwork.aid.post/durable-timeout',
+                requesterDid: 'did:plc:alice',
+                currentStatus: 'assigned',
+                createdAt: '2026-07-10T23:00:00.000Z',
+                updatedAt: '2026-07-10T23:01:00.000Z',
+                timeline: [],
+                assignment: {
+                    assigneeDid: 'did:plc:volunteer',
+                    assignerDid: 'did:plc:coordinator',
+                    assignedAt: '2026-07-10T23:01:00.000Z',
+                    status: 'pending',
+                    timeoutMs: 1_800_000,
+                },
+            }),
+            transition: vi.fn(),
+            assign: vi.fn(),
+            respondToAssignment: vi.fn(),
+            completeHandoff: vi.fn(),
+            deleteSubject: vi.fn(),
+            expireAssignment: vi.fn().mockResolvedValue({
+                applied: true,
+                assignmentEventId: '44',
+                assignment: {
+                    assigneeDid: 'did:plc:volunteer',
+                    assignerDid: 'did:plc:coordinator',
+                    assignedAt: '2026-07-10T23:01:00.000Z',
+                    respondedAt: '2026-07-10T23:32:00.000Z',
+                    status: 'timed_out',
+                    timeoutMs: 1_800_000,
+                },
+                currentStatus: 'triaged',
+            }),
+        };
+        const service = createLifecycleService(repository);
+
+        await expect(
+            service.checkAssignmentTimeoutAsync(
+                'at://did:plc:alice/app.patchwork.aid.post/durable-timeout',
+                '2026-07-10T23:32:00.000Z',
+            ),
+        ).resolves.toMatchObject({
+            statusCode: 200,
+            body: {
+                assignment: { status: 'timed_out' },
+                currentStatus: 'triaged',
+            },
+        });
+        expect(repository.expireAssignment).toHaveBeenCalledWith(
+            expect.objectContaining({
+                commandId: expect.stringContaining('2026-07-10T23:01:00.000Z'),
+                postUri:
+                    'at://did:plc:alice/app.patchwork.aid.post/durable-timeout',
+            }),
+        );
     });
 });

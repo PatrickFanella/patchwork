@@ -439,6 +439,63 @@ describeWithPostgres('core operational PostgreSQL state', () => {
         });
     });
 
+    it('expires overdue assignments atomically and deduplicates retries', async () => {
+        const timeoutUri =
+            'at://did:plc:alice/app.patchwork.aid.post/timed-out-assignment';
+        await lifecycle.register({
+            commandId: 'register-timed-out-assignment',
+            postUri: timeoutUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-10T23:01:00.000Z',
+        });
+        await lifecycle.transition({
+            commandId: 'triage-timed-out-assignment',
+            postUri: timeoutUri,
+            actorDid: 'did:plc:coordinator',
+            actorRole: 'coordinator',
+            fromStatus: 'open',
+            toStatus: 'triaged',
+            occurredAt: '2026-07-10T23:02:00.000Z',
+        });
+        await lifecycle.assign({
+            commandId: 'assign-timed-out-volunteer',
+            postUri: timeoutUri,
+            assignerDid: 'did:plc:coordinator',
+            assigneeDid: 'did:plc:volunteer',
+            occurredAt: '2026-07-10T23:03:00.000Z',
+            timeoutMs: 1_800_000,
+        });
+        const command = {
+            commandId: 'expire-timed-out-volunteer',
+            postUri: timeoutUri,
+            occurredAt: '2026-07-10T23:34:00.000Z',
+        };
+
+        await expect(lifecycle.expireAssignment(command)).resolves.toMatchObject({
+            applied: true,
+            assignment: { status: 'timed_out' },
+            currentStatus: 'triaged',
+        });
+        await expect(
+            new PostgresLifecycleRepository(pool).expireAssignment(command),
+        ).resolves.toMatchObject({ applied: false });
+        await expect(lifecycle.get(timeoutUri)).resolves.toMatchObject({
+            currentStatus: 'triaged',
+            assignment: {
+                assigneeDid: 'did:plc:volunteer',
+                status: 'timed_out',
+                respondedAt: '2026-07-10T23:34:00.000Z',
+            },
+            timeline: expect.arrayContaining([
+                expect.objectContaining({
+                    from: 'assigned',
+                    to: 'triaged',
+                    actorRole: 'coordinator',
+                }),
+            ]),
+        });
+    });
+
     it('soft-deletes private block/report subject data', async () => {
         await blocks.create({
             commandId: 'block-1',

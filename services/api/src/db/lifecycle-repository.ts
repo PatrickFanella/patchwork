@@ -94,6 +94,20 @@ export interface LifecycleHandoffOutcome {
     currentStatus: 'resolved';
 }
 
+export interface LifecycleAssignmentExpiryCommand {
+    commandId: string;
+    postUri: string;
+    occurredAt: string;
+    auditRetentionUntil?: string;
+}
+
+export interface LifecycleAssignmentExpiryOutcome {
+    applied: boolean;
+    assignmentEventId?: string;
+    assignment: AssignmentRecord;
+    currentStatus: RequestStatus;
+}
+
 export interface LifecycleRepository {
     register(input: RegisterWorkflowInput): Promise<boolean>;
     get(postUri: string): Promise<RequestWorkflow | undefined>;
@@ -107,6 +121,9 @@ export interface LifecycleRepository {
         command: LifecycleAssignmentResponseCommand,
     ): Promise<LifecycleAssignmentResponseOutcome>;
     completeHandoff(command: LifecycleHandoffCommand): Promise<LifecycleHandoffOutcome>;
+    expireAssignment(
+        command: LifecycleAssignmentExpiryCommand,
+    ): Promise<LifecycleAssignmentExpiryOutcome>;
     deleteSubject(postUri: string): Promise<boolean>;
 }
 
@@ -664,6 +681,132 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
                 handoffEventId: String(event.handoff_event_id),
                 handoff,
                 currentStatus: 'resolved',
+            };
+        });
+    }
+
+    async expireAssignment(
+        command: LifecycleAssignmentExpiryCommand,
+    ): Promise<LifecycleAssignmentExpiryOutcome> {
+        return withTransaction(this.pool, async client => {
+            const duplicate = await client.query<{
+                assignment_event_id: string | number;
+                assignment: AssignmentRecord;
+                event_type: string;
+            }>(
+                `SELECT assignment_event_id, assignment, event_type
+                 FROM request_assignment_events WHERE command_id = $1`,
+                [command.commandId],
+            );
+            const existing = duplicate.rows[0];
+            if (existing) {
+                if (existing.event_type !== 'timed_out') {
+                    throw new Error('COMMAND_ID_CONFLICT');
+                }
+                return {
+                    applied: false,
+                    assignmentEventId: String(existing.assignment_event_id),
+                    assignment: existing.assignment,
+                    currentStatus: 'triaged',
+                };
+            }
+
+            const workflow = await client.query<{
+                current_status: RequestStatus;
+                assignment: AssignmentRecord | null;
+            }>(
+                `SELECT current_status, assignment FROM request_workflows
+                 WHERE post_uri = $1 FOR UPDATE`,
+                [command.postUri],
+            );
+            const current = workflow.rows[0];
+            if (!current) throw new Error('REQUEST_WORKFLOW_NOT_FOUND');
+            if (!current.assignment) throw new Error('ASSIGNMENT_NOT_FOUND');
+            if (
+                current.assignment.status !== 'pending' ||
+                current.current_status !== 'assigned'
+            ) {
+                return {
+                    applied: false,
+                    assignment: current.assignment,
+                    currentStatus: current.current_status,
+                };
+            }
+
+            const deadline =
+                new Date(current.assignment.assignedAt).getTime() +
+                current.assignment.timeoutMs;
+            if (new Date(command.occurredAt).getTime() < deadline) {
+                return {
+                    applied: false,
+                    assignment: current.assignment,
+                    currentStatus: current.current_status,
+                };
+            }
+
+            const assignment: AssignmentRecord = {
+                ...current.assignment,
+                status: 'timed_out',
+                respondedAt: command.occurredAt,
+            };
+            const reason = `Assignment to ${assignment.assigneeDid} timed out`;
+            const inserted = await client.query<{
+                assignment_event_id: string | number;
+            }>(
+                `INSERT INTO request_assignment_events (
+                    command_id, post_uri, assigner_did, assignee_did,
+                    assignment, event_type, occurred_at
+                 ) VALUES ($1, $2, $3, $4, $5::jsonb, 'timed_out', $6)
+                 RETURNING assignment_event_id`,
+                [
+                    command.commandId,
+                    command.postUri,
+                    assignment.assignerDid,
+                    assignment.assigneeDid,
+                    JSON.stringify(assignment),
+                    command.occurredAt,
+                ],
+            );
+            await client.query(
+                `INSERT INTO request_transition_events (
+                    command_id, post_uri, actor_did, actor_role,
+                    from_status, to_status, reason, occurred_at
+                 ) VALUES ($1, $2, $3, 'coordinator', 'assigned', 'triaged', $4, $5)`,
+                [
+                    `assignment-timeout:${command.commandId}`,
+                    command.postUri,
+                    assignment.assignerDid,
+                    reason,
+                    command.occurredAt,
+                ],
+            );
+            await client.query(
+                `UPDATE request_workflows
+                 SET current_status = 'triaged', assignment = $2::jsonb, updated_at = $3
+                 WHERE post_uri = $1`,
+                [command.postUri, JSON.stringify(assignment), command.occurredAt],
+            );
+            await client.query(
+                `INSERT INTO operational_audit_events (
+                    command_id, actor_did, action, subject_uri, payload,
+                    retention_until, occurred_at
+                 ) VALUES ($1, $2, 'request.assignment_timed_out', $3, $4::jsonb, $5, $6)`,
+                [
+                    `audit:${command.commandId}`,
+                    assignment.assignerDid,
+                    command.postUri,
+                    JSON.stringify({ assigneeDid: assignment.assigneeDid }),
+                    command.auditRetentionUntil ?? command.occurredAt,
+                    command.occurredAt,
+                ],
+            );
+            const event = inserted.rows[0];
+            if (!event) throw new Error('ASSIGNMENT_TIMEOUT_INSERT_FAILED');
+            return {
+                applied: true,
+                assignmentEventId: String(event.assignment_event_id),
+                assignment,
+                currentStatus: 'triaged',
             };
         });
     }

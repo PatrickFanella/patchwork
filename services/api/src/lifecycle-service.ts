@@ -971,6 +971,62 @@ export class LifecycleService {
         };
     }
 
+    async checkAssignmentTimeoutAsync(
+        postUri: string,
+        now?: string,
+    ): Promise<AssignmentResult> {
+        if (!this.repository) {
+            return this.checkAssignmentTimeout(postUri, now);
+        }
+        const workflow = await this.repository.get(postUri);
+        if (!workflow) {
+            return {
+                statusCode: 404,
+                body: {
+                    error: {
+                        code: 'NOT_FOUND',
+                        message: `No lifecycle record found for post: ${postUri}`,
+                    },
+                },
+            };
+        }
+        if (!workflow.assignment) {
+            return {
+                statusCode: 200,
+                body: {
+                    postUri,
+                    assignment: {
+                        assigneeDid: '',
+                        assignerDid: '',
+                        assignedAt: '',
+                        status: 'pending',
+                        timeoutMs: 0,
+                    },
+                    currentStatus: workflow.currentStatus as RequestStatus,
+                    updatedAt: workflow.updatedAt,
+                },
+            };
+        }
+        const occurredAt = now ?? new Date().toISOString();
+        const outcome = await this.repository.expireAssignment({
+            commandId: `assignment-timeout-check:${postUri}:${workflow.assignment.assignedAt}`,
+            postUri,
+            occurredAt,
+            auditRetentionUntil: new Date(
+                new Date(occurredAt).getTime() + 365 * 24 * 60 * 60 * 1000,
+            ).toISOString(),
+        });
+        return {
+            statusCode: 200,
+            body: {
+                postUri,
+                assignment: outcome.assignment,
+                currentStatus: outcome.currentStatus,
+                updatedAt: outcome.applied ? occurredAt : workflow.updatedAt,
+            },
+        };
+    }
+
     /**
      * Complete a handoff (fulfillment) for an in-progress request.
      * Transitions to 'resolved' and captures handoff metadata.
