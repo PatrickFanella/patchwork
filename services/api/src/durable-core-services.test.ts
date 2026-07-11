@@ -83,6 +83,7 @@ describe('durable core services', () => {
             transition: vi
                 .fn()
                 .mockResolvedValue({ applied: true, transitionId: '31' }),
+            assign: vi.fn(),
             deleteSubject: vi.fn(),
         };
         const service = createLifecycleService(repository);
@@ -115,6 +116,7 @@ describe('durable core services', () => {
         const repository = {
             register: vi.fn(),
             transition: vi.fn(),
+            assign: vi.fn(),
             deleteSubject: vi.fn(),
             get: vi.fn().mockResolvedValue({
                 postUri:
@@ -151,5 +153,55 @@ describe('durable core services', () => {
                 timeline: [{ from: 'open', to: 'resolved' }],
             },
         });
+    });
+
+    it('persists assignment using the authenticated coordinator identity', async () => {
+        const repository = {
+            register: vi.fn(),
+            get: vi.fn().mockResolvedValue({
+                postUri:
+                    'at://did:plc:alice/app.patchwork.aid.post/durable-assignment',
+                requesterDid: 'did:plc:alice',
+                currentStatus: 'triaged',
+                createdAt: '2026-07-10T23:10:00.000Z',
+                updatedAt: '2026-07-10T23:11:00.000Z',
+                timeline: [],
+            }),
+            transition: vi.fn(),
+            deleteSubject: vi.fn(),
+            assign: vi.fn().mockResolvedValue({
+                applied: true,
+                assignmentEventId: '41',
+                assignment: {
+                    assigneeDid: 'did:plc:volunteer',
+                    assignerDid: 'did:plc:moderator',
+                    assignedAt: '2026-07-10T23:12:00.000Z',
+                    status: 'pending',
+                    timeoutMs: 1_800_000,
+                },
+            }),
+        };
+        const service = createLifecycleService(repository);
+
+        const result = await service.assignRequest(
+            {
+                commandId: 'assignment-command-1',
+                postUri:
+                    'at://did:plc:alice/app.patchwork.aid.post/durable-assignment',
+                assigneeDid: 'did:plc:volunteer',
+                assignerDid: 'did:plc:mallory',
+                now: '2026-07-10T23:12:00.000Z',
+            },
+            createAuthorizationContext('did:plc:moderator', 'moderator'),
+        );
+
+        expect(result.statusCode).toBe(200);
+        expect(repository.assign).toHaveBeenCalledWith(
+            expect.objectContaining({
+                commandId: 'assignment-command-1',
+                assignerDid: 'did:plc:moderator',
+                assigneeDid: 'did:plc:volunteer',
+            }),
+        );
     });
 });

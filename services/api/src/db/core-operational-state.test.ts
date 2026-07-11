@@ -81,7 +81,13 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             ),
         );
         await pool.query(
-            'TRUNCATE operational_audit_events, abuse_reports, user_blocks, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
+            await readFile(
+                new URL('./migrations/0005_lifecycle_assignments.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
+            'TRUNCATE operational_audit_events, abuse_reports, user_blocks, request_assignment_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
 
@@ -185,6 +191,50 @@ describeWithPostgres('core operational PostgreSQL state', () => {
         expect(stored.rows[0]?.payload).toEqual({
             status: 'triaged',
             location: { areaLabel: 'West Side' },
+        });
+    });
+
+    it('persists assignment metadata atomically and deduplicates retries', async () => {
+        const assignedUri =
+            'at://did:plc:alice/app.patchwork.aid.post/durable-assignment';
+        await lifecycle.register({
+            commandId: 'register-assignment',
+            postUri: assignedUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-10T22:44:00.000Z',
+        });
+        await lifecycle.transition({
+            commandId: 'triage-assignment',
+            postUri: assignedUri,
+            actorDid: 'did:plc:coordinator',
+            actorRole: 'coordinator',
+            fromStatus: 'open',
+            toStatus: 'triaged',
+            occurredAt: '2026-07-10T22:45:00.000Z',
+        });
+        const command = {
+            commandId: 'assign-volunteer',
+            postUri: assignedUri,
+            assignerDid: 'did:plc:coordinator',
+            assigneeDid: 'did:plc:volunteer',
+            occurredAt: '2026-07-10T22:46:00.000Z',
+            timeoutMs: 1_800_000,
+        };
+
+        await expect(lifecycle.assign(command)).resolves.toMatchObject({
+            applied: true,
+            assignment: { status: 'pending' },
+        });
+        await expect(
+            new PostgresLifecycleRepository(pool).assign(command),
+        ).resolves.toMatchObject({ applied: false });
+        await expect(lifecycle.get(assignedUri)).resolves.toMatchObject({
+            currentStatus: 'assigned',
+            assignment: {
+                assigneeDid: 'did:plc:volunteer',
+                assignerDid: 'did:plc:coordinator',
+                status: 'pending',
+            },
         });
     });
 

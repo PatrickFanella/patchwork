@@ -19,6 +19,7 @@ import {
     type AuthorizationContext,
     AuthorizationError,
     requireCapability,
+    requireRole,
 } from './authorization-guard.js';
 import type { LifecycleRepository } from './db/lifecycle-repository.js';
 
@@ -134,6 +135,7 @@ const transitionInputSchema = z.object({
 type TransitionInput = z.infer<typeof transitionInputSchema>;
 
 const assignmentInputSchema = z.object({
+    commandId: z.string().min(1).max(200).optional(),
     postUri: z
         .string()
         .min(1, 'postUri is required')
@@ -409,7 +411,10 @@ export class LifecycleService {
      * Assign a request to a volunteer. Transitions the post to 'assigned'
      * if it is currently 'triaged' or re-assigns from 'assigned'/'in_progress'.
      */
-    async assignRequest(body: unknown): Promise<AssignmentResult> {
+    async assignRequest(
+        body: unknown,
+        authCtx?: AuthorizationContext,
+    ): Promise<AssignmentResult> {
         let input: z.infer<typeof assignmentInputSchema>;
         try {
             input = assignmentInputSchema.parse(body);
@@ -418,6 +423,10 @@ export class LifecycleService {
                 return { statusCode: 400, body: toValidationError(error) };
             }
             throw error;
+        }
+
+        if (this.repository) {
+            return this.assignDurably(input, authCtx);
         }
 
         const record = this.records.get(input.postUri);
@@ -486,6 +495,98 @@ export class LifecycleService {
                 updatedAt: record.updatedAt,
             },
         };
+    }
+
+    private async assignDurably(
+        input: z.infer<typeof assignmentInputSchema>,
+        authCtx?: AuthorizationContext,
+    ): Promise<AssignmentResult> {
+        if (!authCtx) {
+            return {
+                statusCode: 401,
+                body: {
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'A durable assignment requires authentication.',
+                    },
+                },
+            };
+        }
+        try {
+            requireRole(authCtx, 'moderator');
+        } catch (error) {
+            if (error instanceof AuthorizationError) {
+                return {
+                    statusCode: error.statusCode,
+                    body: {
+                        error: { code: error.code, message: error.message },
+                    },
+                };
+            }
+            throw error;
+        }
+        if (!input.commandId) {
+            return {
+                statusCode: 400,
+                body: {
+                    error: {
+                        code: 'COMMAND_ID_REQUIRED',
+                        message: 'commandId is required for durable assignments.',
+                    },
+                },
+            };
+        }
+        const workflow = await this.repository?.get(input.postUri);
+        if (!workflow) {
+            return {
+                statusCode: 404,
+                body: {
+                    error: {
+                        code: 'NOT_FOUND',
+                        message: `No lifecycle record found for post: ${input.postUri}`,
+                    },
+                },
+            };
+        }
+        const now = input.now ?? new Date().toISOString();
+        try {
+            const outcome = await this.repository!.assign({
+                commandId: input.commandId,
+                postUri: input.postUri,
+                assignerDid: authCtx.actorDid,
+                assigneeDid: input.assigneeDid,
+                occurredAt: now,
+                timeoutMs: ASSIGNMENT_TIMEOUT_MS,
+                auditRetentionUntil: new Date(
+                    new Date(now).getTime() + 365 * 24 * 60 * 60 * 1000,
+                ).toISOString(),
+            });
+            return {
+                statusCode: 200,
+                body: {
+                    postUri: input.postUri,
+                    assignment: outcome.assignment,
+                    currentStatus: 'assigned',
+                    updatedAt: now,
+                },
+            };
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                error.message === 'ASSIGNMENT_TRANSITION_NOT_ALLOWED'
+            ) {
+                return {
+                    statusCode: 403,
+                    body: {
+                        error: {
+                            code: 'TRANSITION_NOT_ALLOWED',
+                            message: `Cannot assign a request in '${workflow.currentStatus}' status.`,
+                        },
+                    },
+                };
+            }
+            throw error;
+        }
     }
 
     /**
