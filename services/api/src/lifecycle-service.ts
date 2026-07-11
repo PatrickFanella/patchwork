@@ -157,6 +157,7 @@ const assignmentResponseSchema = z.object({
 });
 
 const handoffInputSchema = z.object({
+    commandId: z.string().min(1).max(200).optional(),
     postUri: z
         .string()
         .min(1)
@@ -404,6 +405,10 @@ export class LifecycleService {
                 timeline: record.timeline,
                 validTransitions: getValidTargetsForRole(currentStatus, role),
                 updatedAt: record.updatedAt,
+                ...(record.assignment
+                    ? { assignment: { ...record.assignment } }
+                    : {}),
+                ...(record.handoff ? { handoff: { ...record.handoff } } : {}),
             },
         };
     }
@@ -1005,6 +1010,10 @@ export class LifecycleService {
             throw error;
         }
 
+        if (this.repository) {
+            return this.completeHandoffDurably(input, authCtx);
+        }
+
         const record = this.records.get(input.postUri);
         if (!record) {
             return {
@@ -1078,6 +1087,96 @@ export class LifecycleService {
                 updatedAt: record.updatedAt,
             },
         };
+    }
+
+    private async completeHandoffDurably(
+        input: z.infer<typeof handoffInputSchema>,
+        authCtx?: AuthorizationContext,
+    ): Promise<HandoffResult> {
+        if (!authCtx) {
+            return {
+                statusCode: 401,
+                body: {
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'A durable handoff requires authentication.',
+                    },
+                },
+            };
+        }
+        if (!input.commandId) {
+            return {
+                statusCode: 400,
+                body: {
+                    error: {
+                        code: 'COMMAND_ID_REQUIRED',
+                        message: 'commandId is required for durable handoffs.',
+                    },
+                },
+            };
+        }
+        const now = input.now ?? new Date().toISOString();
+        try {
+            const outcome = await this.repository!.completeHandoff({
+                commandId: input.commandId,
+                postUri: input.postUri,
+                completedBy: authCtx.actorDid,
+                occurredAt: now,
+                ...(input.notes === undefined ? {} : { notes: input.notes }),
+                ...(input.recipientConfirmed === undefined
+                    ? {}
+                    : { recipientConfirmed: input.recipientConfirmed }),
+                ...(input.deliveryMethod === undefined
+                    ? {}
+                    : { deliveryMethod: input.deliveryMethod }),
+                auditRetentionUntil: new Date(
+                    new Date(now).getTime() + 365 * 24 * 60 * 60 * 1000,
+                ).toISOString(),
+            });
+            return {
+                statusCode: 200,
+                body: {
+                    postUri: input.postUri,
+                    handoff: outcome.handoff,
+                    currentStatus: outcome.currentStatus,
+                    updatedAt: now,
+                },
+            };
+        } catch (error) {
+            if (!(error instanceof Error)) throw error;
+            if (error.message === 'REQUEST_WORKFLOW_NOT_FOUND') {
+                return {
+                    statusCode: 404,
+                    body: {
+                        error: {
+                            code: 'NOT_FOUND',
+                            message: `No lifecycle record found for post: ${input.postUri}`,
+                        },
+                    },
+                };
+            }
+            if (
+                error.message === 'ASSIGNMENT_MISMATCH' ||
+                error.message === 'HANDOFF_TRANSITION_NOT_ALLOWED'
+            ) {
+                return {
+                    statusCode: 403,
+                    body: {
+                        error: {
+                            code:
+                                error.message === 'ASSIGNMENT_MISMATCH'
+                                    ? 'ASSIGNMENT_MISMATCH'
+                                    : 'TRANSITION_NOT_ALLOWED',
+                            message:
+                                error.message === 'ASSIGNMENT_MISMATCH'
+                                    ? 'This volunteer is not the current assignee.'
+                                    : "Handoff requires an accepted assignment in 'in_progress' status.",
+                        },
+                    },
+                };
+            }
+            throw error;
+        }
     }
 
     /**

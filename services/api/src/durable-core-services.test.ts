@@ -85,6 +85,7 @@ describe('durable core services', () => {
                 .mockResolvedValue({ applied: true, transitionId: '31' }),
             assign: vi.fn(),
             respondToAssignment: vi.fn(),
+            completeHandoff: vi.fn(),
             deleteSubject: vi.fn(),
         };
         const service = createLifecycleService(repository);
@@ -119,6 +120,7 @@ describe('durable core services', () => {
             transition: vi.fn(),
             assign: vi.fn(),
             respondToAssignment: vi.fn(),
+            completeHandoff: vi.fn(),
             deleteSubject: vi.fn(),
             get: vi.fn().mockResolvedValue({
                 postUri:
@@ -183,6 +185,7 @@ describe('durable core services', () => {
                 },
             }),
             respondToAssignment: vi.fn(),
+            completeHandoff: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
@@ -228,6 +231,7 @@ describe('durable core services', () => {
                 },
                 currentStatus: 'in_progress',
             }),
+            completeHandoff: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
@@ -253,5 +257,82 @@ describe('durable core services', () => {
                 response: 'accepted',
             }),
         );
+    });
+
+    it('persists handoff completion using the authenticated volunteer identity', async () => {
+        const repository = {
+            register: vi.fn(),
+            get: vi.fn().mockResolvedValue({
+                postUri:
+                    'at://did:plc:alice/app.patchwork.aid.post/durable-assignment',
+                requesterDid: 'did:plc:alice',
+                currentStatus: 'resolved',
+                createdAt: '2026-07-10T23:10:00.000Z',
+                updatedAt: '2026-07-10T23:14:00.000Z',
+                timeline: [],
+                handoff: {
+                    completedBy: 'did:plc:volunteer',
+                    completedAt: '2026-07-10T23:14:00.000Z',
+                    recipientConfirmed: true,
+                    deliveryMethod: 'in_person',
+                },
+            }),
+            transition: vi.fn(),
+            assign: vi.fn(),
+            respondToAssignment: vi.fn(),
+            deleteSubject: vi.fn(),
+            completeHandoff: vi.fn().mockResolvedValue({
+                applied: true,
+                handoffEventId: '43',
+                handoff: {
+                    completedBy: 'did:plc:volunteer',
+                    completedAt: '2026-07-10T23:14:00.000Z',
+                    recipientConfirmed: true,
+                    deliveryMethod: 'in_person',
+                },
+                currentStatus: 'resolved',
+            }),
+        };
+        const service = createLifecycleService(repository);
+
+        const result = await service.completeHandoff(
+            {
+                commandId: 'handoff-command-1',
+                postUri:
+                    'at://did:plc:alice/app.patchwork.aid.post/durable-assignment',
+                assigneeDid: 'did:plc:mallory',
+                recipientConfirmed: true,
+                deliveryMethod: 'in_person',
+                now: '2026-07-10T23:14:00.000Z',
+            },
+            createAuthorizationContext('did:plc:volunteer', 'volunteer'),
+        );
+
+        expect(result).toMatchObject({
+            statusCode: 200,
+            body: { currentStatus: 'resolved' },
+        });
+        expect(repository.completeHandoff).toHaveBeenCalledWith(
+            expect.objectContaining({
+                commandId: 'handoff-command-1',
+                completedBy: 'did:plc:volunteer',
+            }),
+        );
+        await expect(
+            service.queryFromParamsAsync(
+                new URLSearchParams({
+                    postUri:
+                        'at://did:plc:alice/app.patchwork.aid.post/durable-assignment',
+                }),
+            ),
+        ).resolves.toMatchObject({
+            statusCode: 200,
+            body: {
+                handoff: {
+                    completedBy: 'did:plc:volunteer',
+                    deliveryMethod: 'in_person',
+                },
+            },
+        });
     });
 });

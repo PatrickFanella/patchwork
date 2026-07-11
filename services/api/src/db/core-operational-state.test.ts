@@ -93,7 +93,13 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             ),
         );
         await pool.query(
-            'TRUNCATE operational_audit_events, abuse_reports, user_blocks, request_assignment_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
+            await readFile(
+                new URL('./migrations/0007_lifecycle_handoffs.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
+            'TRUNCATE operational_audit_events, abuse_reports, user_blocks, request_handoff_events, request_assignment_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
 
@@ -356,6 +362,78 @@ describeWithPostgres('core operational PostgreSQL state', () => {
                     from: 'assigned',
                     to: 'triaged',
                     reason: 'Schedule conflict',
+                }),
+            ]),
+        });
+    });
+
+    it('persists completed handoff metadata and deduplicates retries', async () => {
+        const handoffUri =
+            'at://did:plc:alice/app.patchwork.aid.post/completed-handoff';
+        await lifecycle.register({
+            commandId: 'register-completed-handoff',
+            postUri: handoffUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-10T22:55:00.000Z',
+        });
+        await lifecycle.transition({
+            commandId: 'triage-completed-handoff',
+            postUri: handoffUri,
+            actorDid: 'did:plc:coordinator',
+            actorRole: 'coordinator',
+            fromStatus: 'open',
+            toStatus: 'triaged',
+            occurredAt: '2026-07-10T22:56:00.000Z',
+        });
+        await lifecycle.assign({
+            commandId: 'assign-completed-handoff',
+            postUri: handoffUri,
+            assignerDid: 'did:plc:coordinator',
+            assigneeDid: 'did:plc:volunteer',
+            occurredAt: '2026-07-10T22:57:00.000Z',
+            timeoutMs: 1_800_000,
+        });
+        await lifecycle.respondToAssignment({
+            commandId: 'accept-completed-handoff',
+            postUri: handoffUri,
+            assigneeDid: 'did:plc:volunteer',
+            response: 'accepted',
+            occurredAt: '2026-07-10T22:58:00.000Z',
+        });
+        const command = {
+            commandId: 'complete-volunteer-handoff',
+            postUri: handoffUri,
+            completedBy: 'did:plc:volunteer',
+            occurredAt: '2026-07-10T23:00:00.000Z',
+            notes: 'Delivered to the front desk',
+            recipientConfirmed: true,
+            deliveryMethod: 'in_person' as const,
+        };
+
+        await expect(lifecycle.completeHandoff(command)).resolves.toMatchObject({
+            applied: true,
+            handoff: {
+                completedBy: 'did:plc:volunteer',
+                notes: 'Delivered to the front desk',
+                recipientConfirmed: true,
+                deliveryMethod: 'in_person',
+            },
+            currentStatus: 'resolved',
+        });
+        await expect(
+            new PostgresLifecycleRepository(pool).completeHandoff(command),
+        ).resolves.toMatchObject({ applied: false });
+        await expect(lifecycle.get(handoffUri)).resolves.toMatchObject({
+            currentStatus: 'resolved',
+            handoff: {
+                completedBy: 'did:plc:volunteer',
+                completedAt: '2026-07-10T23:00:00.000Z',
+            },
+            timeline: expect.arrayContaining([
+                expect.objectContaining({
+                    from: 'in_progress',
+                    to: 'resolved',
+                    actorDid: 'did:plc:volunteer',
                 }),
             ]),
         });

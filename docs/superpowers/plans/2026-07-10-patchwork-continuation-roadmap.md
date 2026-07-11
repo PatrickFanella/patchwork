@@ -200,7 +200,7 @@ flowchart LR
 - Create: `services/api/src/report-service.ts`
 - Test: `services/api/src/durable-core-services.test.ts`
 
-Progress: authenticated PostgreSQL-backed block and report services are wired at `POST /blocks` and `POST /reports`. Lifecycle transitions and timelines are durable. Migrations `0005_lifecycle_assignments.sql` and `0006_assignment_responses.sql` add atomic, idempotent assignment, acceptance, and decline metadata plus transition and audit writes. Assignment-response routes restore the session and ignore request-supplied actor identity. Handoff persistence and a real role source remain; until role resolution exists, production sessions retain the safe generic `user` role and cannot perform coordinator or volunteer assignment actions.
+Progress: authenticated PostgreSQL-backed block and report services are wired at `POST /blocks` and `POST /reports`. Lifecycle transitions and timelines are durable. Migrations `0005_lifecycle_assignments.sql`, `0006_assignment_responses.sql`, and `0007_lifecycle_handoffs.sql` add atomic, idempotent assignment, response, and handoff metadata plus transition and audit writes. These routes restore the session and ignore request-supplied actor identity. Durable timeout processing, deleted-record reconciliation, and a real role source remain; until role resolution exists, production sessions retain the safe generic `user` role and cannot perform coordinator or volunteer assignment actions.
 
 - [ ] Inject repository interfaces into lifecycle, block, report, and audit services.
 - [ ] Keep in-memory repositories in test fixtures only.

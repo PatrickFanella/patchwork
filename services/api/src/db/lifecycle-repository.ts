@@ -4,6 +4,7 @@ import type {
     RequestStatus,
     RequestTimeline,
     AssignmentRecord,
+    HandoffMetadata,
 } from '@patchwork/shared';
 
 export interface LifecycleTransitionCommand {
@@ -39,6 +40,7 @@ export interface RequestWorkflow {
     updatedAt: string;
     timeline: RequestTimeline;
     assignment?: AssignmentRecord;
+    handoff?: HandoffMetadata;
 }
 
 export interface LifecycleAssignmentCommand {
@@ -74,6 +76,24 @@ export interface LifecycleAssignmentResponseOutcome {
     currentStatus: RequestStatus;
 }
 
+export interface LifecycleHandoffCommand {
+    commandId: string;
+    postUri: string;
+    completedBy: string;
+    occurredAt: string;
+    notes?: string;
+    recipientConfirmed?: boolean;
+    deliveryMethod?: 'in_person' | 'shipped' | 'digital' | 'other';
+    auditRetentionUntil?: string;
+}
+
+export interface LifecycleHandoffOutcome {
+    applied: boolean;
+    handoffEventId: string;
+    handoff: HandoffMetadata;
+    currentStatus: 'resolved';
+}
+
 export interface LifecycleRepository {
     register(input: RegisterWorkflowInput): Promise<boolean>;
     get(postUri: string): Promise<RequestWorkflow | undefined>;
@@ -86,6 +106,7 @@ export interface LifecycleRepository {
     respondToAssignment(
         command: LifecycleAssignmentResponseCommand,
     ): Promise<LifecycleAssignmentResponseOutcome>;
+    completeHandoff(command: LifecycleHandoffCommand): Promise<LifecycleHandoffOutcome>;
     deleteSubject(postUri: string): Promise<boolean>;
 }
 
@@ -140,9 +161,10 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
             created_at: Date | string;
             updated_at: Date | string;
             assignment: AssignmentRecord | null;
+            handoff: HandoffMetadata | null;
         }>(
             `SELECT post_uri, requester_did, current_status, created_at, updated_at,
-                    assignment
+                    assignment, handoff
              FROM request_workflows WHERE post_uri = $1`,
             [postUri],
         );
@@ -179,6 +201,7 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
                 ...(transition.reason === null ? {} : { reason: transition.reason }),
             })),
             ...(row.assignment === null ? {} : { assignment: row.assignment }),
+            ...(row.handoff === null ? {} : { handoff: row.handoff }),
         };
     }
 
@@ -523,6 +546,124 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
                 assignmentEventId: String(event.assignment_event_id),
                 assignment,
                 currentStatus: nextStatus,
+            };
+        });
+    }
+
+    async completeHandoff(
+        command: LifecycleHandoffCommand,
+    ): Promise<LifecycleHandoffOutcome> {
+        return withTransaction(this.pool, async client => {
+            const duplicate = await client.query<{
+                handoff_event_id: string | number;
+                handoff: HandoffMetadata;
+            }>(
+                `SELECT handoff_event_id, handoff FROM request_handoff_events
+                 WHERE command_id = $1`,
+                [command.commandId],
+            );
+            const existing = duplicate.rows[0];
+            if (existing) {
+                return {
+                    applied: false,
+                    handoffEventId: String(existing.handoff_event_id),
+                    handoff: existing.handoff,
+                    currentStatus: 'resolved',
+                };
+            }
+
+            const workflow = await client.query<{
+                current_status: RequestStatus;
+                assignment: AssignmentRecord | null;
+            }>(
+                `SELECT current_status, assignment FROM request_workflows
+                 WHERE post_uri = $1 FOR UPDATE`,
+                [command.postUri],
+            );
+            const current = workflow.rows[0];
+            if (!current) throw new Error('REQUEST_WORKFLOW_NOT_FOUND');
+            if (
+                !current.assignment ||
+                current.assignment.assigneeDid !== command.completedBy
+            ) {
+                throw new Error('ASSIGNMENT_MISMATCH');
+            }
+            if (
+                current.current_status !== 'in_progress' ||
+                current.assignment.status !== 'accepted'
+            ) {
+                throw new Error('HANDOFF_TRANSITION_NOT_ALLOWED');
+            }
+
+            const handoff: HandoffMetadata = {
+                completedBy: command.completedBy,
+                completedAt: command.occurredAt,
+                ...(command.notes === undefined ? {} : { notes: command.notes }),
+                ...(command.recipientConfirmed === undefined
+                    ? {}
+                    : { recipientConfirmed: command.recipientConfirmed }),
+                ...(command.deliveryMethod === undefined
+                    ? {}
+                    : { deliveryMethod: command.deliveryMethod }),
+            };
+            const inserted = await client.query<{
+                handoff_event_id: string | number;
+            }>(
+                `INSERT INTO request_handoff_events (
+                    command_id, post_uri, completed_by, handoff, occurred_at
+                 ) VALUES ($1, $2, $3, $4::jsonb, $5)
+                 RETURNING handoff_event_id`,
+                [
+                    command.commandId,
+                    command.postUri,
+                    command.completedBy,
+                    JSON.stringify(handoff),
+                    command.occurredAt,
+                ],
+            );
+            await client.query(
+                `INSERT INTO request_transition_events (
+                    command_id, post_uri, actor_did, actor_role,
+                    from_status, to_status, reason, occurred_at
+                 ) VALUES ($1, $2, $3, 'volunteer', 'in_progress', 'resolved',
+                           'Handoff completed', $4)`,
+                [
+                    `handoff-transition:${command.commandId}`,
+                    command.postUri,
+                    command.completedBy,
+                    command.occurredAt,
+                ],
+            );
+            await client.query(
+                `UPDATE request_workflows
+                 SET current_status = 'resolved', handoff = $2::jsonb, updated_at = $3
+                 WHERE post_uri = $1`,
+                [command.postUri, JSON.stringify(handoff), command.occurredAt],
+            );
+            await client.query(
+                `INSERT INTO operational_audit_events (
+                    command_id, actor_did, action, subject_uri, payload,
+                    retention_until, occurred_at
+                 ) VALUES ($1, $2, 'request.handoff_completed', $3, $4::jsonb, $5, $6)`,
+                [
+                    `audit:${command.commandId}`,
+                    command.completedBy,
+                    command.postUri,
+                    JSON.stringify({
+                        recipientConfirmed: command.recipientConfirmed ?? false,
+                        deliveryMethod: command.deliveryMethod,
+                    }),
+                    command.auditRetentionUntil ?? command.occurredAt,
+                    command.occurredAt,
+                ],
+            );
+            const event = inserted.rows[0];
+            if (!event) throw new Error('HANDOFF_INSERT_FAILED');
+            return {
+                applied: true,
+                handoffEventId: String(event.handoff_event_id),
+                handoff,
+                currentStatus: 'resolved',
             };
         });
     }
