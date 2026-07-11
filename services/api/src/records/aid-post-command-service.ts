@@ -43,6 +43,19 @@ export interface AidPostLifecycleStatusSource {
         occurredAt: string;
         auditRetentionUntil: string;
     }): Promise<unknown>;
+    markPublicStatusSyncPending(command: {
+        postUri: string;
+        actorDid: string;
+        publicStatus: AidPostRecord['status'];
+        occurredAt: string;
+    }): Promise<void>;
+    markPublicStatusSyncFailed(command: {
+        postUri: string;
+        actorDid: string;
+        publicStatus: AidPostRecord['status'];
+        occurredAt: string;
+        errorCode: string;
+    }): Promise<void>;
 }
 
 const uriSchema = z.string().regex(/^at:\/\/[^/]+\/app\.patchwork\.aid\.post\/[^/]+$/);
@@ -156,30 +169,54 @@ export class AidPostCommandService {
                 'No durable lifecycle workflow exists for this aid-post.',
             );
         }
-        const client = await this.clientFactory(sessionToken);
-        const current = await client.get(command.uri);
         const status = toPublicStatus(workflow.currentStatus);
-        const result =
-            current.record.status === status
-                ? current
-                : await client.update(command.uri, command.expectedCid, {
-                      ...current.record,
-                      status,
-                      updatedAt: command.updatedAt,
-                  });
         const actorDid = command.uri.slice('at://'.length).split('/')[0]!;
-        await lifecycleStatusSource.recordPublicStatusSync({
-            commandId: `public-status-sync:${command.uri}:${result.cid}`,
+        await lifecycleStatusSource.markPublicStatusSyncPending({
             postUri: command.uri,
             actorDid,
             publicStatus: status,
-            publicCid: result.cid,
             occurredAt: command.updatedAt,
-            auditRetentionUntil: new Date(
-                new Date(command.updatedAt).getTime() + 365 * 24 * 60 * 60 * 1000,
-            ).toISOString(),
         });
-        return result;
+        try {
+            const client = await this.clientFactory(sessionToken);
+            const current = await client.get(command.uri);
+            const result =
+                current.record.status === status
+                    ? current
+                    : await client.update(command.uri, command.expectedCid, {
+                          ...current.record,
+                          status,
+                          updatedAt: command.updatedAt,
+                      });
+            await lifecycleStatusSource.recordPublicStatusSync({
+                commandId: `public-status-sync:${command.uri}:${result.cid}`,
+                postUri: command.uri,
+                actorDid,
+                publicStatus: status,
+                publicCid: result.cid,
+                occurredAt: command.updatedAt,
+                auditRetentionUntil: new Date(
+                    new Date(command.updatedAt).getTime() + 365 * 24 * 60 * 60 * 1000,
+                ).toISOString(),
+            });
+            return result;
+        } catch (error) {
+            try {
+                await lifecycleStatusSource.markPublicStatusSyncFailed({
+                    postUri: command.uri,
+                    actorDid,
+                    publicStatus: status,
+                    occurredAt: command.updatedAt,
+                    errorCode:
+                        error instanceof AtClientError
+                            ? error.code
+                            : 'SYNC_CHECKPOINT_FAILED',
+                });
+            } catch {
+                // Preserve the original PDS or checkpoint failure for the caller.
+            }
+            throw error;
+        }
     }
 
     async delete(sessionToken: string, input: unknown): Promise<void> {

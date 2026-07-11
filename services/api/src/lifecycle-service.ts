@@ -79,6 +79,9 @@ export interface LifecycleQuerySuccessResponse {
     publicStatus?: 'open' | 'in-progress' | 'resolved' | 'closed';
     publicCid?: string;
     publicSyncedAt?: string;
+    publicSyncState?: 'pending' | 'synced' | 'failed';
+    publicSyncErrorCode?: string;
+    publicSyncAttemptedAt?: string;
 }
 
 export interface AssignmentResult {
@@ -418,6 +421,15 @@ export class LifecycleService {
                 ...(record.publicCid ? { publicCid: record.publicCid } : {}),
                 ...(record.publicSyncedAt
                     ? { publicSyncedAt: record.publicSyncedAt }
+                    : {}),
+                ...(record.publicSyncState
+                    ? { publicSyncState: record.publicSyncState }
+                    : {}),
+                ...(record.publicSyncErrorCode
+                    ? { publicSyncErrorCode: record.publicSyncErrorCode }
+                    : {}),
+                ...(record.publicSyncAttemptedAt
+                    ? { publicSyncAttemptedAt: record.publicSyncAttemptedAt }
                     : {}),
             },
         };

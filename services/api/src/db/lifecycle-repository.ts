@@ -44,6 +44,9 @@ export interface RequestWorkflow {
     publicStatus?: PublicAidPostStatus;
     publicCid?: string;
     publicSyncedAt?: string;
+    publicSyncState?: 'pending' | 'synced' | 'failed';
+    publicSyncErrorCode?: string;
+    publicSyncAttemptedAt?: string;
 }
 
 export type PublicAidPostStatus = 'open' | 'in-progress' | 'resolved' | 'closed';
@@ -140,6 +143,18 @@ export interface PublicStatusSyncOutcome {
     applied: boolean;
 }
 
+export interface PublicStatusSyncAttemptCommand {
+    postUri: string;
+    actorDid: string;
+    publicStatus: PublicAidPostStatus;
+    occurredAt: string;
+}
+
+export interface PublicStatusSyncFailureCommand
+    extends PublicStatusSyncAttemptCommand {
+    errorCode: string;
+}
+
 export interface LifecycleRepository {
     register(input: RegisterWorkflowInput): Promise<boolean>;
     get(postUri: string): Promise<RequestWorkflow | undefined>;
@@ -162,6 +177,12 @@ export interface LifecycleRepository {
     recordPublicStatusSync(
         command: PublicStatusSyncCommand,
     ): Promise<PublicStatusSyncOutcome>;
+    markPublicStatusSyncPending(
+        command: PublicStatusSyncAttemptCommand,
+    ): Promise<void>;
+    markPublicStatusSyncFailed(
+        command: PublicStatusSyncFailureCommand,
+    ): Promise<void>;
     deleteSubject(postUri: string): Promise<boolean>;
 }
 
@@ -220,9 +241,14 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
             public_status: PublicAidPostStatus | null;
             public_cid: string | null;
             public_synced_at: Date | string | null;
+            public_sync_state: 'pending' | 'synced' | 'failed' | null;
+            public_sync_error_code: string | null;
+            public_sync_attempted_at: Date | string | null;
         }>(
             `SELECT post_uri, requester_did, current_status, created_at, updated_at,
-                    assignment, handoff, public_status, public_cid, public_synced_at
+                    assignment, handoff, public_status, public_cid, public_synced_at,
+                    public_sync_state, public_sync_error_code,
+                    public_sync_attempted_at
              FROM request_workflows WHERE post_uri = $1`,
             [postUri],
         );
@@ -267,6 +293,19 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
             ...(row.public_synced_at === null
                 ? {}
                 : { publicSyncedAt: new Date(row.public_synced_at).toISOString() }),
+            ...(row.public_sync_state === null
+                ? {}
+                : { publicSyncState: row.public_sync_state }),
+            ...(row.public_sync_error_code === null
+                ? {}
+                : { publicSyncErrorCode: row.public_sync_error_code }),
+            ...(row.public_sync_attempted_at === null
+                ? {}
+                : {
+                      publicSyncAttemptedAt: new Date(
+                          row.public_sync_attempted_at,
+                      ).toISOString(),
+                  }),
         };
     }
 
@@ -914,7 +953,9 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
 
             const updated = await client.query(
                 `UPDATE request_workflows
-                 SET public_status = $2, public_cid = $3, public_synced_at = $4
+                 SET public_status = $2, public_cid = $3, public_synced_at = $4,
+                     public_sync_state = 'synced', public_sync_error_code = NULL,
+                     public_sync_attempted_at = $4
                  WHERE post_uri = $1`,
                 [
                     command.postUri,
@@ -945,5 +986,31 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
             );
             return { applied: true };
         });
+    }
+
+    async markPublicStatusSyncPending(
+        command: PublicStatusSyncAttemptCommand,
+    ): Promise<void> {
+        const updated = await this.pool.query(
+            `UPDATE request_workflows
+             SET public_sync_state = 'pending', public_sync_error_code = NULL,
+                 public_sync_attempted_at = $2
+             WHERE post_uri = $1`,
+            [command.postUri, command.occurredAt],
+        );
+        if (updated.rowCount !== 1) throw new Error('REQUEST_WORKFLOW_NOT_FOUND');
+    }
+
+    async markPublicStatusSyncFailed(
+        command: PublicStatusSyncFailureCommand,
+    ): Promise<void> {
+        const updated = await this.pool.query(
+            `UPDATE request_workflows
+             SET public_sync_state = 'failed', public_sync_error_code = $2,
+                 public_sync_attempted_at = $3
+             WHERE post_uri = $1`,
+            [command.postUri, command.errorCode, command.occurredAt],
+        );
+        if (updated.rowCount !== 1) throw new Error('REQUEST_WORKFLOW_NOT_FOUND');
     }
 }

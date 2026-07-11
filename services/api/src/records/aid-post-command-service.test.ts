@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AidPostRecord } from '@patchwork/at-lexicons';
+import { AtClientError } from '@patchwork/at-client';
 import {
     AidPostCommandService,
     type AidPostClient,
@@ -126,6 +127,8 @@ describe('AidPostCommandService', () => {
         const at = client();
         const lifecycle = {
             get: vi.fn().mockResolvedValue({ currentStatus: 'in_progress' }),
+            markPublicStatusSyncPending: vi.fn().mockResolvedValue(undefined),
+            markPublicStatusSyncFailed: vi.fn().mockResolvedValue(undefined),
             recordPublicStatusSync: vi.fn().mockResolvedValue({ applied: true }),
         };
         const service = new AidPostCommandService(
@@ -143,6 +146,12 @@ describe('AidPostCommandService', () => {
 
         expect(lifecycle.get).toHaveBeenCalledWith(
             'at://did:plc:alice/app.patchwork.aid.post/3abc',
+        );
+        expect(lifecycle.markPublicStatusSyncPending).toHaveBeenCalledWith(
+            expect.objectContaining({
+                postUri: 'at://did:plc:alice/app.patchwork.aid.post/3abc',
+                publicStatus: 'in-progress',
+            }),
         );
         expect(at.update).toHaveBeenCalledWith(
             'at://did:plc:alice/app.patchwork.aid.post/3abc',
@@ -162,5 +171,41 @@ describe('AidPostCommandService', () => {
                 actorDid: 'did:plc:alice',
             }),
         );
+    });
+
+    it('records a stable failure code when public status reconciliation fails', async () => {
+        const at = client();
+        vi.mocked(at.update).mockRejectedValue(
+            new AtClientError('PDS_UNAVAILABLE', 'PDS unavailable', {
+                retryable: true,
+            }),
+        );
+        const lifecycle = {
+            get: vi.fn().mockResolvedValue({ currentStatus: 'resolved' }),
+            markPublicStatusSyncPending: vi.fn().mockResolvedValue(undefined),
+            markPublicStatusSyncFailed: vi.fn().mockResolvedValue(undefined),
+            recordPublicStatusSync: vi.fn(),
+        };
+        const service = new AidPostCommandService(
+            async () => at,
+            undefined,
+            lifecycle,
+        );
+
+        await expect(
+            service.reconcileStatus('browser-session', {
+                uri: 'at://did:plc:alice/app.patchwork.aid.post/3abc',
+                expectedCid: 'bafy-current',
+                updatedAt: '2026-07-11T02:05:00.000Z',
+            }),
+        ).rejects.toMatchObject({ code: 'PDS_UNAVAILABLE', retryable: true });
+        expect(lifecycle.markPublicStatusSyncFailed).toHaveBeenCalledWith(
+            expect.objectContaining({
+                postUri: 'at://did:plc:alice/app.patchwork.aid.post/3abc',
+                publicStatus: 'resolved',
+                errorCode: 'PDS_UNAVAILABLE',
+            }),
+        );
+        expect(lifecycle.recordPublicStatusSync).not.toHaveBeenCalled();
     });
 });

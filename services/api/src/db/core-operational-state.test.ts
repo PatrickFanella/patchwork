@@ -113,6 +113,12 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             ),
         );
         await pool.query(
+            await readFile(
+                new URL('./migrations/0010_public_sync_state.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
             'TRUNCATE platform_roles, operational_audit_events, abuse_reports, user_blocks, request_handoff_events, request_assignment_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
@@ -174,6 +180,27 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             auditRetentionUntil: '2027-07-11T02:01:00.000Z',
         };
 
+        await lifecycle.markPublicStatusSyncPending({
+            postUri: syncUri,
+            actorDid: 'did:plc:alice',
+            publicStatus: 'in-progress',
+            occurredAt: '2026-07-11T02:00:30.000Z',
+        });
+        await expect(lifecycle.get(syncUri)).resolves.toMatchObject({
+            publicSyncState: 'pending',
+        });
+        await lifecycle.markPublicStatusSyncFailed({
+            postUri: syncUri,
+            actorDid: 'did:plc:alice',
+            publicStatus: 'in-progress',
+            occurredAt: '2026-07-11T02:00:45.000Z',
+            errorCode: 'PDS_UNAVAILABLE',
+        });
+        await expect(lifecycle.get(syncUri)).resolves.toMatchObject({
+            publicSyncState: 'failed',
+            publicSyncErrorCode: 'PDS_UNAVAILABLE',
+        });
+
         await expect(lifecycle.recordPublicStatusSync(command)).resolves.toEqual({
             applied: true,
         });
@@ -184,6 +211,7 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             publicStatus: 'in-progress',
             publicCid: 'bafy-synced',
             publicSyncedAt: '2026-07-11T02:01:00.000Z',
+            publicSyncState: 'synced',
         });
     });
 
