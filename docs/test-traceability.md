@@ -81,6 +81,8 @@ is replaced rather than serialized.
 conflicting credentials, single session/role resolution, and deep immutability.
 The lifecycle PostgreSQL HTTP suite covers missing and expired sessions plus
 authorization derived from the durable role instead of hostile body fields.
+`graceful-shutdown.test.ts` uses a real Node server to prove immediate refusal
+of new connections, active-request drain, pool-close ordering, and idempotency.
 
 ### Browser E2E
 

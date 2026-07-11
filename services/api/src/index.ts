@@ -45,6 +45,7 @@ import { createLifecycleTransitionHandler } from './http/lifecycle-transition-ha
 import { createMethodRouter } from './http/router.js';
 import { readJsonBody } from './http/json-body.js';
 import { authenticateRequest } from './http/authenticated-request.js';
+import { createGracefulShutdown } from './http/graceful-shutdown.js';
 import {
     ensureRequestId,
     PublicHttpError,
@@ -1274,9 +1275,10 @@ const isExecutedDirectly =
 
 if (isExecutedDirectly) {
     const server = startApiServer();
-    process.on('SIGTERM', () => {
-        server.close(() => {
-            void postgresPool?.end();
-        });
+    const shutdown = createGracefulShutdown({
+        server,
+        closeResources: async () => postgresPool?.end(),
     });
+    process.once('SIGTERM', () => void shutdown());
+    process.once('SIGINT', () => void shutdown());
 }

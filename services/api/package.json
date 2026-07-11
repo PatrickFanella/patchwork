@@ -13,8 +13,8 @@
         "db:seed:phase3": "tsx src/db/seed.ts --phase3-only",
         "lint": "npm run typecheck",
         "typecheck": "tsc -p tsconfig.json --noEmit",
-        "test": "vitest run",
-        "test:integration:postgres": "vitest run src/auth/session-repository.postgres.test.ts src/db/core-operational-state.test.ts src/http/lifecycle-transition-handler.postgres.test.ts"
+        "test": "vitest run --no-file-parallelism",
+        "test:integration:postgres": "vitest run --no-file-parallelism src/auth/session-repository.postgres.test.ts src/db/core-operational-state.test.ts src/http/lifecycle-transition-handler.postgres.test.ts"
     },
     "dependencies": {
         "@atproto/oauth-client-node": "0.4.8",

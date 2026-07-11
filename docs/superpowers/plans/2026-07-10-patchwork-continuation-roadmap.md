@@ -248,8 +248,8 @@ Compose. Development and tests may still opt into the explicit fixture runtime.
 - [ ] Parse bearer or secure-cookie sessions once and attach an immutable authenticated principal.
 - [ ] Accept command payloads only as bounded JSON bodies; keep credentials and tokens out of URLs.
 - [x] Return a stable error envelope with request IDs and no internal exception details.
-- [ ] Add graceful shutdown that stops accepting requests, drains active work, and closes pools.
-- [ ] Test malformed JSON, oversized bodies, unsupported media types, missing auth, expired auth, and shutdown behavior.
+- [x] Add graceful shutdown that stops accepting requests, drains active work, and closes pools.
+- [x] Test malformed JSON, oversized bodies, unsupported media types, missing auth, expired auth, and shutdown behavior.
 - [ ] Commit as `refactor(api): add secure method-aware HTTP routing`.
 
 ### Task 4.2: Enforce perimeter and authorization policy

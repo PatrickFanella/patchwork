@@ -46,3 +46,12 @@ durable role elevation, and hostile body identity fields.
 
 The roadmap checkbox remains open until fixture compatibility routes are
 removed or converted; those routes still bypass this boundary.
+
+## Graceful shutdown checkpoint
+
+SIGTERM and SIGINT now share an idempotent shutdown operation. The Node server
+stops accepting connections immediately, drains active requests, and closes the
+PostgreSQL pool only after the drain. A 30-second deadline force-closes remaining
+connections so orchestration cannot hang indefinitely. A real-server test holds
+one request open, proves a new connection is refused, releases the request, and
+then proves exactly-once resource closure.
