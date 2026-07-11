@@ -44,6 +44,13 @@ import { BlockService } from './block-service.js';
 import { ReportService } from './report-service.js';
 import { createLifecycleTransitionHandler } from './http/lifecycle-transition-handler.js';
 import { createMethodRouter } from './http/router.js';
+import { readJsonBody } from './http/json-body.js';
+import {
+    ensureRequestId,
+    PublicHttpError,
+    writeJsonResponse,
+    writePublicError,
+} from './http/error-response.js';
 
 const config = loadApiConfig();
 
@@ -241,37 +248,11 @@ const writeJson = (
     body: unknown,
     extraHeaders?: Record<string, string>,
 ): void => {
-    response.writeHead(statusCode, {
-        'content-type': 'application/json',
-        ...extraHeaders,
-    });
-    response.end(JSON.stringify(body));
+    writeJsonResponse(response, statusCode, body, extraHeaders);
 };
 
-const MAX_BODY_SIZE = 1024 * 1024; // 1 MB
-
-const readJsonBody = (request: IncomingMessage): Promise<unknown> => {
-    return new Promise((resolve, reject) => {
-        const chunks: Buffer[] = [];
-        let totalSize = 0;
-        request.on('data', (chunk: Buffer) => {
-            totalSize += chunk.length;
-            if (totalSize > MAX_BODY_SIZE) {
-                request.destroy();
-                reject(new Error('Request body too large'));
-                return;
-            }
-            chunks.push(chunk);
-        });
-        request.on('end', () => {
-            try {
-                resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-            } catch {
-                reject(new Error('Invalid JSON body'));
-            }
-        });
-        request.on('error', reject);
-    });
+const writeRouteError = (response: ServerResponse, error: unknown): void => {
+    writePublicError(response, error);
 };
 
 const readSessionCookie = (request: IncomingMessage): string | undefined => {
@@ -287,6 +268,10 @@ const readSessionCookie = (request: IncomingMessage): string | undefined => {
 };
 
 const writeAtAuthError = (response: ServerResponse, error: unknown): void => {
+    if (error instanceof PublicHttpError) {
+        writeRouteError(response, error);
+        return;
+    }
     if (error instanceof AtClientError) {
         const statusCode =
             error.code === 'SESSION_EXPIRED' ? 401
@@ -435,6 +420,10 @@ const writeAidPostCommandError = (
     response: ServerResponse,
     error: unknown,
 ): void => {
+    if (error instanceof PublicHttpError) {
+        writeRouteError(response, error);
+        return;
+    }
     if (error instanceof AtClientError) {
         writeAtAuthError(response, error);
         return;
@@ -891,6 +880,7 @@ const routeRouter = createMethodRouter(
 
 export const createApiServer = () => {
     return createServer((request, response) => {
+        ensureRequestId(response);
         const requestUrl = new URL(request.url ?? '/', 'http://localhost');
 
         // --- CORS headers on every response ---
@@ -974,17 +964,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1009,17 +989,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1032,17 +1002,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1055,17 +1015,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1078,17 +1028,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1101,17 +1041,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1125,17 +1055,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1173,15 +1093,7 @@ export const createApiServer = () => {
                         writeAtAuthError(response, error);
                         return;
                     }
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
+                    writeRouteError(response, error);
                 });
             return;
         }
@@ -1220,15 +1132,7 @@ export const createApiServer = () => {
                         writeAtAuthError(response, error);
                         return;
                     }
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
+                    writeRouteError(response, error);
                 });
             return;
         }
@@ -1267,15 +1171,7 @@ export const createApiServer = () => {
                         writeAtAuthError(response, error);
                         return;
                     }
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
+                    writeRouteError(response, error);
                 });
             return;
         }
@@ -1314,15 +1210,7 @@ export const createApiServer = () => {
                         writeAtAuthError(response, error);
                         return;
                     }
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
+                    writeRouteError(response, error);
                 });
             return;
         }
@@ -1336,17 +1224,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1359,17 +1237,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1382,17 +1250,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1405,17 +1263,7 @@ export const createApiServer = () => {
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1448,17 +1296,7 @@ export const createApiServer = () => {
 
                     writeJson(response, result.statusCode, result.body);
                 })
-                .catch(error => {
-                    writeJson(response, 500, {
-                        error: {
-                            code: 'UNHANDLED_ROUTE_ERROR',
-                            message:
-                                error instanceof Error ?
-                                    error.message
-                                :   'Unhandled route error.',
-                        },
-                    });
-                });
+                .catch(error => writeRouteError(response, error));
             return;
         }
 

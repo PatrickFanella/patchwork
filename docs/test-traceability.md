@@ -74,6 +74,9 @@ known-path versus unknown-path distinction. `api-server-routing.test.ts` opens a
 real loopback HTTP server and proves that an unsupported method returns `405`,
 an exact `Allow` header, and the public error envelope. Later Phase 4 slices add
 authenticated-principal, body-parser, CSRF, perimeter, and shutdown coverage.
+The same server suite now covers malformed JSON, unsupported media type, and
+one-mebibyte rejection; `error-response.test.ts` proves unknown exception text
+is replaced rather than serialized.
 
 ### Browser E2E
 

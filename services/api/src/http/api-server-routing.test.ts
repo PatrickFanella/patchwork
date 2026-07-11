@@ -34,7 +34,53 @@ describe('API server method routing', () => {
             error: {
                 code: 'METHOD_NOT_ALLOWED',
                 message: 'The requested method is not allowed for this route.',
+                requestId: expect.any(String),
             },
+        });
+    });
+
+    it('rejects malformed JSON with a stable request-ID error', async () => {
+        const response = await fetch(`${origin}/account/settings`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: '{',
+        });
+
+        expect(response.status).toBe(400);
+        const requestId = response.headers.get('x-request-id');
+        expect(requestId).toMatch(/^[0-9a-f-]{36}$/);
+        await expect(response.json()).resolves.toEqual({
+            error: {
+                code: 'MALFORMED_JSON',
+                message: 'The request body is not valid JSON.',
+                requestId,
+            },
+        });
+    });
+
+    it('rejects command bodies without application/json', async () => {
+        const response = await fetch(`${origin}/account/settings`, {
+            method: 'PUT',
+            headers: { 'content-type': 'text/plain' },
+            body: '{}',
+        });
+
+        expect(response.status).toBe(415);
+        await expect(response.json()).resolves.toMatchObject({
+            error: { code: 'UNSUPPORTED_MEDIA_TYPE' },
+        });
+    });
+
+    it('rejects command bodies larger than one mebibyte', async () => {
+        const response = await fetch(`${origin}/account/settings`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ value: 'x'.repeat(1024 * 1024) }),
+        });
+
+        expect(response.status).toBe(413);
+        await expect(response.json()).resolves.toMatchObject({
+            error: { code: 'REQUEST_BODY_TOO_LARGE' },
         });
     });
 });
