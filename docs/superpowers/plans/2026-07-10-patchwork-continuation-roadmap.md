@@ -218,6 +218,13 @@ Progress: authenticated PostgreSQL-backed block and report services are wired at
 - Modify: `services/moderation-worker/src/index.ts`
 - Test: `services/moderation-worker/src/durable-queue.test.ts`
 
+Progress: migration `002_durable_moderation.sql` adds leases, attempts,
+next-attempt scheduling, stable failure codes, and terminal-failure state.
+`PostgresModerationQueueStore` now enqueues durable work and uses
+`FOR UPDATE SKIP LOCKED` to give concurrent workers distinct claims. Lease
+completion, retry transitions, durable audit operations, and production runtime
+wiring remain.
+
 - [ ] Implement claim-with-lease queue processing using `FOR UPDATE SKIP LOCKED`.
 - [ ] Persist attempts, next-attempt time, terminal failure, policy decision, and audit history.
 - [ ] Make policy application idempotent by command ID.

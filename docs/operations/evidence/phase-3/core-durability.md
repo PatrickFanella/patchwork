@@ -38,3 +38,11 @@ the replay skipped all ten, and 20 PostgreSQL/HTTP integration tests passed.
   leases and retry behavior.
 - Connect automatic repository-event reconciliation during the live-indexer
   phase; the current public-status command is author initiated.
+
+## Moderation durability checkpoint
+
+On 2026-07-11, an isolated PostgreSQL integration test demonstrated two
+concurrent moderation workers claiming distinct queued subjects through
+`FOR UPDATE SKIP LOCKED`. This proves the claim primitive only; the production
+worker remains fixture-backed until lease completion, retry, audit, and runtime
+wiring are implemented.

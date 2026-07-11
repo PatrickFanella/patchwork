@@ -39,7 +39,7 @@ Counts can change as tests are consolidated. Readiness depends on covered bounda
 | Lifecycle rules | `packages/shared/src/lifecycle.test.ts` | `lifecycle-service.integration.test.ts` | Restart, retry, rollback, audit, assignment/handoff, deletion, role, and public-sync state | `lifecycle-transition-handler.postgres.test.ts` | Lifecycle UI is fixture-oriented | Author status reconciliation is command-tested; live stream reconciliation is absent | Concurrent-command proof and automatic stream reconciliation |
 | Blocks and reports | Service validation tests | Older chat safety fixtures | Repository retention/deletion tests | Authenticated route wiring lacks full HTTP test | Chat safety UX fixtures | — | Cross-request enforcement |
 | Discovery | Firehose, ranking, discovery rule tests | Phase fixture pipeline | Discovery events persist | Query service tests do not use live ingestion | Map/feed UI and accessibility | — | Live stream to projection database |
-| Moderation | Policy and queue state tests | Worker fixture services | Schema exists in API DB only | — | Console UX fixtures | — | PostgreSQL worker stores and crash recovery |
+| Moderation | Policy and queue state tests | Worker fixture services | Concurrent PostgreSQL queue claim using `SKIP LOCKED`; runtime still fixture-backed | — | Console UX fixtures | — | Lease completion/retry, audit store, runtime wiring, and crash recovery |
 | Privacy | Geo floor and redaction tests | Fixture response checks | Audit payload redaction | HTTP boundary avoids actor override | Accessibility only | Redacted lifecycle evidence | Retention enforcement jobs |
 
 ## Suite ownership and classification
