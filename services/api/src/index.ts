@@ -43,6 +43,7 @@ import { PostgresRoleRepository } from './db/role-repository.js';
 import { BlockService } from './block-service.js';
 import { ReportService } from './report-service.js';
 import { createLifecycleTransitionHandler } from './http/lifecycle-transition-handler.js';
+import { createMethodRouter } from './http/router.js';
 
 const config = loadApiConfig();
 
@@ -848,6 +849,46 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
         attachmentService.getAttachmentsFromParams(requestUrl.searchParams),
 };
 
+const legacyReadPaths = new Set([
+    '/health',
+    '/health/ready',
+    '/metrics',
+    '/contracts',
+    '/query/map',
+    '/query/feed',
+    '/query/directory',
+    '/chat/conversations',
+    '/chat/messages',
+    '/chat/safety/metrics',
+    '/volunteer/profiles',
+    '/verification/status',
+    '/verification/audit',
+    '/account/settings',
+    '/aid/post/lifecycle',
+    '/auth/session',
+    '/org/profile',
+    '/org/members',
+    '/org/services',
+    '/org/audit',
+    '/org/metrics',
+    '/inbox',
+    '/inbox/counts',
+    '/feedback/request',
+    '/feedback/user',
+    '/feedback/summary',
+    '/reputation',
+    '/reputation/signals',
+    '/aid/post/attachments',
+]);
+
+const routeRouter = createMethodRouter(
+    Object.entries(routeHandlers).map(([pathname, handler]) => ({
+        method: legacyReadPaths.has(pathname) ? 'GET' : 'POST',
+        pathname,
+        handler,
+    })),
+);
+
 export const createApiServer = () => {
     return createServer((request, response) => {
         const requestUrl = new URL(request.url ?? '/', 'http://localhost');
@@ -1378,10 +1419,24 @@ export const createApiServer = () => {
             return;
         }
 
-        const handler = routeHandlers[requestUrl.pathname];
-        if (handler) {
+        const route = routeRouter.resolve(request.method, requestUrl.pathname);
+        if (route.kind === 'method-not-allowed') {
+            writeJson(
+                response,
+                405,
+                {
+                    error: {
+                        code: 'METHOD_NOT_ALLOWED',
+                        message: 'The requested method is not allowed for this route.',
+                    },
+                },
+                { allow: route.allow.join(', ') },
+            );
+            return;
+        }
+        if (route.kind === 'matched') {
             void Promise.resolve()
-                .then(() => handler(requestUrl))
+                .then(() => route.handler(requestUrl))
                 .then(result => {
                     if (result.contentType) {
                         response.writeHead(result.statusCode, {

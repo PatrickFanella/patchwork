@@ -244,7 +244,7 @@ Compose. Development and tests may still opt into the explicit fixture runtime.
 - Modify: `services/api/src/index.ts`
 - Test: `services/api/src/http/router.test.ts`
 
-- [ ] Route by HTTP method and pathname, returning `405` with `Allow` for unsupported methods.
+- [x] Route by HTTP method and pathname, returning `405` with `Allow` for unsupported methods.
 - [ ] Parse bearer or secure-cookie sessions once and attach an immutable authenticated principal.
 - [ ] Accept command payloads only as bounded JSON bodies; keep credentials and tokens out of URLs.
 - [ ] Return a stable error envelope with request IDs and no internal exception details.

@@ -67,6 +67,14 @@ The mandatory API integration command runs:
 
 These tests require `TEST_DATABASE_URL`. They verify encrypted OAuth persistence, browser-session revocation, migrations, restart survival, command idempotency, transaction rollback, audit redaction, subject deletion, HTTP parsing, session-derived identity, ownership denial, and server restart/readback.
 
+### API transport security
+
+`services/api/src/http/router.test.ts` verifies method/path resolution and the
+known-path versus unknown-path distinction. `api-server-routing.test.ts` opens a
+real loopback HTTP server and proves that an unsupported method returns `405`,
+an exact `Allow` header, and the public error envelope. Later Phase 4 slices add
+authenticated-principal, body-parser, CSRF, perimeter, and shutdown coverage.
+
 ### Browser E2E
 
 `apps/web/e2e/accessibility.spec.ts` starts the Vite web application and runs in Chromium. It verifies skip links, landmarks, keyboard operation, Escape behavior, labels, ARIA semantics, focus management, route announcements, and image alternatives.
