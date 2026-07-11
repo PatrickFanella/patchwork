@@ -1124,11 +1124,35 @@ export const createApiServer = () => {
             requestUrl.pathname === '/aid/post/accept'
         ) {
             void readJsonBody(request)
-                .then(body => lifecycleService.acceptAssignment(body))
+                .then(async body => {
+                    if (!postgresPool) return lifecycleService.acceptAssignment(body);
+                    if (!atAuthRuntime) {
+                        throw new AtClientError(
+                            'SESSION_EXPIRED',
+                            'AT authentication is unavailable.',
+                        );
+                    }
+                    const sessionToken = readSessionCookie(request);
+                    if (!sessionToken) {
+                        throw new AtClientError(
+                            'SESSION_EXPIRED',
+                            'The Patchwork browser session is missing.',
+                        );
+                    }
+                    const session = await atAuthRuntime.service.current(sessionToken);
+                    return lifecycleService.acceptAssignment(
+                        body,
+                        createAuthorizationContext(session.did, 'user'),
+                    );
+                })
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
                 .catch(error => {
+                    if (error instanceof AtClientError) {
+                        writeAtAuthError(response, error);
+                        return;
+                    }
                     writeJson(response, 500, {
                         error: {
                             code: 'UNHANDLED_ROUTE_ERROR',
@@ -1147,11 +1171,35 @@ export const createApiServer = () => {
             requestUrl.pathname === '/aid/post/decline'
         ) {
             void readJsonBody(request)
-                .then(body => lifecycleService.declineAssignment(body))
+                .then(async body => {
+                    if (!postgresPool) return lifecycleService.declineAssignment(body);
+                    if (!atAuthRuntime) {
+                        throw new AtClientError(
+                            'SESSION_EXPIRED',
+                            'AT authentication is unavailable.',
+                        );
+                    }
+                    const sessionToken = readSessionCookie(request);
+                    if (!sessionToken) {
+                        throw new AtClientError(
+                            'SESSION_EXPIRED',
+                            'The Patchwork browser session is missing.',
+                        );
+                    }
+                    const session = await atAuthRuntime.service.current(sessionToken);
+                    return lifecycleService.declineAssignment(
+                        body,
+                        createAuthorizationContext(session.did, 'user'),
+                    );
+                })
                 .then(result => {
                     writeJson(response, result.statusCode, result.body);
                 })
                 .catch(error => {
+                    if (error instanceof AtClientError) {
+                        writeAtAuthError(response, error);
+                        return;
+                    }
                     writeJson(response, 500, {
                         error: {
                             code: 'UNHANDLED_ROUTE_ERROR',

@@ -84,6 +84,7 @@ describe('durable core services', () => {
                 .fn()
                 .mockResolvedValue({ applied: true, transitionId: '31' }),
             assign: vi.fn(),
+            respondToAssignment: vi.fn(),
             deleteSubject: vi.fn(),
         };
         const service = createLifecycleService(repository);
@@ -117,6 +118,7 @@ describe('durable core services', () => {
             register: vi.fn(),
             transition: vi.fn(),
             assign: vi.fn(),
+            respondToAssignment: vi.fn(),
             deleteSubject: vi.fn(),
             get: vi.fn().mockResolvedValue({
                 postUri:
@@ -180,6 +182,7 @@ describe('durable core services', () => {
                     timeoutMs: 1_800_000,
                 },
             }),
+            respondToAssignment: vi.fn(),
         };
         const service = createLifecycleService(repository);
 
@@ -201,6 +204,53 @@ describe('durable core services', () => {
                 commandId: 'assignment-command-1',
                 assignerDid: 'did:plc:moderator',
                 assigneeDid: 'did:plc:volunteer',
+            }),
+        );
+    });
+
+    it('persists assignment acceptance using the authenticated volunteer identity', async () => {
+        const repository = {
+            register: vi.fn(),
+            get: vi.fn(),
+            transition: vi.fn(),
+            assign: vi.fn(),
+            deleteSubject: vi.fn(),
+            respondToAssignment: vi.fn().mockResolvedValue({
+                applied: true,
+                assignmentEventId: '42',
+                assignment: {
+                    assigneeDid: 'did:plc:volunteer',
+                    assignerDid: 'did:plc:moderator',
+                    assignedAt: '2026-07-10T23:12:00.000Z',
+                    respondedAt: '2026-07-10T23:13:00.000Z',
+                    status: 'accepted',
+                    timeoutMs: 1_800_000,
+                },
+                currentStatus: 'in_progress',
+            }),
+        };
+        const service = createLifecycleService(repository);
+
+        const result = await service.acceptAssignment(
+            {
+                commandId: 'accept-assignment-command-1',
+                postUri:
+                    'at://did:plc:alice/app.patchwork.aid.post/durable-assignment',
+                assigneeDid: 'did:plc:mallory',
+                now: '2026-07-10T23:13:00.000Z',
+            },
+            createAuthorizationContext('did:plc:volunteer', 'volunteer'),
+        );
+
+        expect(result).toMatchObject({
+            statusCode: 200,
+            body: { currentStatus: 'in_progress' },
+        });
+        expect(repository.respondToAssignment).toHaveBeenCalledWith(
+            expect.objectContaining({
+                commandId: 'accept-assignment-command-1',
+                assigneeDid: 'did:plc:volunteer',
+                response: 'accepted',
             }),
         );
     });

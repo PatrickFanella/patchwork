@@ -57,6 +57,23 @@ export interface LifecycleAssignmentOutcome {
     assignment: AssignmentRecord;
 }
 
+export interface LifecycleAssignmentResponseCommand {
+    commandId: string;
+    postUri: string;
+    assigneeDid: string;
+    response: 'accepted' | 'declined';
+    occurredAt: string;
+    reason?: string;
+    auditRetentionUntil?: string;
+}
+
+export interface LifecycleAssignmentResponseOutcome {
+    applied: boolean;
+    assignmentEventId: string;
+    assignment: AssignmentRecord;
+    currentStatus: RequestStatus;
+}
+
 export interface LifecycleRepository {
     register(input: RegisterWorkflowInput): Promise<boolean>;
     get(postUri: string): Promise<RequestWorkflow | undefined>;
@@ -66,6 +83,9 @@ export interface LifecycleRepository {
     assign(
         command: LifecycleAssignmentCommand,
     ): Promise<LifecycleAssignmentOutcome>;
+    respondToAssignment(
+        command: LifecycleAssignmentResponseCommand,
+    ): Promise<LifecycleAssignmentResponseOutcome>;
     deleteSubject(postUri: string): Promise<boolean>;
 }
 
@@ -375,6 +395,134 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
                 applied: true,
                 assignmentEventId: String(event.assignment_event_id),
                 assignment,
+            };
+        });
+    }
+
+    async respondToAssignment(
+        command: LifecycleAssignmentResponseCommand,
+    ): Promise<LifecycleAssignmentResponseOutcome> {
+        return withTransaction(this.pool, async client => {
+            const duplicate = await client.query<{
+                assignment_event_id: string | number;
+                assignment: AssignmentRecord;
+                event_type: 'accepted' | 'declined';
+            }>(
+                `SELECT assignment_event_id, assignment, event_type
+                 FROM request_assignment_events WHERE command_id = $1`,
+                [command.commandId],
+            );
+            const existing = duplicate.rows[0];
+            if (existing) {
+                return {
+                    applied: false,
+                    assignmentEventId: String(existing.assignment_event_id),
+                    assignment: existing.assignment,
+                    currentStatus:
+                        existing.event_type === 'accepted' ? 'in_progress' : 'triaged',
+                };
+            }
+
+            const workflow = await client.query<{
+                current_status: RequestStatus;
+                assignment: AssignmentRecord | null;
+            }>(
+                `SELECT current_status, assignment FROM request_workflows
+                 WHERE post_uri = $1 FOR UPDATE`,
+                [command.postUri],
+            );
+            const current = workflow.rows[0];
+            if (!current) throw new Error('REQUEST_WORKFLOW_NOT_FOUND');
+            if (!current.assignment || current.assignment.assigneeDid !== command.assigneeDid) {
+                throw new Error('ASSIGNMENT_MISMATCH');
+            }
+            if (current.assignment.status !== 'pending') {
+                throw new Error('ASSIGNMENT_ALREADY_RESPONDED');
+            }
+            if (current.current_status !== 'assigned') {
+                throw new Error('ASSIGNMENT_TRANSITION_NOT_ALLOWED');
+            }
+
+            const assignment: AssignmentRecord = {
+                ...current.assignment,
+                status: command.response,
+                respondedAt: command.occurredAt,
+                ...(command.response === 'declined' && command.reason
+                    ? { declineReason: command.reason }
+                    : {}),
+            };
+            const nextStatus: RequestStatus =
+                command.response === 'accepted' ? 'in_progress' : 'triaged';
+            const reason =
+                command.reason ??
+                (command.response === 'accepted'
+                    ? 'Assignment accepted'
+                    : 'Assignment declined');
+            const inserted = await client.query<{
+                assignment_event_id: string | number;
+            }>(
+                `INSERT INTO request_assignment_events (
+                    command_id, post_uri, assigner_did, assignee_did,
+                    assignment, event_type, occurred_at
+                 ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+                 RETURNING assignment_event_id`,
+                [
+                    command.commandId,
+                    command.postUri,
+                    current.assignment.assignerDid,
+                    command.assigneeDid,
+                    JSON.stringify(assignment),
+                    command.response,
+                    command.occurredAt,
+                ],
+            );
+            await client.query(
+                `INSERT INTO request_transition_events (
+                    command_id, post_uri, actor_did, actor_role,
+                    from_status, to_status, reason, occurred_at
+                 ) VALUES ($1, $2, $3, 'volunteer', 'assigned', $4, $5, $6)`,
+                [
+                    `assignment-response:${command.commandId}`,
+                    command.postUri,
+                    command.assigneeDid,
+                    nextStatus,
+                    reason,
+                    command.occurredAt,
+                ],
+            );
+            await client.query(
+                `UPDATE request_workflows
+                 SET current_status = $2, assignment = $3::jsonb, updated_at = $4
+                 WHERE post_uri = $1`,
+                [
+                    command.postUri,
+                    nextStatus,
+                    JSON.stringify(assignment),
+                    command.occurredAt,
+                ],
+            );
+            await client.query(
+                `INSERT INTO operational_audit_events (
+                    command_id, actor_did, action, subject_uri, payload,
+                    retention_until, occurred_at
+                 ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
+                [
+                    `audit:${command.commandId}`,
+                    command.assigneeDid,
+                    `request.assignment_${command.response}`,
+                    command.postUri,
+                    JSON.stringify({ assignmentStatus: command.response }),
+                    command.auditRetentionUntil ?? command.occurredAt,
+                    command.occurredAt,
+                ],
+            );
+            const event = inserted.rows[0];
+            if (!event) throw new Error('ASSIGNMENT_RESPONSE_INSERT_FAILED');
+            return {
+                applied: true,
+                assignmentEventId: String(event.assignment_event_id),
+                assignment,
+                currentStatus: nextStatus,
             };
         });
     }

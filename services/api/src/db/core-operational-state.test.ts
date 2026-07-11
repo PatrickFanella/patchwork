@@ -87,6 +87,12 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             ),
         );
         await pool.query(
+            await readFile(
+                new URL('./migrations/0006_assignment_responses.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
             'TRUNCATE operational_audit_events, abuse_reports, user_blocks, request_assignment_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
@@ -235,6 +241,123 @@ describeWithPostgres('core operational PostgreSQL state', () => {
                 assignerDid: 'did:plc:coordinator',
                 status: 'pending',
             },
+        });
+    });
+
+    it('persists assignment acceptance and deduplicates retries', async () => {
+        const acceptedUri =
+            'at://did:plc:alice/app.patchwork.aid.post/accepted-assignment';
+        await lifecycle.register({
+            commandId: 'register-accepted-assignment',
+            postUri: acceptedUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-10T22:47:00.000Z',
+        });
+        await lifecycle.transition({
+            commandId: 'triage-accepted-assignment',
+            postUri: acceptedUri,
+            actorDid: 'did:plc:coordinator',
+            actorRole: 'coordinator',
+            fromStatus: 'open',
+            toStatus: 'triaged',
+            occurredAt: '2026-07-10T22:48:00.000Z',
+        });
+        await lifecycle.assign({
+            commandId: 'assign-accepted-volunteer',
+            postUri: acceptedUri,
+            assignerDid: 'did:plc:coordinator',
+            assigneeDid: 'did:plc:volunteer',
+            occurredAt: '2026-07-10T22:49:00.000Z',
+            timeoutMs: 1_800_000,
+        });
+        const command = {
+            commandId: 'accept-volunteer-assignment',
+            postUri: acceptedUri,
+            assigneeDid: 'did:plc:volunteer',
+            response: 'accepted' as const,
+            occurredAt: '2026-07-10T22:50:00.000Z',
+        };
+
+        await expect(lifecycle.respondToAssignment(command)).resolves.toMatchObject({
+            applied: true,
+            assignment: { status: 'accepted' },
+            currentStatus: 'in_progress',
+        });
+        await expect(
+            new PostgresLifecycleRepository(pool).respondToAssignment(command),
+        ).resolves.toMatchObject({ applied: false });
+        await expect(
+            new PostgresLifecycleRepository(pool).get(acceptedUri),
+        ).resolves.toMatchObject({
+            currentStatus: 'in_progress',
+            assignment: {
+                assigneeDid: 'did:plc:volunteer',
+                status: 'accepted',
+                respondedAt: '2026-07-10T22:50:00.000Z',
+            },
+            timeline: expect.arrayContaining([
+                expect.objectContaining({
+                    from: 'assigned',
+                    to: 'in_progress',
+                    actorDid: 'did:plc:volunteer',
+                }),
+            ]),
+        });
+    });
+
+    it('persists assignment decline and returns the request for reassignment', async () => {
+        const declinedUri =
+            'at://did:plc:alice/app.patchwork.aid.post/declined-assignment';
+        await lifecycle.register({
+            commandId: 'register-declined-assignment',
+            postUri: declinedUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-10T22:51:00.000Z',
+        });
+        await lifecycle.transition({
+            commandId: 'triage-declined-assignment',
+            postUri: declinedUri,
+            actorDid: 'did:plc:coordinator',
+            actorRole: 'coordinator',
+            fromStatus: 'open',
+            toStatus: 'triaged',
+            occurredAt: '2026-07-10T22:52:00.000Z',
+        });
+        await lifecycle.assign({
+            commandId: 'assign-declined-volunteer',
+            postUri: declinedUri,
+            assignerDid: 'did:plc:coordinator',
+            assigneeDid: 'did:plc:volunteer',
+            occurredAt: '2026-07-10T22:53:00.000Z',
+            timeoutMs: 1_800_000,
+        });
+
+        await expect(
+            lifecycle.respondToAssignment({
+                commandId: 'decline-volunteer-assignment',
+                postUri: declinedUri,
+                assigneeDid: 'did:plc:volunteer',
+                response: 'declined',
+                reason: 'Schedule conflict',
+                occurredAt: '2026-07-10T22:54:00.000Z',
+            }),
+        ).resolves.toMatchObject({
+            applied: true,
+            assignment: {
+                status: 'declined',
+                declineReason: 'Schedule conflict',
+            },
+            currentStatus: 'triaged',
+        });
+        await expect(lifecycle.get(declinedUri)).resolves.toMatchObject({
+            currentStatus: 'triaged',
+            timeline: expect.arrayContaining([
+                expect.objectContaining({
+                    from: 'assigned',
+                    to: 'triaged',
+                    reason: 'Schedule conflict',
+                }),
+            ]),
         });
     });
 

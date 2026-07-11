@@ -146,6 +146,7 @@ const assignmentInputSchema = z.object({
 });
 
 const assignmentResponseSchema = z.object({
+    commandId: z.string().min(1).max(200).optional(),
     postUri: z
         .string()
         .min(1)
@@ -627,6 +628,10 @@ export class LifecycleService {
             throw error;
         }
 
+        if (this.repository) {
+            return this.respondToAssignmentDurably(input, 'accepted', authCtx);
+        }
+
         const record = this.records.get(input.postUri);
         if (!record) {
             return {
@@ -696,7 +701,25 @@ export class LifecycleService {
     /**
      * Volunteer declines an assignment. Reverts to 'triaged' for reassignment.
      */
-    async declineAssignment(body: unknown): Promise<AssignmentResult> {
+    async declineAssignment(
+        body: unknown,
+        authCtx?: AuthorizationContext,
+    ): Promise<AssignmentResult> {
+        if (authCtx) {
+            try {
+                requireCapability(authCtx, 'accept:assignment');
+            } catch (err) {
+                if (err instanceof AuthorizationError) {
+                    return {
+                        statusCode: err.statusCode,
+                        body: {
+                            error: { code: err.code, message: err.message },
+                        },
+                    };
+                }
+                throw err;
+            }
+        }
         let input: z.infer<typeof assignmentResponseSchema>;
         try {
             input = assignmentResponseSchema.parse(body);
@@ -705,6 +728,10 @@ export class LifecycleService {
                 return { statusCode: 400, body: toValidationError(error) };
             }
             throw error;
+        }
+
+        if (this.repository) {
+            return this.respondToAssignmentDurably(input, 'declined', authCtx);
         }
 
         const record = this.records.get(input.postUri);
@@ -772,6 +799,90 @@ export class LifecycleService {
                 updatedAt: record.updatedAt,
             },
         };
+    }
+
+    private async respondToAssignmentDurably(
+        input: z.infer<typeof assignmentResponseSchema>,
+        response: 'accepted' | 'declined',
+        authCtx?: AuthorizationContext,
+    ): Promise<AssignmentResult> {
+        if (!authCtx) {
+            return {
+                statusCode: 401,
+                body: {
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'A durable assignment response requires authentication.',
+                    },
+                },
+            };
+        }
+        if (!input.commandId) {
+            return {
+                statusCode: 400,
+                body: {
+                    error: {
+                        code: 'COMMAND_ID_REQUIRED',
+                        message:
+                            'commandId is required for durable assignment responses.',
+                    },
+                },
+            };
+        }
+        const now = input.now ?? new Date().toISOString();
+        try {
+            const outcome = await this.repository!.respondToAssignment({
+                commandId: input.commandId,
+                postUri: input.postUri,
+                assigneeDid: authCtx.actorDid,
+                response,
+                occurredAt: now,
+                ...(input.reason ? { reason: input.reason } : {}),
+                auditRetentionUntil: new Date(
+                    new Date(now).getTime() + 365 * 24 * 60 * 60 * 1000,
+                ).toISOString(),
+            });
+            return {
+                statusCode: 200,
+                body: {
+                    postUri: input.postUri,
+                    assignment: outcome.assignment,
+                    currentStatus: outcome.currentStatus,
+                    updatedAt: now,
+                },
+            };
+        } catch (error) {
+            if (!(error instanceof Error)) throw error;
+            if (error.message === 'REQUEST_WORKFLOW_NOT_FOUND') {
+                return {
+                    statusCode: 404,
+                    body: {
+                        error: {
+                            code: 'NOT_FOUND',
+                            message: `No lifecycle record found for post: ${input.postUri}`,
+                        },
+                    },
+                };
+            }
+            if (
+                error.message === 'ASSIGNMENT_MISMATCH' ||
+                error.message === 'ASSIGNMENT_ALREADY_RESPONDED'
+            ) {
+                return {
+                    statusCode: 403,
+                    body: {
+                        error: {
+                            code: error.message,
+                            message:
+                                error.message === 'ASSIGNMENT_MISMATCH'
+                                    ? 'This volunteer is not the current assignee.'
+                                    : 'Assignment has already been responded to.',
+                        },
+                    },
+                };
+            }
+            throw error;
+        }
     }
 
     /**
