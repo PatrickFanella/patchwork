@@ -105,6 +105,7 @@ const aidPostCommandService =
         new AidPostCommandService(
             sessionToken => atAuthRuntime.aidPostClient(sessionToken),
             lifecycleRepository,
+            lifecycleRepository,
         )
     :   undefined;
 
@@ -560,6 +561,18 @@ const handleAidPostCommandRoute = (
 
             if (
                 request.method === 'POST' &&
+                requestUrl.pathname === '/at/aid-posts/status/reconcile'
+            ) {
+                const result = await aidPostCommandService.reconcileStatus(
+                    sessionToken,
+                    await readJsonBody(request),
+                );
+                writeJson(response, 200, result);
+                return;
+            }
+
+            if (
+                request.method === 'POST' &&
                 requestUrl.pathname === '/at/aid-posts/close'
             ) {
                 const result = await aidPostCommandService.close(
@@ -610,6 +623,7 @@ const contractRoutes = [
     '/oauth/callback',
     '/at/aid-posts',
     '/at/aid-posts/close',
+    '/at/aid-posts/status/reconcile',
     '/query/map',
     '/query/feed',
     '/query/directory',

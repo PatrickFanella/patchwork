@@ -78,6 +78,12 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
             ),
         );
         await pool.query(
+            await readFile(
+                new URL('../db/migrations/0009_public_status_sync.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
             'TRUNCATE platform_roles, operational_audit_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });

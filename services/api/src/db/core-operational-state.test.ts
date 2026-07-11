@@ -107,6 +107,12 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             ),
         );
         await pool.query(
+            await readFile(
+                new URL('./migrations/0009_public_status_sync.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
             'TRUNCATE platform_roles, operational_audit_events, abuse_reports, user_blocks, request_handoff_events, request_assignment_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
@@ -147,6 +153,38 @@ describeWithPostgres('core operational PostgreSQL state', () => {
         await expect(
             new PostgresRoleRepository(pool).resolve('did:plc:volunteer'),
         ).resolves.toBe('volunteer');
+    });
+
+    it('records public status synchronization and returned CID idempotently', async () => {
+        const syncUri =
+            'at://did:plc:alice/app.patchwork.aid.post/public-status-sync';
+        await lifecycle.register({
+            commandId: 'register-public-status-sync',
+            postUri: syncUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-11T02:00:00.000Z',
+        });
+        const command = {
+            commandId: 'sync-public-status:bafy-synced',
+            postUri: syncUri,
+            actorDid: 'did:plc:alice',
+            publicStatus: 'in-progress' as const,
+            publicCid: 'bafy-synced',
+            occurredAt: '2026-07-11T02:01:00.000Z',
+            auditRetentionUntil: '2027-07-11T02:01:00.000Z',
+        };
+
+        await expect(lifecycle.recordPublicStatusSync(command)).resolves.toEqual({
+            applied: true,
+        });
+        await expect(
+            new PostgresLifecycleRepository(pool).recordPublicStatusSync(command),
+        ).resolves.toEqual({ applied: false });
+        await expect(lifecycle.get(syncUri)).resolves.toMatchObject({
+            publicStatus: 'in-progress',
+            publicCid: 'bafy-synced',
+            publicSyncedAt: '2026-07-11T02:01:00.000Z',
+        });
     });
 
     it('rolls back a conflicting transition without changing workflow state', async () => {

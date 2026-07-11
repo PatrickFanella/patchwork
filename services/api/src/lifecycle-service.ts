@@ -76,6 +76,9 @@ export interface LifecycleQuerySuccessResponse {
     updatedAt: string;
     assignment?: AssignmentRecord;
     handoff?: HandoffMetadata;
+    publicStatus?: 'open' | 'in-progress' | 'resolved' | 'closed';
+    publicCid?: string;
+    publicSyncedAt?: string;
 }
 
 export interface AssignmentResult {
@@ -409,6 +412,13 @@ export class LifecycleService {
                     ? { assignment: { ...record.assignment } }
                     : {}),
                 ...(record.handoff ? { handoff: { ...record.handoff } } : {}),
+                ...(record.publicStatus
+                    ? { publicStatus: record.publicStatus }
+                    : {}),
+                ...(record.publicCid ? { publicCid: record.publicCid } : {}),
+                ...(record.publicSyncedAt
+                    ? { publicSyncedAt: record.publicSyncedAt }
+                    : {}),
             },
         };
     }

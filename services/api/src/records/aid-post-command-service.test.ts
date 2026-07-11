@@ -121,4 +121,46 @@ describe('AidPostCommandService', () => {
         ).rejects.toThrow('stale CID');
         expect(reconciler.reconcileDeletion).not.toHaveBeenCalled();
     });
+
+    it('reconciles public status from durable workflow state', async () => {
+        const at = client();
+        const lifecycle = {
+            get: vi.fn().mockResolvedValue({ currentStatus: 'in_progress' }),
+            recordPublicStatusSync: vi.fn().mockResolvedValue({ applied: true }),
+        };
+        const service = new AidPostCommandService(
+            async () => at,
+            undefined,
+            lifecycle,
+        );
+
+        const result = await service.reconcileStatus('browser-session', {
+            uri: 'at://did:plc:alice/app.patchwork.aid.post/3abc',
+            expectedCid: 'bafy-current',
+            updatedAt: '2026-07-11T02:00:00.000Z',
+            status: 'closed',
+        });
+
+        expect(lifecycle.get).toHaveBeenCalledWith(
+            'at://did:plc:alice/app.patchwork.aid.post/3abc',
+        );
+        expect(at.update).toHaveBeenCalledWith(
+            'at://did:plc:alice/app.patchwork.aid.post/3abc',
+            'bafy-current',
+            {
+                ...record,
+                status: 'in-progress',
+                updatedAt: '2026-07-11T02:00:00.000Z',
+            },
+        );
+        expect(result.record.status).toBe('in-progress');
+        expect(lifecycle.recordPublicStatusSync).toHaveBeenCalledWith(
+            expect.objectContaining({
+                postUri: 'at://did:plc:alice/app.patchwork.aid.post/3abc',
+                publicStatus: 'in-progress',
+                publicCid: 'bafy-updated',
+                actorDid: 'did:plc:alice',
+            }),
+        );
+    });
 });

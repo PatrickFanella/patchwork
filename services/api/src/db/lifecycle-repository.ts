@@ -41,7 +41,12 @@ export interface RequestWorkflow {
     timeline: RequestTimeline;
     assignment?: AssignmentRecord;
     handoff?: HandoffMetadata;
+    publicStatus?: PublicAidPostStatus;
+    publicCid?: string;
+    publicSyncedAt?: string;
 }
+
+export type PublicAidPostStatus = 'open' | 'in-progress' | 'resolved' | 'closed';
 
 export interface LifecycleAssignmentCommand {
     commandId: string;
@@ -121,6 +126,20 @@ export interface LifecycleDeletionOutcome {
     removed: boolean;
 }
 
+export interface PublicStatusSyncCommand {
+    commandId: string;
+    postUri: string;
+    actorDid: string;
+    publicStatus: PublicAidPostStatus;
+    publicCid: string;
+    occurredAt: string;
+    auditRetentionUntil: string;
+}
+
+export interface PublicStatusSyncOutcome {
+    applied: boolean;
+}
+
 export interface LifecycleRepository {
     register(input: RegisterWorkflowInput): Promise<boolean>;
     get(postUri: string): Promise<RequestWorkflow | undefined>;
@@ -140,6 +159,9 @@ export interface LifecycleRepository {
     reconcileDeletion(
         command: LifecycleDeletionCommand,
     ): Promise<LifecycleDeletionOutcome>;
+    recordPublicStatusSync(
+        command: PublicStatusSyncCommand,
+    ): Promise<PublicStatusSyncOutcome>;
     deleteSubject(postUri: string): Promise<boolean>;
 }
 
@@ -195,9 +217,12 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
             updated_at: Date | string;
             assignment: AssignmentRecord | null;
             handoff: HandoffMetadata | null;
+            public_status: PublicAidPostStatus | null;
+            public_cid: string | null;
+            public_synced_at: Date | string | null;
         }>(
             `SELECT post_uri, requester_did, current_status, created_at, updated_at,
-                    assignment, handoff
+                    assignment, handoff, public_status, public_cid, public_synced_at
              FROM request_workflows WHERE post_uri = $1`,
             [postUri],
         );
@@ -235,6 +260,13 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
             })),
             ...(row.assignment === null ? {} : { assignment: row.assignment }),
             ...(row.handoff === null ? {} : { handoff: row.handoff }),
+            ...(row.public_status === null
+                ? {}
+                : { publicStatus: row.public_status }),
+            ...(row.public_cid === null ? {} : { publicCid: row.public_cid }),
+            ...(row.public_synced_at === null
+                ? {}
+                : { publicSyncedAt: new Date(row.public_synced_at).toISOString() }),
         };
     }
 
@@ -866,6 +898,52 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
                 ],
             );
             return { applied: true, removed };
+        });
+    }
+
+    async recordPublicStatusSync(
+        command: PublicStatusSyncCommand,
+    ): Promise<PublicStatusSyncOutcome> {
+        return withTransaction(this.pool, async client => {
+            const duplicate = await client.query(
+                `SELECT audit_event_id FROM operational_audit_events
+                 WHERE command_id = $1 AND action = 'request.public_status_synced'`,
+                [command.commandId],
+            );
+            if (duplicate.rows[0]) return { applied: false };
+
+            const updated = await client.query(
+                `UPDATE request_workflows
+                 SET public_status = $2, public_cid = $3, public_synced_at = $4
+                 WHERE post_uri = $1`,
+                [
+                    command.postUri,
+                    command.publicStatus,
+                    command.publicCid,
+                    command.occurredAt,
+                ],
+            );
+            if (updated.rowCount !== 1) {
+                throw new Error('REQUEST_WORKFLOW_NOT_FOUND');
+            }
+            await client.query(
+                `INSERT INTO operational_audit_events (
+                    command_id, actor_did, action, subject_uri, payload,
+                    retention_until, occurred_at
+                 ) VALUES ($1, $2, 'request.public_status_synced', $3, $4::jsonb, $5, $6)`,
+                [
+                    command.commandId,
+                    command.actorDid,
+                    command.postUri,
+                    JSON.stringify({
+                        publicStatus: command.publicStatus,
+                        publicCid: command.publicCid,
+                    }),
+                    command.auditRetentionUntil,
+                    command.occurredAt,
+                ],
+            );
+            return { applied: true };
         });
     }
 }
