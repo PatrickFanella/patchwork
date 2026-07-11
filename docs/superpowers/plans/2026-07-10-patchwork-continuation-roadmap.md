@@ -220,12 +220,13 @@ Progress: authenticated PostgreSQL-backed block and report services are wired at
 
 Progress: migration `002_durable_moderation.sql` adds leases, attempts,
 next-attempt scheduling, stable failure codes, and terminal-failure state.
-`PostgresModerationQueueStore` now enqueues durable work and uses
-`FOR UPDATE SKIP LOCKED` to give concurrent workers distinct claims. Lease
-completion, retry transitions, durable audit operations, and production runtime
-wiring remain.
+`PostgresModerationQueueStore` now enqueues durable work, uses
+`FOR UPDATE SKIP LOCKED` to give concurrent workers distinct claims, enforces
+lease ownership on acknowledgement/failure, schedules retries, records terminal
+failures, and recovers work after lease expiry. Durable audit operations and
+production runtime wiring remain.
 
-- [ ] Implement claim-with-lease queue processing using `FOR UPDATE SKIP LOCKED`.
+- [x] Implement claim-with-lease queue processing using `FOR UPDATE SKIP LOCKED`.
 - [ ] Persist attempts, next-attempt time, terminal failure, policy decision, and audit history.
 - [ ] Make policy application idempotent by command ID.
 - [ ] Fail production startup if PostgreSQL-backed stores cannot initialize.

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { ModerationQueueItem } from '@patchwork/shared';
 import { PostgresModerationQueueStore } from './postgres-queue-store.js';
 
@@ -40,6 +40,9 @@ describeWithPostgres('PostgresModerationQueueStore', () => {
                 'utf8',
             ),
         );
+    });
+
+    beforeEach(async () => {
         await pool.query(
             'TRUNCATE moderation_audit_records, moderation_queue_items RESTART IDENTITY CASCADE',
         );
@@ -70,5 +73,107 @@ describeWithPostgres('PostgresModerationQueueStore', () => {
         expect(second).not.toBeNull();
         expect(first?.subjectUri).not.toBe(second?.subjectUri);
         expect(new Set([first?.subjectUri, second?.subjectUri]).size).toBe(2);
+    });
+
+    it('requeues failures after backoff and excludes terminal failures', async () => {
+        const queued = item('retry');
+        await store.enqueue(queued);
+        await store.claim({
+            workerId: 'worker-a',
+            now: '2026-07-11T23:01:00.000Z',
+            leaseMs: 30_000,
+        });
+
+        await store.fail({
+            subjectUri: queued.subjectUri,
+            workerId: 'worker-a',
+            now: '2026-07-11T23:01:05.000Z',
+            failureCode: 'POLICY_PROVIDER_UNAVAILABLE',
+            nextAttemptAt: '2026-07-11T23:02:00.000Z',
+            terminal: false,
+        });
+        await expect(
+            store.claim({
+                workerId: 'worker-b',
+                now: '2026-07-11T23:01:59.000Z',
+                leaseMs: 30_000,
+            }),
+        ).resolves.toBeNull();
+        const retried = await store.claim({
+            workerId: 'worker-b',
+            now: '2026-07-11T23:02:00.000Z',
+            leaseMs: 30_000,
+        });
+        expect(retried?.subjectUri).toBe(queued.subjectUri);
+
+        await store.fail({
+            subjectUri: queued.subjectUri,
+            workerId: 'worker-b',
+            now: '2026-07-11T23:02:05.000Z',
+            failureCode: 'MAX_ATTEMPTS_EXCEEDED',
+            terminal: true,
+        });
+        await expect(
+            store.claim({
+                workerId: 'worker-c',
+                now: '2026-07-12T00:00:00.000Z',
+                leaseMs: 30_000,
+            }),
+        ).resolves.toBeNull();
+    });
+
+    it('acknowledges work only for the lease owner and prevents reprocessing', async () => {
+        const queued = item('ack');
+        await store.enqueue(queued);
+        await store.claim({
+            workerId: 'worker-a',
+            now: '2026-07-11T23:03:00.000Z',
+            leaseMs: 30_000,
+        });
+
+        await expect(
+            store.ack({
+                subjectUri: queued.subjectUri,
+                workerId: 'worker-b',
+                now: '2026-07-11T23:03:05.000Z',
+            }),
+        ).rejects.toThrow('MODERATION_LEASE_NOT_OWNED');
+        await store.ack({
+            subjectUri: queued.subjectUri,
+            workerId: 'worker-a',
+            now: '2026-07-11T23:03:05.000Z',
+        });
+        await expect(
+            store.claim({
+                workerId: 'worker-c',
+                now: '2026-07-12T00:00:00.000Z',
+                leaseMs: 30_000,
+            }),
+        ).resolves.toBeNull();
+    });
+
+    it('recovers work after a crashed worker lease expires', async () => {
+        const queued = item('expired-lease');
+        await store.enqueue(queued);
+        await store.claim({
+            workerId: 'crashed-worker',
+            now: '2026-07-11T23:04:00.000Z',
+            leaseMs: 30_000,
+        });
+
+        await expect(
+            store.claim({
+                workerId: 'recovery-worker',
+                now: '2026-07-11T23:04:29.999Z',
+                leaseMs: 30_000,
+            }),
+        ).resolves.toBeNull();
+        await expect(
+            store.claim({
+                workerId: 'recovery-worker',
+                now: '2026-07-11T23:04:30.000Z',
+                leaseMs: 30_000,
+            }),
+        ).resolves.toMatchObject({ subjectUri: queued.subjectUri });
     });
 });

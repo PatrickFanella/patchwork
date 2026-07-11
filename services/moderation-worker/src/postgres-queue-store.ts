@@ -7,6 +7,21 @@ export interface ClaimModerationWorkCommand {
     leaseMs: number;
 }
 
+export interface FailModerationWorkCommand {
+    subjectUri: string;
+    workerId: string;
+    now: string;
+    failureCode: string;
+    nextAttemptAt?: string;
+    terminal: boolean;
+}
+
+export interface AckModerationWorkCommand {
+    subjectUri: string;
+    workerId: string;
+    now: string;
+}
+
 interface ModerationQueueRow {
     queue_id: string;
     subject_uri: string;
@@ -110,5 +125,48 @@ export class PostgresModerationQueueStore {
         );
         const row = result.rows[0];
         return row ? toItem(row) : null;
+    }
+
+    async fail(command: FailModerationWorkCommand): Promise<void> {
+        const result = await this.pool.query(
+            `UPDATE moderation_queue_items
+             SET lease_owner = NULL,
+                 lease_expires_at = NULL,
+                 next_attempt_at = $4,
+                 last_failure_code = $5,
+                 terminal_failure = $6,
+                 updated_at = $3
+             WHERE subject_uri = $1
+               AND lease_owner = $2`,
+            [
+                command.subjectUri,
+                command.workerId,
+                command.now,
+                command.terminal ? null : command.nextAttemptAt ?? null,
+                command.failureCode,
+                command.terminal,
+            ],
+        );
+        if (result.rowCount !== 1) {
+            throw new Error('MODERATION_LEASE_NOT_OWNED');
+        }
+    }
+
+    async ack(command: AckModerationWorkCommand): Promise<void> {
+        const result = await this.pool.query(
+            `UPDATE moderation_queue_items
+             SET queue_status = 'resolved',
+                 lease_owner = NULL,
+                 lease_expires_at = NULL,
+                 next_attempt_at = NULL,
+                 last_failure_code = NULL,
+                 updated_at = $3
+             WHERE subject_uri = $1
+               AND lease_owner = $2`,
+            [command.subjectUri, command.workerId, command.now],
+        );
+        if (result.rowCount !== 1) {
+            throw new Error('MODERATION_LEASE_NOT_OWNED');
+        }
     }
 }

@@ -44,5 +44,7 @@ the replay skipped all ten, and 20 PostgreSQL/HTTP integration tests passed.
 On 2026-07-11, an isolated PostgreSQL integration test demonstrated two
 concurrent moderation workers claiming distinct queued subjects through
 `FOR UPDATE SKIP LOCKED`. This proves the claim primitive only; the production
-worker remains fixture-backed until lease completion, retry, audit, and runtime
-wiring are implemented.
+worker remains fixture-backed. Follow-up PostgreSQL tests prove ownership-checked
+acknowledgement/failure, retry backoff, terminal exclusion, and recovery at the
+lease-expiry boundary. Durable audit/policy transactions and runtime wiring
+remain.
