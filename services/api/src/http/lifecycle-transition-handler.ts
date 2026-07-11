@@ -1,30 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AtClientError } from '@patchwork/at-client';
-import type { PlatformRole } from '@patchwork/shared';
-import { createAuthorizationContext } from '../authorization-guard.js';
 import type { LifecycleService } from '../lifecycle-service.js';
 import { PublicHttpError, writeJsonResponse, writePublicError } from './error-response.js';
 import { readJsonBody } from './json-body.js';
-
-export interface LifecycleSessionPrincipal {
-    did: string;
-    role: PlatformRole;
-}
+import type { AuthenticatedRequest } from './authenticated-request.js';
 
 export interface LifecycleTransitionHandlerDependencies {
     service: LifecycleService;
-    resolveSession(token: string): Promise<LifecycleSessionPrincipal>;
+    authenticate(request: IncomingMessage): Promise<AuthenticatedRequest>;
 }
-
-const readSessionCookie = (request: IncomingMessage): string | undefined => {
-    for (const cookie of request.headers.cookie?.split(';') ?? []) {
-        const [name, ...valueParts] = cookie.trim().split('=');
-        if (name === 'patchwork_session') {
-            return decodeURIComponent(valueParts.join('='));
-        }
-    }
-    return undefined;
-};
 
 const writeJson = (
     response: ServerResponse,
@@ -51,17 +35,10 @@ export const createLifecycleTransitionHandler = (
 
         void (async () => {
             try {
-                const sessionToken = readSessionCookie(request);
-                if (!sessionToken) {
-                    throw new AtClientError(
-                        'SESSION_EXPIRED',
-                        'The Patchwork browser session is missing.',
-                    );
-                }
-                const principal = await dependencies.resolveSession(sessionToken);
+                const authenticated = await dependencies.authenticate(request);
                 const result = await dependencies.service.transitionFromBody(
                     await readJsonBody(request),
-                    createAuthorizationContext(principal.did, principal.role),
+                    authenticated.principal.authorization,
                 );
                 writeJson(response, result.statusCode, result.body);
             } catch (error) {

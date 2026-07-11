@@ -77,6 +77,10 @@ authenticated-principal, body-parser, CSRF, perimeter, and shutdown coverage.
 The same server suite now covers malformed JSON, unsupported media type, and
 one-mebibyte rejection; `error-response.test.ts` proves unknown exception text
 is replaced rather than serialized.
+`authenticated-request.test.ts` covers bearer and cookie parsing, missing and
+conflicting credentials, single session/role resolution, and deep immutability.
+The lifecycle PostgreSQL HTTP suite covers missing and expired sessions plus
+authorization derived from the durable role instead of hostile body fields.
 
 ### Browser E2E
 

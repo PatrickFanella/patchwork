@@ -39,11 +39,11 @@ export function createAuthorizationContext(
     actorDid: string,
     role: PlatformRole,
 ): AuthorizationContext {
-    return {
+    return Object.freeze({
         actorDid,
         role,
-        capabilities: [...ROLE_CAPABILITIES[role]],
-    };
+        capabilities: Object.freeze([...ROLE_CAPABILITIES[role]]),
+    });
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,8 @@ import { PostgresLifecycleRepository } from '../db/lifecycle-repository.js';
 import { PostgresRoleRepository } from '../db/role-repository.js';
 import { createLifecycleService } from '../lifecycle-service.js';
 import { createLifecycleTransitionHandler } from './lifecycle-transition-handler.js';
+import { authenticateRequest } from './authenticated-request.js';
+import { AtClientError } from '@patchwork/at-client';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = databaseUrl ? describe : describe.skip;
@@ -15,10 +17,19 @@ const startServer = async (pool: Pool): Promise<{ server: Server; baseUrl: strin
     const roles = new PostgresRoleRepository(pool);
     const handler = createLifecycleTransitionHandler({
         service: createLifecycleService(new PostgresLifecycleRepository(pool)),
-        resolveSession: async token => {
-            if (token !== 'alice-session') throw new Error('invalid test session');
-            return { did: 'did:plc:alice', role: await roles.resolve('did:plc:alice') };
-        },
+        authenticate: request =>
+            authenticateRequest(request, {
+                resolveSession: async token => {
+                    if (token !== 'alice-session') {
+                        throw new AtClientError(
+                            'SESSION_EXPIRED',
+                            'The Patchwork browser session is missing or expired.',
+                        );
+                    }
+                    return { did: 'did:plc:alice' };
+                },
+                resolveRole: did => roles.resolve(did),
+            }),
     });
     const server = createServer((request, response) => {
         const url = new URL(request.url ?? '/', 'http://localhost');
@@ -166,6 +177,30 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
             }),
         });
         expect(response.status).toBe(401);
+        await expect(response.json()).resolves.toMatchObject({
+            error: { code: 'AUTHENTICATION_REQUIRED' },
+        });
+        await stopServer(running.server);
+    });
+
+    it('rejects an expired HTTP session', async () => {
+        const running = await startServer(pool);
+        const response = await fetch(`${running.baseUrl}/aid/post/transition`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                cookie: 'patchwork_session=expired-session',
+            },
+            body: JSON.stringify({
+                commandId: 'http-transition-expired',
+                postUri: 'at://did:plc:alice/app.patchwork.aid.post/http-expired',
+                targetStatus: 'resolved',
+            }),
+        });
+        expect(response.status).toBe(401);
+        await expect(response.json()).resolves.toMatchObject({
+            error: { code: 'SESSION_EXPIRED' },
+        });
         await stopServer(running.server);
     });
 

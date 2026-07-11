@@ -35,7 +35,6 @@ import { createFeedbackService } from './feedback-service.js';
 import { createReputationService } from './reputation-service.js';
 import { getCorsHeaders } from './cors.js';
 import { selectLimiter, extractClientIp } from './rate-limiter.js';
-import { createAuthorizationContext } from './authorization-guard.js';
 import { PostgresBlockRepository } from './db/block-repository.js';
 import { PostgresReportRepository } from './db/report-repository.js';
 import { PostgresLifecycleRepository } from './db/lifecycle-repository.js';
@@ -45,6 +44,7 @@ import { ReportService } from './report-service.js';
 import { createLifecycleTransitionHandler } from './http/lifecycle-transition-handler.js';
 import { createMethodRouter } from './http/router.js';
 import { readJsonBody } from './http/json-body.js';
+import { authenticateRequest } from './http/authenticated-request.js';
 import {
     ensureRequestId,
     PublicHttpError,
@@ -100,13 +100,19 @@ const lifecycleRepository =
 const lifecycleService = createLifecycleService(lifecycleRepository);
 const roleRepository =
     postgresPool ? new PostgresRoleRepository(postgresPool) : undefined;
-const resolveAuthorizationContext = async (did: string) =>
-    createAuthorizationContext(did, await roleRepository?.resolve(did) ?? 'user');
-
 const atAuthRuntime =
     config.NODE_ENV === 'test' ?
         undefined
     :   createAtAuthRuntime(config, postgresPool!);
+
+const authenticateApiRequest =
+    atAuthRuntime && roleRepository ?
+        (request: IncomingMessage) =>
+            authenticateRequest(request, {
+                resolveSession: token => atAuthRuntime.service.current(token),
+                resolveRole: did => roleRepository.resolve(did),
+            })
+    :   undefined;
 
 const aidPostCommandService =
     atAuthRuntime ?
@@ -118,17 +124,10 @@ const aidPostCommandService =
     :   undefined;
 
 const lifecycleTransitionHandler =
-    atAuthRuntime && postgresPool ?
+    authenticateApiRequest && postgresPool ?
         createLifecycleTransitionHandler({
             service: lifecycleService,
-            resolveSession: async token => {
-                const session = await atAuthRuntime.service.current(token);
-                const authorization = await resolveAuthorizationContext(session.did);
-                return {
-                    ...session,
-                    role: authorization.role,
-                };
-            },
+            authenticate: authenticateApiRequest,
         })
     :   undefined;
 
@@ -255,18 +254,6 @@ const writeRouteError = (response: ServerResponse, error: unknown): void => {
     writePublicError(response, error);
 };
 
-const readSessionCookie = (request: IncomingMessage): string | undefined => {
-    const cookieHeader = request.headers.cookie;
-    if (!cookieHeader) return undefined;
-    for (const cookie of cookieHeader.split(';')) {
-        const [name, ...valueParts] = cookie.trim().split('=');
-        if (name === 'patchwork_session') {
-            return decodeURIComponent(valueParts.join('='));
-        }
-    }
-    return undefined;
-};
-
 const writeAtAuthError = (response: ServerResponse, error: unknown): void => {
     if (error instanceof PublicHttpError) {
         writeRouteError(response, error);
@@ -361,20 +348,15 @@ const handleRealAuthRoute = (
                 return;
             }
 
-            const sessionToken = readSessionCookie(request);
-            if (!sessionToken) {
-                throw new AtClientError(
-                    'SESSION_EXPIRED',
-                    'The Patchwork browser session is missing.',
-                );
-            }
+            const authenticated = await authenticateApiRequest!(request);
 
             if (
                 request.method === 'GET' &&
                 requestUrl.pathname === '/auth/session'
             ) {
-                const current = await atAuthRuntime.service.current(sessionToken);
-                writeJson(response, 200, { session: current });
+                writeJson(response, 200, {
+                    session: { did: authenticated.principal.did },
+                });
                 return;
             }
 
@@ -382,7 +364,9 @@ const handleRealAuthRoute = (
                 request.method === 'POST' &&
                 requestUrl.pathname === '/auth/refresh'
             ) {
-                const refreshed = await atAuthRuntime.service.refresh(sessionToken);
+                const refreshed = await atAuthRuntime.service.refresh(
+                    authenticated.sessionToken,
+                );
                 writeJson(response, 200, { session: refreshed, refreshed: true });
                 return;
             }
@@ -391,7 +375,7 @@ const handleRealAuthRoute = (
                 request.method === 'DELETE' &&
                 requestUrl.pathname === '/auth/session'
             ) {
-                await atAuthRuntime.service.logout(sessionToken);
+                await atAuthRuntime.service.logout(authenticated.sessionToken);
                 writeJson(
                     response,
                     200,
@@ -466,20 +450,18 @@ const handleDurableSafetyRoute = (
                 });
                 return;
             }
-            const sessionToken = readSessionCookie(request);
-            if (!sessionToken) {
-                throw new AtClientError(
-                    'SESSION_EXPIRED',
-                    'The Patchwork browser session is missing.',
-                );
-            }
-            const session = await atAuthRuntime.service.current(sessionToken);
-            const auth = await resolveAuthorizationContext(session.did);
+            const authenticated = await authenticateApiRequest!(request);
             const body = await readJsonBody(request);
             const result =
                 isBlock ?
-                    await blockService.block(body, auth)
-                :   await reportService.report(body, auth);
+                    await blockService.block(
+                        body,
+                        authenticated.principal.authorization,
+                    )
+                :   await reportService.report(
+                        body,
+                        authenticated.principal.authorization,
+                    );
             writeJson(response, result.statusCode, result.body);
         } catch (error) {
             writeAtAuthError(response, error);
@@ -498,13 +480,8 @@ const handleAidPostCommandRoute = (
 
     void (async () => {
         try {
-            const sessionToken = readSessionCookie(request);
-            if (!sessionToken) {
-                throw new AtClientError(
-                    'SESSION_EXPIRED',
-                    'The Patchwork browser session is missing.',
-                );
-            }
+            const authenticated = await authenticateApiRequest!(request);
+            const sessionToken = authenticated.sessionToken;
 
             if (
                 request.method === 'GET' &&
@@ -1066,23 +1043,16 @@ export const createApiServer = () => {
             void readJsonBody(request)
                 .then(async body => {
                     if (!postgresPool) return lifecycleService.assignRequest(body);
-                    if (!atAuthRuntime) {
+                    if (!authenticateApiRequest) {
                         throw new AtClientError(
                             'SESSION_EXPIRED',
                             'AT authentication is unavailable.',
                         );
                     }
-                    const sessionToken = readSessionCookie(request);
-                    if (!sessionToken) {
-                        throw new AtClientError(
-                            'SESSION_EXPIRED',
-                            'The Patchwork browser session is missing.',
-                        );
-                    }
-                    const session = await atAuthRuntime.service.current(sessionToken);
+                    const authenticated = await authenticateApiRequest(request);
                     return lifecycleService.assignRequest(
                         body,
-                        await resolveAuthorizationContext(session.did),
+                        authenticated.principal.authorization,
                     );
                 })
                 .then(result => {
@@ -1105,23 +1075,16 @@ export const createApiServer = () => {
             void readJsonBody(request)
                 .then(async body => {
                     if (!postgresPool) return lifecycleService.acceptAssignment(body);
-                    if (!atAuthRuntime) {
+                    if (!authenticateApiRequest) {
                         throw new AtClientError(
                             'SESSION_EXPIRED',
                             'AT authentication is unavailable.',
                         );
                     }
-                    const sessionToken = readSessionCookie(request);
-                    if (!sessionToken) {
-                        throw new AtClientError(
-                            'SESSION_EXPIRED',
-                            'The Patchwork browser session is missing.',
-                        );
-                    }
-                    const session = await atAuthRuntime.service.current(sessionToken);
+                    const authenticated = await authenticateApiRequest(request);
                     return lifecycleService.acceptAssignment(
                         body,
-                        await resolveAuthorizationContext(session.did),
+                        authenticated.principal.authorization,
                     );
                 })
                 .then(result => {
@@ -1144,23 +1107,16 @@ export const createApiServer = () => {
             void readJsonBody(request)
                 .then(async body => {
                     if (!postgresPool) return lifecycleService.declineAssignment(body);
-                    if (!atAuthRuntime) {
+                    if (!authenticateApiRequest) {
                         throw new AtClientError(
                             'SESSION_EXPIRED',
                             'AT authentication is unavailable.',
                         );
                     }
-                    const sessionToken = readSessionCookie(request);
-                    if (!sessionToken) {
-                        throw new AtClientError(
-                            'SESSION_EXPIRED',
-                            'The Patchwork browser session is missing.',
-                        );
-                    }
-                    const session = await atAuthRuntime.service.current(sessionToken);
+                    const authenticated = await authenticateApiRequest(request);
                     return lifecycleService.declineAssignment(
                         body,
-                        await resolveAuthorizationContext(session.did),
+                        authenticated.principal.authorization,
                     );
                 })
                 .then(result => {
@@ -1183,23 +1139,16 @@ export const createApiServer = () => {
             void readJsonBody(request)
                 .then(async body => {
                     if (!postgresPool) return lifecycleService.completeHandoff(body);
-                    if (!atAuthRuntime) {
+                    if (!authenticateApiRequest) {
                         throw new AtClientError(
                             'SESSION_EXPIRED',
                             'AT authentication is unavailable.',
                         );
                     }
-                    const sessionToken = readSessionCookie(request);
-                    if (!sessionToken) {
-                        throw new AtClientError(
-                            'SESSION_EXPIRED',
-                            'The Patchwork browser session is missing.',
-                        );
-                    }
-                    const session = await atAuthRuntime.service.current(sessionToken);
+                    const authenticated = await authenticateApiRequest(request);
                     return lifecycleService.completeHandoff(
                         body,
-                        await resolveAuthorizationContext(session.did),
+                        authenticated.principal.authorization,
                     );
                 })
                 .then(result => {

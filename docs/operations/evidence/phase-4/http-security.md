@@ -32,3 +32,17 @@ that internal exception text is absent.
 
 This does not yet satisfy the command-body checklist because unsafe legacy
 query-string mutation and credential routes still exist and must be removed.
+
+## Central authenticated-principal checkpoint
+
+The durable alpha command paths now share `authenticateRequest()`. It accepts a
+single opaque bearer or browser-cookie session, rejects missing, malformed, or
+conflicting credentials, resolves the session and PostgreSQL role once at the
+edge, and provides handlers a deeply frozen principal and capability context.
+AT-record, block/report, lifecycle transition, assignment response, and handoff
+handlers no longer parse identity independently or construct authorization from
+body fields. PostgreSQL HTTP coverage includes missing and expired sessions,
+durable role elevation, and hostile body identity fields.
+
+The roadmap checkbox remains open until fixture compatibility routes are
+removed or converted; those routes still bypass this boundary.
