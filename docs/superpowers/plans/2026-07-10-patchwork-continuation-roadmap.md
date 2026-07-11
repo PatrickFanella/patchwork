@@ -200,12 +200,12 @@ flowchart LR
 - Create: `services/api/src/report-service.ts`
 - Test: `services/api/src/durable-core-services.test.ts`
 
-Progress: authenticated PostgreSQL-backed block and report services are wired at `POST /blocks` and `POST /reports`. Lifecycle transitions and timelines are durable. Migrations `0005_lifecycle_assignments.sql`, `0006_assignment_responses.sql`, and `0007_lifecycle_handoffs.sql` add atomic, idempotent assignment, response, handoff, and timeout processing plus transition and audit writes. These routes restore the session and ignore request-supplied actor identity; timeout checks use deterministic command IDs. Confirmed PDS deletion now reconciles private workflow state after compare-and-swap succeeds, cascades fulfillment data, and retains one idempotent audit marker. A real role source remains; until role resolution exists, production sessions retain the safe generic `user` role and cannot perform coordinator or volunteer assignment actions.
+Progress: authenticated PostgreSQL-backed block and report services are wired at `POST /blocks` and `POST /reports`. Lifecycle transitions and timelines are durable. Migrations `0005_lifecycle_assignments.sql`, `0006_assignment_responses.sql`, and `0007_lifecycle_handoffs.sql` add atomic, idempotent assignment, response, handoff, and timeout processing plus transition and audit writes. These routes restore the session and ignore request-supplied actor identity; timeout checks use deterministic command IDs. Confirmed PDS deletion reconciles private workflow state after compare-and-swap succeeds, cascades fulfillment data, and retains one idempotent audit marker. Migration `0008_platform_roles.sql` provides operator-provisioned DID roles with a safe `user` default; durable HTTP authorization resolves the role on every request.
 
-- [ ] Inject repository interfaces into lifecycle, block, report, and audit services.
+- [x] Inject repository interfaces into lifecycle, block, report, and audit services.
 - [ ] Keep in-memory repositories in test fixtures only.
-- [ ] Wrap state transition plus audit emission in one database transaction.
-- [ ] Derive the actor exclusively from the authenticated session.
+- [x] Wrap state transition plus audit emission in one database transaction.
+- [x] Derive the actor exclusively from the authenticated session.
 - [ ] Test process restart, concurrent transitions, idempotent retry, forbidden transition, and deleted-record reconciliation.
 - [ ] Commit as `feat(api): replace core in-memory state with Postgres`.
 

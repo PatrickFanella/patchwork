@@ -8,6 +8,7 @@ import {
 } from './audit-repository.js';
 import { PostgresBlockRepository } from './block-repository.js';
 import { PostgresReportRepository } from './report-repository.js';
+import { PostgresRoleRepository } from './role-repository.js';
 
 const createTransactionalPool = () => {
     const query = vi
@@ -66,6 +67,7 @@ describeWithPostgres('core operational PostgreSQL state', () => {
     const blocks = new PostgresBlockRepository(pool);
     const reports = new PostgresReportRepository(pool);
     const audit = new PostgresAuditRepository(pool);
+    const roles = new PostgresRoleRepository(pool);
     const postUri = 'at://did:plc:alice/app.patchwork.aid.post/durable';
 
     beforeAll(async () => {
@@ -99,7 +101,13 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             ),
         );
         await pool.query(
-            'TRUNCATE operational_audit_events, abuse_reports, user_blocks, request_handoff_events, request_assignment_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
+            await readFile(
+                new URL('./migrations/0008_platform_roles.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
+            'TRUNCATE platform_roles, operational_audit_events, abuse_reports, user_blocks, request_handoff_events, request_assignment_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
 
@@ -126,6 +134,19 @@ describeWithPostgres('core operational PostgreSQL state', () => {
         ).resolves.toBe(false);
         await expect(new PostgresLifecycleRepository(pool).get(postUri)).resolves
             .toMatchObject({ currentStatus: 'open' });
+    });
+
+    it('defaults unknown DIDs to user and resolves provisioned roles after restart', async () => {
+        await expect(roles.resolve('did:plc:unknown')).resolves.toBe('user');
+        await roles.set({
+            did: 'did:plc:volunteer',
+            role: 'volunteer',
+            updatedBy: 'did:plc:operator',
+            updatedAt: '2026-07-10T22:40:00.000Z',
+        });
+        await expect(
+            new PostgresRoleRepository(pool).resolve('did:plc:volunteer'),
+        ).resolves.toBe('volunteer');
     });
 
     it('rolls back a conflicting transition without changing workflow state', async () => {

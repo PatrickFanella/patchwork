@@ -39,6 +39,7 @@ import { createAuthorizationContext } from './authorization-guard.js';
 import { PostgresBlockRepository } from './db/block-repository.js';
 import { PostgresReportRepository } from './db/report-repository.js';
 import { PostgresLifecycleRepository } from './db/lifecycle-repository.js';
+import { PostgresRoleRepository } from './db/role-repository.js';
 import { BlockService } from './block-service.js';
 import { ReportService } from './report-service.js';
 import { createLifecycleTransitionHandler } from './http/lifecycle-transition-handler.js';
@@ -89,6 +90,10 @@ const reportService =
 const lifecycleRepository =
     postgresPool ? new PostgresLifecycleRepository(postgresPool) : undefined;
 const lifecycleService = createLifecycleService(lifecycleRepository);
+const roleRepository =
+    postgresPool ? new PostgresRoleRepository(postgresPool) : undefined;
+const resolveAuthorizationContext = async (did: string) =>
+    createAuthorizationContext(did, await roleRepository?.resolve(did) ?? 'user');
 
 const atAuthRuntime =
     config.NODE_ENV === 'test' ?
@@ -107,10 +112,14 @@ const lifecycleTransitionHandler =
     atAuthRuntime && postgresPool ?
         createLifecycleTransitionHandler({
             service: lifecycleService,
-            resolveSession: async token => ({
-                ...(await atAuthRuntime.service.current(token)),
-                role: 'user',
-            }),
+            resolveSession: async token => {
+                const session = await atAuthRuntime.service.current(token);
+                const authorization = await resolveAuthorizationContext(session.did);
+                return {
+                    ...session,
+                    role: authorization.role,
+                };
+            },
         })
     :   undefined;
 
@@ -474,7 +483,7 @@ const handleDurableSafetyRoute = (
                 );
             }
             const session = await atAuthRuntime.service.current(sessionToken);
-            const auth = createAuthorizationContext(session.did, 'user');
+            const auth = await resolveAuthorizationContext(session.did);
             const body = await readJsonBody(request);
             const result =
                 isBlock ?
@@ -1098,7 +1107,7 @@ export const createApiServer = () => {
                     const session = await atAuthRuntime.service.current(sessionToken);
                     return lifecycleService.assignRequest(
                         body,
-                        createAuthorizationContext(session.did, 'user'),
+                        await resolveAuthorizationContext(session.did),
                     );
                 })
                 .then(result => {
@@ -1145,7 +1154,7 @@ export const createApiServer = () => {
                     const session = await atAuthRuntime.service.current(sessionToken);
                     return lifecycleService.acceptAssignment(
                         body,
-                        createAuthorizationContext(session.did, 'user'),
+                        await resolveAuthorizationContext(session.did),
                     );
                 })
                 .then(result => {
@@ -1192,7 +1201,7 @@ export const createApiServer = () => {
                     const session = await atAuthRuntime.service.current(sessionToken);
                     return lifecycleService.declineAssignment(
                         body,
-                        createAuthorizationContext(session.did, 'user'),
+                        await resolveAuthorizationContext(session.did),
                     );
                 })
                 .then(result => {
@@ -1239,7 +1248,7 @@ export const createApiServer = () => {
                     const session = await atAuthRuntime.service.current(sessionToken);
                     return lifecycleService.completeHandoff(
                         body,
-                        createAuthorizationContext(session.did, 'user'),
+                        await resolveAuthorizationContext(session.did),
                     );
                 })
                 .then(result => {

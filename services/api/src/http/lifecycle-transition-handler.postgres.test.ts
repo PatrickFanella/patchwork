@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PostgresLifecycleRepository } from '../db/lifecycle-repository.js';
+import { PostgresRoleRepository } from '../db/role-repository.js';
 import { createLifecycleService } from '../lifecycle-service.js';
 import { createLifecycleTransitionHandler } from './lifecycle-transition-handler.js';
 
@@ -11,11 +12,12 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = databaseUrl ? describe : describe.skip;
 
 const startServer = async (pool: Pool): Promise<{ server: Server; baseUrl: string }> => {
+    const roles = new PostgresRoleRepository(pool);
     const handler = createLifecycleTransitionHandler({
         service: createLifecycleService(new PostgresLifecycleRepository(pool)),
         resolveSession: async token => {
             if (token !== 'alice-session') throw new Error('invalid test session');
-            return { did: 'did:plc:alice', role: 'user' };
+            return { did: 'did:plc:alice', role: await roles.resolve('did:plc:alice') };
         },
     });
     const server = createServer((request, response) => {
@@ -70,7 +72,13 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
             ),
         );
         await pool.query(
-            'TRUNCATE operational_audit_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
+            await readFile(
+                new URL('../db/migrations/0008_platform_roles.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
+            'TRUNCATE platform_roles, operational_audit_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
 
@@ -167,5 +175,38 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
         });
         expect(response.status).toBe(403);
         await stopServer(running.server);
+    });
+
+    it('authorizes moderation using the provisioned database role', async () => {
+        await new PostgresRoleRepository(pool).set({
+            did: 'did:plc:alice',
+            role: 'moderator',
+            updatedBy: 'did:plc:operator',
+            updatedAt: '2026-07-10T23:40:00.000Z',
+        });
+        const running = await startServer(pool);
+        const response = await fetch(`${running.baseUrl}/aid/post/transition`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                cookie: 'patchwork_session=alice-session',
+            },
+            body: JSON.stringify({
+                commandId: 'http-transition-moderator',
+                postUri: 'at://did:plc:alice/app.patchwork.aid.post/http-moderated',
+                targetStatus: 'archived',
+                actorDid: 'did:plc:mallory',
+                actorRole: 'requester',
+                now: '2026-07-10T23:41:00.000Z',
+            }),
+        });
+
+        expect(response.status).toBe(200);
+        await stopServer(running.server);
+        await expect(
+            new PostgresLifecycleRepository(pool).get(
+                'at://did:plc:alice/app.patchwork.aid.post/http-moderated',
+            ),
+        ).resolves.toMatchObject({ currentStatus: 'archived' });
     });
 });
