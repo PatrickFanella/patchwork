@@ -1,4 +1,9 @@
 import type { Pool, PoolClient } from 'pg';
+import type {
+    LifecycleRole,
+    RequestStatus,
+    RequestTimeline,
+} from '@patchwork/shared';
 
 export interface LifecycleTransitionCommand {
     commandId: string;
@@ -31,6 +36,7 @@ export interface RequestWorkflow {
     currentStatus: string;
     createdAt: string;
     updatedAt: string;
+    timeline: RequestTimeline;
 }
 
 export interface LifecycleRepository {
@@ -98,15 +104,38 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
             [postUri],
         );
         const row = result.rows[0];
-        return row
-            ? {
-                  postUri: row.post_uri,
-                  requesterDid: row.requester_did,
-                  currentStatus: row.current_status,
-                  createdAt: new Date(row.created_at).toISOString(),
-                  updatedAt: new Date(row.updated_at).toISOString(),
-              }
-            : undefined;
+        if (!row) return undefined;
+
+        const transitions = await this.pool.query<{
+            from_status: RequestStatus;
+            to_status: RequestStatus;
+            actor_did: string;
+            actor_role: LifecycleRole;
+            reason: string | null;
+            occurred_at: Date | string;
+        }>(
+            `SELECT from_status, to_status, actor_did, actor_role, reason, occurred_at
+             FROM request_transition_events
+             WHERE post_uri = $1
+             ORDER BY occurred_at ASC, transition_id ASC`,
+            [postUri],
+        );
+
+        return {
+            postUri: row.post_uri,
+            requesterDid: row.requester_did,
+            currentStatus: row.current_status,
+            createdAt: new Date(row.created_at).toISOString(),
+            updatedAt: new Date(row.updated_at).toISOString(),
+            timeline: transitions.rows.map(transition => ({
+                from: transition.from_status,
+                to: transition.to_status,
+                actorDid: transition.actor_did,
+                actorRole: transition.actor_role,
+                timestamp: new Date(transition.occurred_at).toISOString(),
+                ...(transition.reason === null ? {} : { reason: transition.reason }),
+            })),
+        };
     }
 
     async deleteSubject(postUri: string): Promise<boolean> {
@@ -168,14 +197,15 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
 
             const inserted = await client.query<TransitionRow>(
                 `INSERT INTO request_transition_events (
-                    command_id, post_uri, actor_did, from_status, to_status,
-                    reason, occurred_at
-                 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    command_id, post_uri, actor_did, actor_role,
+                    from_status, to_status, reason, occurred_at
+                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  RETURNING transition_id`,
                 [
                     command.commandId,
                     command.postUri,
                     command.actorDid,
+                    command.actorRole ?? 'requester',
                     command.fromStatus,
                     command.toStatus,
                     command.reason ?? null,

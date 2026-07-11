@@ -78,6 +78,7 @@ describe('durable core services', () => {
                     currentStatus: 'open',
                     createdAt: '2026-07-10T23:02:00.000Z',
                     updatedAt: '2026-07-10T23:02:00.000Z',
+                    timeline: [],
                 }),
             transition: vi
                 .fn()
@@ -108,5 +109,47 @@ describe('durable core services', () => {
                 toStatus: 'resolved',
             }),
         );
+    });
+
+    it('reconstructs lifecycle queries from the durable timeline', async () => {
+        const repository = {
+            register: vi.fn(),
+            transition: vi.fn(),
+            deleteSubject: vi.fn(),
+            get: vi.fn().mockResolvedValue({
+                postUri:
+                    'at://did:plc:alice/app.patchwork.aid.post/durable-query',
+                requesterDid: 'did:plc:alice',
+                currentStatus: 'resolved',
+                createdAt: '2026-07-10T23:02:00.000Z',
+                updatedAt: '2026-07-10T23:03:00.000Z',
+                timeline: [
+                    {
+                        from: 'open',
+                        to: 'resolved',
+                        actorDid: 'did:plc:alice',
+                        actorRole: 'requester',
+                        timestamp: '2026-07-10T23:03:00.000Z',
+                    },
+                ],
+            }),
+        };
+        const service = createLifecycleService(repository);
+
+        await expect(
+            service.queryFromParamsAsync(
+                new URLSearchParams({
+                    postUri:
+                        'at://did:plc:alice/app.patchwork.aid.post/durable-query',
+                    actorRole: 'requester',
+                }),
+            ),
+        ).resolves.toMatchObject({
+            statusCode: 200,
+            body: {
+                currentStatus: 'resolved',
+                timeline: [{ from: 'open', to: 'resolved' }],
+            },
+        });
     });
 });

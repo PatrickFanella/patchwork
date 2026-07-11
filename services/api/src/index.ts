@@ -760,7 +760,7 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
     '/aid/post/transition': requestUrl =>
         lifecycleService.transitionFromParams(requestUrl.searchParams),
     '/aid/post/lifecycle': requestUrl =>
-        lifecycleService.queryFromParams(requestUrl.searchParams),
+        lifecycleService.queryFromParamsAsync(requestUrl.searchParams),
     '/auth/session': requestUrl =>
         requireFixtureAuthService().validateSessionFromParams(
             requestUrl.searchParams,

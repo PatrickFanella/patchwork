@@ -344,6 +344,67 @@ export class LifecycleService {
         );
     }
 
+    async queryFromParamsAsync(
+        params: URLSearchParams,
+    ): Promise<LifecycleQueryResult> {
+        const postUri = params.get('postUri');
+        if (!postUri) {
+            return {
+                statusCode: 400,
+                body: {
+                    error: {
+                        code: 'INVALID_INPUT',
+                        message: 'postUri query parameter is required.',
+                    },
+                },
+            };
+        }
+        if (this.repository) {
+            return this.queryDurablePostLifecycle(
+                postUri,
+                params.get('actorRole') ?? undefined,
+            );
+        }
+        return this.queryPostLifecycle(
+            postUri,
+            params.get('actorRole') ?? undefined,
+        );
+    }
+
+    private async queryDurablePostLifecycle(
+        postUri: string,
+        actorRole?: string,
+    ): Promise<LifecycleQueryResult> {
+        const record = await this.repository?.get(postUri);
+        if (!record) {
+            return {
+                statusCode: 404,
+                body: {
+                    error: {
+                        code: 'NOT_FOUND',
+                        message: `No lifecycle record found for post: ${postUri}`,
+                    },
+                },
+            };
+        }
+        const role: LifecycleRole =
+            actorRole && isValidLifecycleRole(actorRole)
+                ? actorRole
+                : 'requester';
+        const currentStatus = record.currentStatus as RequestStatus;
+        return {
+            statusCode: 200,
+            body: {
+                postUri: record.postUri,
+                currentStatus,
+                statusLabel: STATUS_LABELS[currentStatus],
+                timeline: record.timeline,
+                validTransitions: getValidTargetsForRole(currentStatus, role),
+                updatedAt: record.updatedAt,
+            },
+        };
+    }
+
     /**
      * Assign a request to a volunteer. Transitions the post to 'assigned'
      * if it is currently 'triaged' or re-assigns from 'assigned'/'in_progress'.

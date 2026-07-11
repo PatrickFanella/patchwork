@@ -75,6 +75,12 @@ describeWithPostgres('core operational PostgreSQL state', () => {
         );
         await pool.query(migration);
         await pool.query(
+            await readFile(
+                new URL('./migrations/0004_lifecycle_timeline.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
             'TRUNCATE operational_audit_events, abuse_reports, user_blocks, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
@@ -109,6 +115,7 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             commandId: 'durable-transition',
             postUri,
             actorDid: 'did:plc:alice',
+            actorRole: 'requester',
             fromStatus: 'open',
             toStatus: 'triaged',
             occurredAt: '2026-07-10T22:41:00.000Z',
@@ -127,6 +134,20 @@ describeWithPostgres('core operational PostgreSQL state', () => {
             ['audit:durable-transition'],
         );
         expect(auditCount.rows[0]?.count).toBe('1');
+        await expect(
+            new PostgresLifecycleRepository(pool).get(postUri),
+        ).resolves.toMatchObject({
+            currentStatus: 'triaged',
+            timeline: [
+                {
+                    from: 'open',
+                    to: 'triaged',
+                    actorDid: 'did:plc:alice',
+                    actorRole: 'requester',
+                    timestamp: '2026-07-10T22:41:00.000Z',
+                },
+            ],
+        });
 
         await expect(
             lifecycle.transition({

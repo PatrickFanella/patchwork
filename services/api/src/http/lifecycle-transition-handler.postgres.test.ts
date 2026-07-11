@@ -46,6 +46,12 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
         );
         await pool.query(migration);
         await pool.query(
+            await readFile(
+                new URL('../db/migrations/0004_lifecycle_timeline.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
             'TRUNCATE operational_audit_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
