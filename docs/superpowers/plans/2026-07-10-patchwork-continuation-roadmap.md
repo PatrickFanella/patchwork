@@ -530,6 +530,11 @@ result is `NO-GO` with no exceptions because the mandatory browser, staging,
 rollback, restore, alert-delivery, retention, accessibility, capacity, and
 human-ownership evidence is incomplete.
 
+Local capacity evidence:
+`docs/operations/evidence/phase-8/local-capacity-probe.md`. The executable
+PostgreSQL read probe passes its bounded modeled targets, but does not satisfy
+the staging `CAPACITY` condition.
+
 ### Task 8.2: Re-evaluate expansion features
 
 **Files:**

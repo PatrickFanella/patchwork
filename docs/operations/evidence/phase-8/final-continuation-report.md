@@ -28,13 +28,13 @@ paths without fixture fallback.
 
 ## Verification baseline
 
-- database-enabled repository suite: 848 tests;
+- database-enabled repository suite: 852 tests;
 - PostgreSQL/HTTP integration: 24 tests;
 - direct service integration: 9 tests;
 - Chromium: 48 passed, 1 authorized-external test skipped;
 - migrations: API 12, indexer 3, moderation 3; clean application and replay;
-- database-enabled coverage: 64.50% statements, 51.20% branches, 58.46%
-  functions, 65.71% lines;
+- database-enabled coverage: 64.85% statements, 51.57% branches, 58.85%
+  functions, 66.02% lines;
 - build, lint, typecheck, artifact redaction, and high-severity audit pass;
 - eleven Prometheus alert rules validate with `promtool`.
 
@@ -56,7 +56,8 @@ paths without fixture fallback.
 4. Restore of a staging backup with measured staging RTO/RPO.
 5. Delivered and resolved alerts during indexer and database game days.
 6. Formal approval of backup-aware retention and deletion policy.
-7. Independent WCAG/assistive-technology review and deployed capacity test.
+7. Independent WCAG/assistive-technology review and sustained deployed
+   capacity test; the bounded local PostgreSQL read probe is green.
 8. Named product, engineering, infrastructure, privacy, trust-and-safety, and
    on-call owners.
 9. Approval of `project-closure.md` or a replacement go decision.
@@ -65,8 +66,8 @@ paths without fixture fallback.
 
 Local tests cannot prove OAuth metadata, PDS behavior, registry signing, host
 configuration, alert delivery, or human response. Single-region/single-replica
-capacity remains unmeasured, and fixture-only expansion code remains frozen but
-present outside the alpha surface.
+staging capacity remains unmeasured, and fixture-only expansion code remains
+frozen but present outside the alpha surface.
 
 Do not launch or recruit participants. Either supply the authorized staging,
 OAuth, and ownership inputs and execute the remaining gates, or approve and

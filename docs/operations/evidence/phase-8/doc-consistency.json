@@ -1,7 +1,7 @@
 {
   "reviewDate": "2026-07-11",
   "verdict": "conditional-pass-repository-fail-launch",
-  "summary": { "p0": 0, "p1": 8, "p2": 16, "p3": 4, "pending": 3, "total": 31 },
+  "summary": { "p0": 0, "p1": 9, "p2": 16, "p3": 4, "pending": 3, "total": 32 },
   "issues": [
     { "id": 1, "severity": "P1", "status": "fixed", "topic": "matrix moderation retention" },
     { "id": 2, "severity": "P1", "status": "fixed", "topic": "traceability moderation runtime" },
@@ -24,7 +24,7 @@
     { "id": 19, "severity": "P2", "status": "fixed", "topic": "root migration scope" },
     { "id": 20, "severity": "P2", "status": "open", "topic": "lifecycle UI classification" },
     { "id": 21, "severity": "P2", "status": "historical", "topic": "old quality review" },
-    { "id": 22, "severity": "P2", "status": "open", "topic": "capacity model versus evidence" },
+    { "id": 22, "severity": "P2", "status": "fixed", "topic": "capacity model versus evidence" },
     { "id": 23, "severity": "P2", "status": "open", "topic": "canary versus staging mechanism" },
     { "id": 24, "severity": "P3", "status": "accepted", "topic": "Node compatibility range" },
     { "id": 25, "severity": "P3", "status": "historical", "topic": "legacy phase naming" },
@@ -33,6 +33,7 @@
     { "id": 28, "severity": "Pending Evidence", "status": "launch-blocking", "topic": "account deletion promise" },
     { "id": 29, "severity": "Pending Evidence", "status": "launch-blocking", "topic": "data export promise" },
     { "id": 30, "severity": "Pending Evidence", "status": "external", "topic": "external resource inventory" },
-    { "id": 31, "severity": "P1", "status": "fixed", "topic": "browser server ownership" }
+    { "id": 31, "severity": "P1", "status": "fixed", "topic": "browser server ownership" },
+    { "id": 32, "severity": "P1", "status": "fixed", "topic": "nonexistent capacity tests" }
   ]
 }

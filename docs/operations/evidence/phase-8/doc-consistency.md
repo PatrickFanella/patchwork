@@ -24,14 +24,14 @@ package scripts, HTTP routes, migrations, Compose, and CI workflows.
 | 12 | P2 | Production issue plan defines future production-ready conditions | Current authority is continuation roadmap and matrix | Historical plan; superseded |
 | 13 | P2 | ADR 0003 introduction says runtime is fixture-heavy | ADR records decision-time context, not current status | Historical context retained |
 | 14 | P2 | Phase 6 evidence records API 11/moderation 2 migrations | Current counts are 12/3/3 | Dated evidence retained; current report corrected |
-| 15 | P2 | Phase 7 immutable-delivery evidence records 836 tests | Current database suite has 848 tests | Dated evidence retained |
+| 15 | P2 | Phase 7 immutable-delivery evidence records 836 tests | Current database suite has 852 tests | Dated evidence retained |
 | 16 | P2 | Phase 7 staging-readiness records seven alert rules | Current rule file has eleven | Dated drill evidence retained |
 | 17 | P2 | Legal changelog references `MODERATION_LOG_RETENTION_DAYS` | Runtime uses explicit seven-day migration and scheduler policy | Historical changelog retained; current policy corrected |
 | 18 | P2 | README “Fallback dataset” label can imply runtime fallback | Production code forbids fixture mode and never silently falls back | Wording already says test/demo only |
 | 19 | P2 | README root `db:migrate` script sounds universal | Root script invokes API migration only | Fixed in quick start; command list is explicit |
 | 20 | P2 | Test traceability calls lifecycle UI fixture-oriented | Alpha shell now uses durable authenticated commands; some expansion UI remains fixture-only | Pending table split in future doc maintenance |
 | 21 | P2 | Quality-review evidence says traceability maps old fixture architecture | Traceability has since been rewritten | Dated review evidence retained |
-| 22 | P2 | Capacity envelope describes modeled budgets as operational guidance | No deployed staging load result exists | Clearly treated as unproven in go/no-go report |
+| 22 | P2 | Capacity envelope describes modeled budgets as operational guidance | No deployed staging load result exists | Fixed; targets, local evidence, and staging proof are separated |
 | 23 | P2 | Progressive-delivery runbook discusses canary thresholds | Alpha deployment is single staging topology with no executed canary | Mechanism-only; external execution remains open |
 | 24 | P3 | README requires Node >=20.19 while roadmap standardizes Node 22 | `package.json` supports >=20.19; Docker uses Node 22 | Valid compatibility difference |
 | 25 | P3 | Historical phase documents use legacy component phase naming | Current roadmap supersedes phase sequencing | Retained for provenance |
@@ -40,6 +40,7 @@ package scripts, HTTP routes, migrations, Compose, and CI workflows.
 | 28 | Pending evidence | Terms promise account deletion through Settings | Settings remains fixture-runtime in matrix | Must be reviewed by product/legal before any launch |
 | 29 | Pending evidence | Privacy policy describes data access/export rights in UI | Durable export/deactivation runtime is not implemented | Must be corrected or implemented before launch |
 | 30 | Pending evidence | Staging host, DNS, registry, and OAuth docs describe intended resources | No authorized external inventory is available | Verify during staging or closure approval |
+| 32 | P1 | Capacity documentation names three repeatable test files | None of the named test files exists | Fixed with tested `capacity:probe` and corrected runbook |
 
 ## Review conclusion
 
@@ -48,13 +49,13 @@ Verdict: **Conditional pass** for repository handoff; **fail for launch**.
 | Level | Count |
 | --- | ---: |
 | P0 blocker | 0 |
-| P1 major | 8 |
+| P1 major | 9 |
 | P2 minor/historical | 16 |
 | P3 nit/accepted | 4 |
 | Pending evidence | 3 |
-| **Total** | **31** |
+| **Total** | **32** |
 
-All eight P1 documentation inconsistencies were fixed or converted to explicit
+All nine P1 documentation inconsistencies were fixed or converted to explicit
 unassigned placeholders in this pass. Pending issues 28–30 still require human
 or external evidence and are represented as `NO-GO` conditions; draft legal
 documents are now conspicuously marked not in force. Historical evidence is

@@ -14,18 +14,20 @@ This document describes what each test layer actually executes. Test counts are 
 | HTTP/PostgreSQL integration | Real Node HTTP server, cookies, JSON boundary, durable lifecycle state | Included in API PostgreSQL integration | PostgreSQL 16 | `e2e-production` |
 | Browser E2E | Rendered web application, focus, keyboard, landmarks, ARIA | `npm run test:e2e -w @patchwork/web` | Playwright Chromium | `quality-gates` |
 | Diagnostic coverage | Finds unexecuted production code; no arbitrary global threshold | `npm run test:coverage` | None | `quality-gates`, uploaded artifact |
+| Local HTTP capacity probe | Paces completed GET requests; records status, throughput, p50/p95/p99; optionally enforces budgets | `npm run capacity:probe` | Configured running API; PostgreSQL used for current evidence | Manual isolated/staging evidence |
 | External AT protocol | Disposable accounts against the staging PDS | Manual controlled exercise | Home-network staging PDS | Redacted evidence only |
 
 ## Current verified baseline
 
 | Layer | Result |
 | --- | --- |
-| Database-enabled full repository suite | 848 passed |
+| Database-enabled full repository suite | 852 passed |
 | Direct lifecycle service integration | 9 passed |
 | PostgreSQL integration, including HTTP boundary | 24 passed |
 | Browser Chromium suite | 48 passed, 1 externally gated case skipped |
 | Diagnostic coverage without database suites | 58.22% statements, 45.95% branches, 51.44% functions, 59.44% lines |
 | External AT protocol | Two-account create/read/update/close/delete and ownership denial verified manually |
+| Local PostgreSQL capacity probe | 1,150 requests, 0 errors; four modeled read budgets passed over 1,000 generated projections |
 
 Counts can change as tests are consolidated. Readiness depends on covered boundaries, not the aggregate.
 

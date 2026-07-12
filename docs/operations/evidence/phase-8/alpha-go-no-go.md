@@ -26,17 +26,17 @@ exceptions to the launch criteria in this decision.
 | Security | `npm audit --omit=dev --audit-level=high`: zero vulnerabilities on 2026-07-11; delivery workflow is configured to reject high/critical Trivy findings | Dependency gate green; deployed-image scan has not run |
 | Data retention | API migration 0012 and moderation migration 003 drive hourly non-overlapping cleanup for all alpha-private state. Active moderation cases and sessions are preserved; failure/staleness metrics alert for both runtimes. | Formal privacy/backup-deletion approval and deployed scheduler observations remain incomplete |
 | Accessibility | 48 Chromium cases pass, including eight zero-violation axe route scans and cross-route 320px reflow | No independent WCAG 2.2 or assistive-technology review |
-| Performance | Local performance contracts and capacity envelope exist | No deployed staging load envelope or database saturation measurement |
+| Performance | Executable local HTTP probe passed modeled alpha read targets over 1,000 PostgreSQL projections with zero errors | No sustained staging workload, write/ingestion/moderation load, or resource saturation measurement |
 | Operations | Role-based RACI and incident procedures exist | No named humans have accepted staging on-call, product, engineering, or trust-and-safety ownership |
 
 Current verification baseline:
 
-- database-enabled repository suite: 848 tests;
+- database-enabled repository suite: 852 tests;
 - PostgreSQL/HTTP integration: 24 tests;
 - direct service integration: 9 tests;
 - Chromium: 48 passed, 1 externally gated case skipped;
-- database-enabled coverage: 64.50% statements, 51.20% branches, 58.46%
-  functions, 65.71% lines;
+- database-enabled coverage: 64.85% statements, 51.57% branches, 58.85%
+  functions, 66.02% lines;
 - API/indexer/moderation migrations replay cleanly at 12/3/3;
 - build, typecheck, lint, artifact redaction, and high-severity dependency audit
   pass.
