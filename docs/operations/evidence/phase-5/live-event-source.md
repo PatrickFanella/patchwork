@@ -63,3 +63,11 @@ This completes Task 5.1, not Phase 5. Normalized projections and dead letters
 remain process-local or absent, discovery does not yet read the indexer’s
 projection database, and no controlled public-Jetstream aid-post lifecycle has
 been demonstrated. Those are Tasks 5.2, 5.3, and the Phase 5 exit gate.
+
+## Current follow-up
+
+Tasks 5.2 and 5.3 are now implemented locally. The production subscription is
+narrowed from all planned Patchwork NSIDs to the alpha aid-post NSID, and
+validated status/delete events reconcile durable workflow state before cursor
+acknowledgement. See `repository-event-reconciliation.md`. The controlled
+public-Jetstream lifecycle remains the external exit gate.

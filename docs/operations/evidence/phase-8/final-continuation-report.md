@@ -1,6 +1,6 @@
 # Patchwork continuation status report
 
-Snapshot: 2026-07-11 after commit `07994d8`
+Snapshot: 2026-07-11, current `main` worktree
 
 Recommended decision: **NO-GO**
 
@@ -20,26 +20,31 @@ Recommended decision: **NO-GO**
 Raw roadmap completion is 121/136 items (89%). This is not a launch score: the
 remaining items are high-weight external gates, so the project is `NO-GO`.
 
-Locally implementable behavior is effectively complete for the narrow alpha:
-authentication adapters, AT CRUD, lifecycle, moderation, HTTP security,
-ingestion, projections, discovery, browser commands, deployment mechanisms,
+The roadmap's narrow core paths are implemented locally: authentication
+adapters, AT CRUD, lifecycle, moderation, HTTP security, ingestion,
+projections, discovery, browser commands, deployment mechanisms,
 backup/restore, metrics, alerts, and private-data retention have production
-paths without fixture fallback.
+paths without fixture fallback. Account deactivation/export policy and runtime
+remain unresolved launch blockers rather than completed alpha behavior.
 
 ## Verification baseline
 
-- database-enabled repository suite: 852 tests;
+- database-enabled repository suite: 857 tests;
 - PostgreSQL/HTTP integration: 24 tests;
+- indexer PostgreSQL projection/reconciliation: 13 tests;
 - direct service integration: 9 tests;
 - Chromium: 48 passed, 1 authorized-external test skipped;
 - migrations: API 12, indexer 3, moderation 3; clean application and replay;
-- database-enabled coverage: 64.85% statements, 51.57% branches, 58.85%
-  functions, 66.02% lines;
+- database-enabled coverage: 65.02% statements, 51.77% branches, 59.04%
+  functions, 66.20% lines;
 - build, lint, typecheck, artifact redaction, and high-severity audit pass;
 - eleven Prometheus alert rules validate with `promtool`.
 
 ## Recent continuation commits
 
+- `d9ef20f` — executable local alpha read-capacity evidence;
+- `b382cbd` — isolated browser gate and accessibility audit;
+- `be8c435` — closure and final-audit preparation;
 - `07994d8` — moderation casework retention;
 - `9bf5122` — API private-data retention;
 - `6316193` — local recovery and alerting proof;

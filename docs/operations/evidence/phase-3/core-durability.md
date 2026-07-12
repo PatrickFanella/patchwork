@@ -40,9 +40,11 @@ home-network service on port 5432 remained untouched. Eleven migrations apply
 and replay without changes; the focused Phase 3 run recorded 20 PostgreSQL/HTTP
 integration tests, with later Phase 4 additions tracked separately.
 
-Automatic repository-event reconciliation remains part of the live-indexer
-phase; the current public-status command is author initiated and does not weaken
-the demonstrated Phase 3 durability boundary.
+Automatic repository-event reconciliation is now implemented by the persistent
+indexer. Validated status/delete events reconcile compatible private state
+before checkpointing; stale events are ignored, divergence is recorded, and a
+post-projection failure is redelivered. See
+`../phase-5/repository-event-reconciliation.md`.
 
 ## Moderation durability checkpoint
 

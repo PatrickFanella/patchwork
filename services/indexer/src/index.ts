@@ -14,6 +14,7 @@ import {
 } from '@patchwork/shared';
 import { PostgresCheckpointStore } from './checkpoint.js';
 import { PostgresDeadLetterStore } from './db/dead-letter-store.js';
+import { PostgresLifecycleEventReconciler } from './db/lifecycle-reconciler.js';
 import { PostgresProjectionStore } from './db/projection-store.js';
 import { renderPrometheusRuntimeMetrics } from './metrics.js';
 import { IndexerPipeline } from './pipeline.js';
@@ -51,15 +52,24 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
     const schema = await pool.query<{
         projections: string | null;
         state: string | null;
+        workflows: string | null;
+        audit: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projections,
-            to_regclass('indexer_projection_state')::TEXT AS state`,
+            to_regclass('indexer_projection_state')::TEXT AS state,
+            to_regclass('request_workflows')::TEXT AS workflows,
+            to_regclass('operational_audit_events')::TEXT AS audit`,
     );
-    if (!schema.rows[0]?.projections || !schema.rows[0]?.state) {
+    if (
+        !schema.rows[0]?.projections ||
+        !schema.rows[0]?.state ||
+        !schema.rows[0]?.workflows ||
+        !schema.rows[0]?.audit
+    ) {
         await pool.end();
         throw new Error(
-            'FATAL: indexer projection schema is missing; run indexer migrations before startup.',
+            'FATAL: indexer projection or lifecycle reconciliation schema is missing; run API and indexer migrations before startup.',
         );
     }
 
@@ -70,6 +80,7 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
         checkpointInterval: 100,
         projectionStore,
         deadLetterStore: new PostgresDeadLetterStore(pool),
+        lifecycleReconciler: new PostgresLifecycleEventReconciler(pool),
     });
 
     const cursor = await pipeline.loadCheckpoint();
@@ -277,7 +288,7 @@ export const startIndexerServer = async () => {
     const { pipeline, pool, projectionStore } = await createPipeline();
     const source = new JetstreamEventSource({
         url: config.INDEXER_FIREHOSE_URL,
-        collections: Object.values(recordNsid),
+        collections: [recordNsid.aidPost],
     });
     const runtime = new IndexerRuntime({
         pipeline,

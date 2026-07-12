@@ -41,6 +41,10 @@ export interface IndexerPipelineOptions {
     deadLetterStore?: {
         append(failure: IngestionFailure): Promise<void>;
     };
+
+    lifecycleReconciler?: {
+        reconcile(event: NormalizedFirehoseEvent): Promise<void>;
+    };
 }
 
 export class IndexerPipeline {
@@ -51,6 +55,7 @@ export class IndexerPipeline {
     private readonly metricsCollector = new MetricsCollector();
     private readonly projectionStore?: IndexerPipelineOptions['projectionStore'];
     private readonly deadLetterStore?: IndexerPipelineOptions['deadLetterStore'];
+    private readonly lifecycleReconciler?: IndexerPipelineOptions['lifecycleReconciler'];
     private eventsSinceCheckpoint = 0;
     private lastProcessedSeq = -1;
 
@@ -60,6 +65,7 @@ export class IndexerPipeline {
         this.checkpointInterval = options?.checkpointInterval ?? 100;
         this.projectionStore = options?.projectionStore;
         this.deadLetterStore = options?.deadLetterStore;
+        this.lifecycleReconciler = options?.lifecycleReconciler;
     }
 
     /**
@@ -100,6 +106,7 @@ export class IndexerPipeline {
         if (this.projectionStore) {
             for (const event of result.normalizedEvents) {
                 await this.projectionStore.apply(event);
+                await this.lifecycleReconciler?.reconcile(event);
             }
         }
         if (this.deadLetterStore) {

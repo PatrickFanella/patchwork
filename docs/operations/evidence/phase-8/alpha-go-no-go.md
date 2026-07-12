@@ -19,7 +19,7 @@ exceptions to the launch criteria in this decision.
 | AT record lifecycle | Phase 2 redacted two-account direct-PDS CRUD and ownership evidence | Direct protocol path proven; complete browser/API path not proven |
 | Durable private state | Phase 3 restart, concurrency, idempotency, audit, and moderation evidence | Local and PostgreSQL gates pass |
 | HTTP security | Phase 4 method, auth, CSRF, stable-error, idempotency, and privacy evidence | Local gate passes |
-| Live ingestion and discovery | Phase 5 cursor, reconnect, projection, tombstone, dead-letter, rebuild, and query evidence | Controlled live staging lifecycle still absent |
+| Live ingestion and discovery | Phase 5 cursor, reconnect, projection, tombstone, dead-letter, rebuild, query, and automatic lifecycle-reconciliation evidence | Controlled live staging lifecycle still absent |
 | Web journey | Local browser evidence passes 48 Chromium cases and the real two-account case is skipped without authorized state | Mandatory real OAuth journey absent |
 | Staging topology and delivery | Phase 7 topology and digest-deployment mechanism evidence | No signed registry digest or staging deployment/rollback run |
 | Recovery and alerting | Phase 7 isolated PostgreSQL 16 restore and eleven validated alert rules | No staging restore, notification delivery, or incident exercise |
@@ -31,12 +31,13 @@ exceptions to the launch criteria in this decision.
 
 Current verification baseline:
 
-- database-enabled repository suite: 852 tests;
+- database-enabled repository suite: 857 tests;
 - PostgreSQL/HTTP integration: 24 tests;
+- indexer PostgreSQL projection/reconciliation: 13 tests;
 - direct service integration: 9 tests;
 - Chromium: 48 passed, 1 externally gated case skipped;
-- database-enabled coverage: 64.85% statements, 51.57% branches, 58.85%
-  functions, 66.02% lines;
+- database-enabled coverage: 65.02% statements, 51.77% branches, 59.04%
+  functions, 66.20% lines;
 - API/indexer/moderation migrations replay cleanly at 12/3/3;
 - build, typecheck, lint, artifact redaction, and high-severity dependency audit
   pass.

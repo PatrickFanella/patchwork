@@ -82,6 +82,8 @@ services:
                 condition: service_healthy
             patchwork-indexer-migrations:
                 condition: service_completed_successfully
+            patchwork-api-migrations:
+                condition: service_completed_successfully
         environment:
             NODE_ENV: production
             LOG_LEVEL: ${LOG_LEVEL:-info}
