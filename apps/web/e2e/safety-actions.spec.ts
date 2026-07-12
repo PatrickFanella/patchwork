@@ -213,3 +213,142 @@ test('record owner closes with compare-and-swap then deletes the AT record', asy
         expect(body).not.toHaveProperty('authorDid');
     }
 });
+
+test('owner can recover when private lifecycle transition outpaces public AT sync', async ({
+    page,
+}) => {
+    await page.unroute('http://localhost:4000/**');
+    const postUri =
+        'at://did:plc:viewer/app.patchwork.aid.post/sync-recovery-1';
+    let syncAttempts = 0;
+    await page.route('http://localhost:4000/**', async route => {
+        const url = new URL(route.request().url());
+        if (url.pathname === '/auth/session') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    session: {
+                        did: 'did:plc:viewer',
+                        expiresAt: '2099-01-01T00:00:00.000Z',
+                    },
+                }),
+            });
+            return;
+        }
+        if (url.pathname === '/query/feed') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    results: [
+                        {
+                            uri: postUri,
+                            cid: 'cid-before-sync',
+                            authorDid: 'did:plc:viewer',
+                            title: 'Lifecycle sync recovery',
+                            summary: 'Private and public status must converge.',
+                            status: 'open',
+                            category: 'food',
+                            urgency: 'medium',
+                            updatedAt: '2026-07-11T00:00:00.000Z',
+                        },
+                    ],
+                }),
+            });
+            return;
+        }
+        if (url.pathname === '/aid/post/lifecycle') {
+            await route.fulfill({
+                status: 404,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    error: {
+                        code: 'NOT_FOUND',
+                        message: 'No lifecycle record was found.',
+                    },
+                }),
+            });
+            return;
+        }
+        if (url.pathname === '/aid/post/transition') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    postUri,
+                    previousStatus: 'open',
+                    currentStatus: 'resolved',
+                    transition: {
+                        from: 'open',
+                        to: 'resolved',
+                        actorDid: 'did:plc:viewer',
+                        actorRole: 'requester',
+                        timestamp: '2026-07-11T01:00:00.000Z',
+                    },
+                    timeline: [],
+                    updatedAt: '2026-07-11T01:00:00.000Z',
+                }),
+            });
+            return;
+        }
+        if (url.pathname === '/at/aid-posts/status/reconcile') {
+            syncAttempts += 1;
+            if (syncAttempts === 1) {
+                await route.fulfill({
+                    status: 503,
+                    contentType: 'application/json',
+                    body: JSON.stringify({
+                        error: {
+                            code: 'PDS_UNAVAILABLE',
+                            message: 'The AT server is temporarily unavailable.',
+                            retryable: true,
+                        },
+                    }),
+                });
+                return;
+            }
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    uri: postUri,
+                    cid: 'cid-after-sync',
+                    record: {
+                        $type: 'app.patchwork.aid.post',
+                        version: '1.0.0',
+                        title: 'Lifecycle sync recovery',
+                        description: 'Private and public status must converge.',
+                        category: 'food',
+                        urgency: 'medium',
+                        status: 'resolved',
+                        location: {
+                            latitude: 40.71,
+                            longitude: -74.01,
+                            precisionKm: 1,
+                        },
+                        createdAt: '2026-07-11T00:00:00.000Z',
+                        updatedAt: '2026-07-11T01:00:00.000Z',
+                    },
+                }),
+            });
+            return;
+        }
+        await route.fallback();
+    });
+
+    await page.goto('/feed');
+    await page
+        .getByRole('button', { name: 'Resolve request "Lifecycle sync recovery"' })
+        .click();
+    await expect(
+        page.getByText(/Private workflow saved, but its public AT status is not synchronized/),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Retry public status sync' }).click();
+
+    await expect(
+        page.getByText(/Private workflow saved, but its public AT status is not synchronized/),
+    ).toHaveCount(0);
+    await expect(page.getByText('Resolved').first()).toBeVisible();
+    expect(syncAttempts).toBe(2);
+});

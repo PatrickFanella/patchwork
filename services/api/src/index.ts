@@ -892,6 +892,7 @@ const contractRoutes = [
     '/query/feed',
     '/query/directory',
     '/aid/post/transition',
+    '/aid/post/lifecycle',
     '/aid/post/assign',
     '/aid/post/accept',
     '/aid/post/decline',
@@ -903,6 +904,7 @@ const contractRoutes = [
     '/moderation/state',
     '/moderation/audit',
     '/account/export',
+    '/aid/post/lifecycle',
     '/account/deactivate',
     '/health',
     '/health/ready',
@@ -946,6 +948,15 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
             error: {
                 code: 'ACCOUNT_PRIVACY_UNAVAILABLE',
                 message: 'Account privacy services are unavailable.',
+            },
+        },
+    }),
+    '/aid/post/lifecycle': () => ({
+        statusCode: 503,
+        body: {
+            error: {
+                code: 'LIFECYCLE_STORE_UNAVAILABLE',
+                message: 'Durable lifecycle state is unavailable.',
             },
         },
     }),

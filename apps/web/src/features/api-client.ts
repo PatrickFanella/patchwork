@@ -583,6 +583,18 @@ export const closeAtAidPostViaApi = async (
     return result.ok ? parseAtAidPostResult(result.data) : result;
 };
 
+export const reconcileAidPostStatusViaApi = async (
+    input: { uri: string; expectedCid: string; updatedAt: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtAidPostResult>> => {
+    const result = await requestJsonPost(
+        '/at/aid-posts/status/reconcile',
+        input,
+        signal,
+    );
+    return result.ok ? parseAtAidPostResult(result.data) : result;
+};
+
 export const deleteAtAidPostViaApi = async (
     input: { uri: string; expectedCid: string },
     signal?: AbortSignal,
@@ -1241,10 +1253,13 @@ export const transitionAidPostViaApi = async (
 
 export const queryAidPostLifecycleViaApi = async (
     postUri: string,
-    _actorRole?: string,
     signal?: AbortSignal,
 ): Promise<ApiClientResult<LifecycleQueryApiResult>> => {
-    const result = await requestJsonPost('/aid/post/lifecycle/query', { postUri }, signal);
+    const result = await requestJson(
+        '/aid/post/lifecycle',
+        new URLSearchParams({ postUri }),
+        signal,
+    );
 
     if (!result.ok) {
         return result;

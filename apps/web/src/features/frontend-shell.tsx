@@ -73,6 +73,7 @@ import { TextLink } from '../components/TextLink';
 import {
     type AidPostReportReason,
     type ApiDataOrigin,
+    type AtAidPostResult,
     blockUserViaApi,
     closeAtAidPostViaApi,
     createAidPostViaApi,
@@ -84,7 +85,9 @@ import {
     fetchSettingsAuditFromApi,
     fetchSettingsFromApi,
     initiateChatViaApi,
+    queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
+    reconcileAidPostStatusViaApi,
     updateSettingsViaApi,
     transitionAidPostViaApi,
 } from './api-client';
@@ -1037,6 +1040,22 @@ const LIFECYCLE_STATUS_LABELS: Record<string, string> = {
     archived: 'Archived',
 };
 
+const lifecycleStatusFromValue = (
+    value: string,
+): LifecycleStatus | undefined => {
+    const normalized = value === 'in-progress' ? 'in_progress' : value;
+    return [
+        'open',
+        'triaged',
+        'assigned',
+        'in_progress',
+        'resolved',
+        'archived',
+    ].includes(normalized) ?
+            (normalized as LifecycleStatus)
+        :   undefined;
+};
+
 const LIFECYCLE_STATUS_TONES: Record<
     string,
     'neutral' | 'info' | 'success' | 'danger'
@@ -1116,6 +1135,9 @@ interface FeedRouteProps {
     errorMessage?: string;
     dataOrigin: ApiDataOrigin;
     onRetry: () => void;
+    publicSyncFailure?: PublicSyncFailure;
+    publicSyncRetrying: boolean;
+    onRetryPublicSync: () => void;
     onNavigate: (route: AppRoute) => void;
     onOpenChat: (record: FeedRecordEnvelope, surface: ChatEntrySurface) => void;
     onUpdateCard: (id: string, patch: Partial<Omit<FeedAidCard, 'id'>>) => void;
@@ -1128,6 +1150,32 @@ interface FeedRouteProps {
     ) => void;
     currentUserDid?: string;
 }
+
+interface PublicSyncFailure {
+    postUri: string;
+    expectedCid: string;
+    updatedAt: string;
+    message: string;
+}
+
+const replaceRecordFromAtResult = (
+    records: readonly FeedRecordEnvelope[],
+    result: AtAidPostResult,
+): FeedRecordEnvelope[] =>
+    records.map(record =>
+        record.aidPostUri === result.uri ?
+            {
+                ...record,
+                cid: result.cid,
+                card: {
+                    ...record.card,
+                    status: result.record.status,
+                    updatedAt:
+                        result.record.updatedAt ?? result.record.createdAt,
+                },
+            }
+        :   record,
+    );
 
 const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
     const [mode, setMode] = useState<'report' | 'block'>();
@@ -1367,6 +1415,9 @@ const FeedRoute = ({
     errorMessage,
     dataOrigin,
     onRetry,
+    publicSyncFailure,
+    publicSyncRetrying,
+    onRetryPublicSync,
     onNavigate,
     onOpenChat,
     onUpdateCard,
@@ -1418,6 +1469,25 @@ const FeedRoute = ({
                         <p>API sync issue: {errorMessage}</p>
                         <Button type='button' variant='neutral' className='mt-2 px-3 py-1 text-xs' onClick={onRetry}>
                             Retry discovery
+                        </Button>
+                    </div>
+                :   null}
+                {publicSyncFailure ?
+                    <div role='alert' className='mh-alert mt-3 text-xs font-bold'>
+                        <p>
+                            Private workflow saved, but its public AT status is
+                            not synchronized: {publicSyncFailure.message}
+                        </p>
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            className='mt-2 px-3 py-1 text-xs'
+                            disabled={publicSyncRetrying}
+                            onClick={onRetryPublicSync}
+                        >
+                            {publicSyncRetrying ?
+                                'Retrying public sync...'
+                            :   'Retry public status sync'}
                         </Button>
                     </div>
                 :   null}
@@ -1560,7 +1630,8 @@ const FeedRoute = ({
                                     presentation.transitionActions
                                         .length > 0 &&
                                     onTransition &&
-                                    record ?
+                                    record &&
+                                    currentUserDid === record.recipientDid ?
                                         <div className='mt-3 flex flex-wrap gap-2'>
                                             <span className='text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
                                                 Lifecycle:
@@ -3415,6 +3486,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const [isAidLoading, setIsAidLoading] = useState(false);
     const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     const [aidErrorMessage, setAidErrorMessage] = useState<string>();
+    const [publicSyncFailure, setPublicSyncFailure] =
+        useState<PublicSyncFailure>();
+    const [publicSyncRetrying, setPublicSyncRetrying] = useState(false);
     const [directoryErrorMessage, setDirectoryErrorMessage] =
         useState<string>();
     const [aidDataOrigin, setAidDataOrigin] = useState<ApiDataOrigin>(
@@ -3508,13 +3582,87 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             currentRoute === '/map' ? 'map' : 'feed',
             controller.signal,
         )
-            .then(result => {
+            .then(async result => {
                 if (controller.signal.aborted) {
                     return;
                 }
 
                 if (result.ok) {
-                    setFeedRecords(result.data);
+                    const records = await Promise.all(
+                        result.data.map(async record => {
+                            if (
+                                !currentUserDid ||
+                                record.recipientDid !== currentUserDid
+                            ) {
+                                return record;
+                            }
+                            const lifecycle =
+                                await queryAidPostLifecycleViaApi(
+                                    record.aidPostUri,
+                                    controller.signal,
+                                );
+                            const lifecycleStatus =
+                                lifecycle.ok ?
+                                    lifecycleStatusFromValue(
+                                        lifecycle.data.currentStatus,
+                                    )
+                                : lifecycle.code === 'NOT_FOUND' ?
+                                    lifecycleStatusFromValue(record.card.status)
+                                :   undefined;
+                            const validTransitions =
+                                lifecycle.ok ?
+                                    lifecycle.data.validTransitions.flatMap(
+                                        value => {
+                                            const status =
+                                                lifecycleStatusFromValue(value);
+                                            return status ? [status] : [];
+                                        },
+                                    )
+                                : lifecycle.code === 'NOT_FOUND' ?
+                                    (['open', 'resolved'] satisfies LifecycleStatus[])
+                                :   undefined;
+                            return lifecycleStatus ?
+                                    {
+                                        ...record,
+                                        card: {
+                                            ...record.card,
+                                            lifecycleStatus,
+                                            ...(validTransitions ?
+                                                { validTransitions }
+                                            :   {}),
+                                            ...(lifecycle.ok ?
+                                                {
+                                                    timeline:
+                                                        lifecycle.data.timeline.flatMap(
+                                                            entry => {
+                                                                const from =
+                                                                    lifecycleStatusFromValue(
+                                                                        entry.from,
+                                                                    );
+                                                                const to =
+                                                                    lifecycleStatusFromValue(
+                                                                        entry.to,
+                                                                    );
+                                                                return from && to ?
+                                                                        [
+                                                                            {
+                                                                                ...entry,
+                                                                                from,
+                                                                                to,
+                                                                            } satisfies FeedStatusTransition,
+                                                                        ]
+                                                                    :   [];
+                                                            },
+                                                        ),
+                                                }
+                                            :   {}),
+                                        },
+                                    }
+                                :   record;
+                        }),
+                    );
+                    if (controller.signal.aborted) return;
+                    setFeedRecords(records);
                     setAidDataOrigin('api');
                     return;
                 }
@@ -3533,7 +3681,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         return () => {
             controller.abort();
         };
-    }, [aidReload, currentRoute, discoveryState]);
+    }, [aidReload, currentRoute, currentUserDid, discoveryState]);
 
     useEffect(() => {
         if (currentRoute !== '/resources') {
@@ -3710,6 +3858,30 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         setChatRequestPreview(undefined);
     };
 
+    const retryPublicSync = () => {
+        const failure = publicSyncFailure;
+        if (!failure || !failure.expectedCid) return;
+        setPublicSyncRetrying(true);
+        void reconcileAidPostStatusViaApi({
+            uri: failure.postUri,
+            expectedCid: failure.expectedCid,
+            updatedAt: failure.updatedAt,
+        }).then(result => {
+            setPublicSyncRetrying(false);
+            if (!result.ok) {
+                setPublicSyncFailure({
+                    ...failure,
+                    message: `${result.code}: ${result.error}`,
+                });
+                return;
+            }
+            setFeedRecords(current =>
+                replaceRecordFromAtResult(current, result.data),
+            );
+            setPublicSyncFailure(undefined);
+        });
+    };
+
     const requiresAuthentication =
         currentRoute === '/posting' ||
         currentRoute === '/chat' ||
@@ -3776,6 +3948,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 errorMessage={aidErrorMessage}
                 dataOrigin={aidDataOrigin}
                 onRetry={() => setAidReload(value => value + 1)}
+                publicSyncFailure={publicSyncFailure}
+                publicSyncRetrying={publicSyncRetrying}
+                onRetryPublicSync={retryPublicSync}
                 onNavigate={navigate}
                 onOpenChat={openChatFromRecord}
                 onUpdateCard={(id, patch) => {
@@ -3798,10 +3973,15 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                     )
                 }
                 onTransition={(id, postUri, targetStatus) => {
+                    const record = feedRecords.find(
+                        candidate => candidate.aidPostUri === postUri,
+                    );
+                    const updatedAt = nowIso();
+                    setPublicSyncFailure(undefined);
                     void transitionAidPostViaApi({
                         postUri,
                         targetStatus,
-                        now: nowIso(),
+                        now: updatedAt,
                     }).then(result => {
                         if (result.ok) {
                             applyLifecycleAction({
@@ -3810,6 +3990,34 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                 targetStatus,
                                 actorDid: result.data.transition.actorDid,
                                 actorRole: result.data.transition.actorRole,
+                            });
+                            if (!record?.cid) {
+                                setAidErrorMessage(
+                                    'Private workflow saved, but the indexed record revision is unavailable. Retry discovery before synchronizing public status.',
+                                );
+                                return;
+                            }
+                            void reconcileAidPostStatusViaApi({
+                                uri: postUri,
+                                expectedCid: record.cid,
+                                updatedAt,
+                            }).then(syncResult => {
+                                if (!syncResult.ok) {
+                                    setPublicSyncFailure({
+                                        postUri,
+                                        expectedCid: record.cid!,
+                                        updatedAt,
+                                        message: `${syncResult.code}: ${syncResult.error}`,
+                                    });
+                                    return;
+                                }
+                                setFeedRecords(current =>
+                                    replaceRecordFromAtResult(
+                                        current,
+                                        syncResult.data,
+                                    ),
+                                );
+                                setPublicSyncFailure(undefined);
                             });
                         }
                     });

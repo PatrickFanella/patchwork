@@ -19,6 +19,7 @@ import {
     type AuthorizationContext,
     AuthorizationError,
     requireCapability,
+    requireOwnerOrRole,
     requireRole,
 } from './authorization-guard.js';
 import type { LifecycleRepository } from './db/lifecycle-repository.js';
@@ -379,6 +380,68 @@ export class LifecycleService {
             postUri,
             params.get('actorRole') ?? undefined,
         );
+    }
+
+    async queryForActor(
+        postUri: string | null,
+        authCtx: AuthorizationContext,
+    ): Promise<LifecycleQueryResult> {
+        if (!postUri) {
+            return {
+                statusCode: 400,
+                body: {
+                    error: {
+                        code: 'INVALID_INPUT',
+                        message: 'postUri query parameter is required.',
+                    },
+                },
+            };
+        }
+        if (!this.repository) {
+            return {
+                statusCode: 503,
+                body: {
+                    error: {
+                        code: 'LIFECYCLE_STORE_UNAVAILABLE',
+                        message: 'Durable lifecycle state is unavailable.',
+                    },
+                },
+            };
+        }
+        const record = await this.repository.get(postUri);
+        if (!record) {
+            return {
+                statusCode: 404,
+                body: {
+                    error: {
+                        code: 'NOT_FOUND',
+                        message: 'No lifecycle record was found.',
+                    },
+                },
+            };
+        }
+        try {
+            requireOwnerOrRole(authCtx, record.requesterDid, 'moderator');
+        } catch (error) {
+            if (error instanceof AuthorizationError) {
+                return {
+                    statusCode: error.statusCode,
+                    body: {
+                        error: {
+                            code: error.code,
+                            message: 'Lifecycle state is private to its owner.',
+                        },
+                    },
+                };
+            }
+            throw error;
+        }
+        const lifecycleRole: LifecycleRole =
+            authCtx.role === 'volunteer' ? 'volunteer'
+            : authCtx.role === 'moderator' ? 'moderator'
+            : authCtx.role === 'admin' || authCtx.role === 'super_admin' ? 'admin'
+            : 'requester';
+        return this.queryDurablePostLifecycle(postUri, lifecycleRole);
     }
 
     private async queryDurablePostLifecycle(

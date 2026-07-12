@@ -81,6 +81,10 @@ test.describe('real two-account AT record lifecycle', () => {
             }, { timeout: 60_000 })
             .toBe(1);
         await requester
+            .getByRole('button', { name: `Resolve request "${title}"` })
+            .click();
+        await expect(requester.getByText('Resolved').first()).toBeVisible();
+        await requester
             .getByRole('button', { name: `Close ${title.toLowerCase()}` })
             .click();
         await expect(requester.getByText('Request closed.')).toBeVisible();

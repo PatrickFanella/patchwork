@@ -90,6 +90,7 @@ export interface FeedAidCard {
     category: AidCategory;
     status: AidStatus;
     lifecycleStatus?: LifecycleStatus;
+    validTransitions?: LifecycleStatus[];
     urgency: 1 | 2 | 3 | 4 | 5;
     accessibilityTags: string[];
     createdAt: string;
@@ -285,7 +286,10 @@ const buildTransitionActions = (
         return [];
     }
 
-    const transitions = LIFECYCLE_TRANSITION_LABELS[status] ?? [];
+    const allowed = card.validTransitions;
+    const transitions = (LIFECYCLE_TRANSITION_LABELS[status] ?? []).filter(
+        transition => !allowed || allowed.includes(transition.target),
+    );
     return transitions.map(({ target, label }) => ({
         targetStatus: target,
         label,

@@ -36,16 +36,27 @@ export const createLifecycleTransitionHandler = (
         response: ServerResponse,
         requestUrl: URL,
     ): boolean => {
-        if (
-            request.method !== 'POST' ||
-            requestUrl.pathname !== '/aid/post/transition'
-        ) {
+        const isTransition =
+            request.method === 'POST' &&
+            requestUrl.pathname === '/aid/post/transition';
+        const isQuery =
+            request.method === 'GET' &&
+            requestUrl.pathname === '/aid/post/lifecycle';
+        if (!isTransition && !isQuery) {
             return false;
         }
 
         void (async () => {
             try {
                 const authenticated = await dependencies.authenticate(request);
+                if (isQuery) {
+                    const result = await dependencies.service.queryForActor(
+                        requestUrl.searchParams.get('postUri'),
+                        authenticated.principal.authorization,
+                    );
+                    writeJson(response, result.statusCode, result.body);
+                    return;
+                }
                 const body = await readJsonBody(request);
                 const result = await dependencies.executeIdempotent(
                     request,

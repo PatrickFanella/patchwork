@@ -26,6 +26,9 @@ const startServer = async (pool: Pool): Promise<{ server: Server; baseUrl: strin
         authenticate: request =>
             authenticateRequest(request, {
                 resolveSession: async token => {
+                    if (token === 'bob-session') {
+                        return { did: 'did:plc:bob' };
+                    }
                     if (token !== 'alice-session') {
                         throw new AtClientError(
                             'SESSION_EXPIRED',
@@ -207,6 +210,52 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
         expect(response.status).toBe(401);
         await expect(response.json()).resolves.toMatchObject({
             error: { code: 'AUTHENTICATION_REQUIRED' },
+        });
+        await stopServer(running.server);
+    });
+
+    it('returns private lifecycle state only through the authenticated owner boundary', async () => {
+        const postUri =
+            'at://did:plc:alice/app.patchwork.aid.post/http-private-query';
+        await new PostgresLifecycleRepository(pool).register({
+            commandId: 'http-private-query-register',
+            postUri,
+            requesterDid: 'did:plc:alice',
+            createdAt: '2026-07-11T12:00:00.000Z',
+        });
+        const running = await startServer(pool);
+        const response = await fetch(
+            `${running.baseUrl}/aid/post/lifecycle?postUri=${encodeURIComponent(postUri)}&actorRole=admin`,
+            { headers: { cookie: 'patchwork_session=alice-session' } },
+        );
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as {
+            postUri: string;
+            currentStatus: string;
+            validTransitions: string[];
+        };
+        expect(body).toMatchObject({
+            postUri,
+            currentStatus: 'open',
+            validTransitions: expect.arrayContaining(['resolved']),
+        });
+        expect(body.validTransitions).not.toContain('archived');
+        await stopServer(running.server);
+    });
+
+    it('rejects lifecycle reads from another ordinary account', async () => {
+        const postUri =
+            'at://did:plc:alice/app.patchwork.aid.post/http-private-query';
+        const running = await startServer(pool);
+        const response = await fetch(
+            `${running.baseUrl}/aid/post/lifecycle?postUri=${encodeURIComponent(postUri)}`,
+            { headers: { cookie: 'patchwork_session=bob-session' } },
+        );
+
+        expect(response.status).toBe(403);
+        await expect(response.json()).resolves.toMatchObject({
+            error: { code: 'FORBIDDEN' },
         });
         await stopServer(running.server);
     });

@@ -428,10 +428,13 @@ artifact. Vite rejects `VITE_DATA_MODE=fixture` for a production build.
 Local evidence: `docs/operations/evidence/phase-6/alpha-browser-journey-local.md`.
 The production UI now creates records without browser-supplied authorship,
 retains projection CIDs, reports/blocks through durable authenticated HTTP, and
-closes/deletes owner records with compare-and-swap. The real two-account spec
-is executable but remains skipped until an authorized staging URL and two
-OAuth storage states are supplied; therefore the first three checklist items
-and the Phase 6 exit gate remain open.
+closes/deletes owner records with compare-and-swap. Owners now load private
+lifecycle state through an authenticated boundary, transition using only
+server-derived roles, reconcile the result to the AT record, and receive a
+retry control when public sync fails after private state commits. The real
+two-account spec includes that workflow step but remains skipped until an
+authorized staging URL and two OAuth storage states are supplied; therefore
+the first three checklist items and the Phase 6 exit gate remain open.
 
 **Phase 6 exit gate:** Two browser sessions complete the real create-to-discover-to-close/delete journey against persistent services with fixture mode disabled.
 

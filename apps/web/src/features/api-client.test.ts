@@ -10,7 +10,9 @@ import {
     fetchFeedRecordsFromApi,
     exportDataViaApi,
     initiateChatViaApi,
+    queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
+    reconcileAidPostStatusViaApi,
     transitionAidPostViaApi,
 } from './api-client.js';
 import type { DiscoveryFilterState } from '../discovery-filters.js';
@@ -353,6 +355,79 @@ describe('api client', () => {
         });
         expect(body).not.toHaveProperty('actorDid');
         expect(body).not.toHaveProperty('actorRole');
+    });
+
+    it('reconciles durable lifecycle status to the owner AT record without browser identity', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({
+                uri: 'at://did:plc:owner/app.patchwork.aid.post/post-1',
+                cid: 'bafy-synced',
+                record: {
+                    $type: 'app.patchwork.aid.post',
+                    version: '1.0.0',
+                    title: 'Need groceries',
+                    description: 'Delivery requested.',
+                    category: 'food',
+                    urgency: 'medium',
+                    status: 'in-progress',
+                    location: {
+                        latitude: 41.88,
+                        longitude: -87.63,
+                        precisionKm: 3,
+                    },
+                    createdAt: '2026-07-11T12:00:00.000Z',
+                    updatedAt: '2026-07-11T12:05:00.000Z',
+                },
+            }),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const result = await reconcileAidPostStatusViaApi({
+            uri: 'at://did:plc:owner/app.patchwork.aid.post/post-1',
+            expectedCid: 'bafy-before',
+            updatedAt: '2026-07-11T12:05:00.000Z',
+        });
+
+        expect(result.ok).toBe(true);
+        const [, init] = fetchMock.mock.calls[0] as unknown as [
+            string,
+            RequestInit,
+        ];
+        expect(JSON.parse(String(init.body))).toEqual({
+            uri: 'at://did:plc:owner/app.patchwork.aid.post/post-1',
+            expectedCid: 'bafy-before',
+            updatedAt: '2026-07-11T12:05:00.000Z',
+        });
+        expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('actorDid');
+        expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('actorRole');
+    });
+
+    it('loads private lifecycle state with an authenticated identity-free GET', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({
+                postUri: 'at://did:plc:owner/app.patchwork.aid.post/post-1',
+                currentStatus: 'open',
+                statusLabel: 'Open',
+                timeline: [],
+                validTransitions: ['open', 'resolved'],
+                updatedAt: '2026-07-11T12:00:00.000Z',
+            }),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const result = await queryAidPostLifecycleViaApi(
+            'at://did:plc:owner/app.patchwork.aid.post/post-1',
+        );
+
+        expect(result.ok).toBe(true);
+        const [url, init] = fetchMock.mock.calls[0] as unknown as [
+            string,
+            RequestInit,
+        ];
+        expect(url).toContain('/aid/post/lifecycle?postUri=');
+        expect(init).toMatchObject({ method: 'GET', credentials: 'include' });
+        expect(url).not.toContain('actorRole');
+        expect(url).not.toContain('actorDid');
     });
 
     it('maps chat initiation fallback payload from API', async () => {

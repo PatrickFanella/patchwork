@@ -23,14 +23,24 @@ run against an authorized staging URL and disposable OAuth/PDS accounts.
   test proves hostile identity fields cannot override the session DID.
 - Browser lifecycle transitions no longer send actor DID or role; presentation
   state uses the actor and role returned by the server.
+- Owners load private workflow state through authenticated `GET
+  /aid/post/lifecycle`; ordinary cross-account reads receive `403`, and query
+  parameters cannot elevate the durable role. The shell derives an initial
+  owner workflow from the public record only when no workflow exists yet.
+- After a durable transition, the shell calls the production AT status
+  reconciliation command with the indexed CID. A committed-private/failed-PDS
+  result remains visible and offers an idempotent retry that converges on the
+  current PDS CID instead of repeating the lifecycle mutation.
 - Local-only urgency and close mutations are unavailable in API mode.
 
 ## Browser and privacy evidence
 
-Three rendered-browser cases cover report, block, and owner close-to-delete.
+Four rendered-browser cases cover report, block, owner close-to-delete, and
+private-lifecycle/public-AT synchronization recovery.
 They verify CSRF delivery, identity omission, private confirmation, CID
 replacement, and removal after deletion. The external
-`at-record-lifecycle.spec.ts` covers the same two-account sequence and asserts
+`at-record-lifecycle.spec.ts` now includes the workflow transition in the same
+two-account sequence and asserts
 that exact input coordinates, private report details, and OAuth token names do
 not appear in URLs, rendered DOM, or captured JSON responses.
 
@@ -41,16 +51,16 @@ compressed trace content.
 
 ## Verification
 
-- Database-enabled full repository gate: 829 passed.
-- PostgreSQL/HTTP integration: 24 passed.
+- Database-enabled full repository gate: 870 passed.
+- PostgreSQL/HTTP integration: 30 passed.
 - Direct lifecycle service integration: 9 passed.
-- Chromium: 39 passed; the single real-environment journey skipped because its
+- Chromium: 49 passed; the single real-environment journey skipped because its
   required external inputs were absent.
-- Diagnostic coverage: 58.24% statements, 45.95% branches, 51.50% functions,
-  59.46% lines.
+- Diagnostic coverage: 65.22% statements, 51.74% branches, 59.10% functions,
+  66.39% lines.
 - Full workspace build and high-severity dependency audit: passed. One known
   low-severity Windows development-server advisory remains.
-- Clean migration application and replay: API 11, indexer 3, moderation 2.
+- Clean migration application and replay: API 13, indexer 3, moderation 3.
 - Production artifact search: no demo identities or records.
 
 ## Exact external blocker and execution contract

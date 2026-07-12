@@ -20,25 +20,25 @@ exceptions to the launch criteria in this decision.
 | Durable private state | Phase 3 restart, concurrency, idempotency, audit, and moderation evidence | Local and PostgreSQL gates pass |
 | HTTP security | Phase 4 method, auth, CSRF, stable-error, idempotency, and privacy evidence | Local gate passes |
 | Live ingestion and discovery | Phase 5 cursor, reconnect, projection, tombstone, dead-letter, rebuild, query, and automatic lifecycle-reconciliation evidence | Controlled live staging lifecycle still absent |
-| Web journey | Local browser evidence passes 48 Chromium cases and the real two-account case is skipped without authorized state | Mandatory real OAuth journey absent |
+| Web journey | Local browser evidence passes 49 Chromium cases, including private-workflow/public-AT sync recovery; the real two-account case includes that workflow step but is skipped without authorized state | Mandatory real OAuth journey absent |
 | Staging topology and delivery | Phase 7 topology and digest-deployment mechanism evidence | No signed registry digest or staging deployment/rollback run |
 | Recovery and alerting | Phase 7 isolated PostgreSQL 16 restore and eleven validated alert rules | No staging restore, notification delivery, or incident exercise |
 | Security | `npm audit --omit=dev --audit-level=high`: zero vulnerabilities on 2026-07-11; delivery workflow is configured to reject high/critical Trivy findings | Dependency gate green; deployed-image scan has not run |
 | Data retention | API migration 0012 and moderation migration 003 drive hourly non-overlapping cleanup for all alpha-private state. Active moderation cases and sessions are preserved; failure/staleness metrics alert for both runtimes. | Formal privacy/backup-deletion approval and deployed scheduler observations remain incomplete |
 | Data subject access and deactivation | Authenticated versioned export covers Patchwork-held alpha data without credentials or cross-subject projections. Durable deactivation removes Patchwork state, revokes login, sanitizes bounded retained exceptions, and suppresses future commands/projections. | Independent AT-repository deletion, controlled casework review, real staging exercise, and formal privacy approval remain incomplete |
-| Accessibility | 48 Chromium cases pass, including eight zero-violation axe route scans and cross-route 320px reflow | No independent WCAG 2.2 or assistive-technology review |
+| Accessibility | The 49-case Chromium gate passes, including eight zero-violation axe route scans and cross-route 320px reflow | No independent WCAG 2.2 or assistive-technology review |
 | Performance | Executable local HTTP probe passed modeled alpha read targets over 1,000 PostgreSQL projections with zero errors | No sustained staging workload, write/ingestion/moderation load, or resource saturation measurement |
 | Operations | Role-based RACI and incident procedures exist | No named humans have accepted staging on-call, product, engineering, or trust-and-safety ownership |
 
 Current verification baseline:
 
-- database-enabled repository suite: 866 tests;
-- PostgreSQL/HTTP integration: 28 tests;
+- database-enabled repository suite: 870 tests;
+- PostgreSQL/HTTP integration: 30 tests;
 - indexer PostgreSQL projection/reconciliation: 14 tests;
 - direct service integration: 9 tests;
-- Chromium: 48 passed, 1 externally gated case skipped;
-- database-enabled coverage: 65.55% statements, 52.24% branches, 59.51%
-  functions, 66.72% lines;
+- Chromium: 49 passed, 1 externally gated case skipped;
+- database-enabled coverage: 65.22% statements, 51.74% branches, 59.10%
+  functions, 66.39% lines;
 - API/indexer/moderation migrations replay cleanly at 13/3/3;
 - build, typecheck, lint, artifact redaction, and high-severity dependency audit
   pass.
