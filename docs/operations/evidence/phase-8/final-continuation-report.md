@@ -44,6 +44,11 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 
 ## Recent continuation commits
 
+- `b1f39df` — unique advertised production route contract;
+- `85d14e3` — session-derived durable block enforcement in discovery;
+- `8d82c1c` — authenticated lifecycle reads and public-status sync recovery;
+- `ac377a4` — durable account deactivation and resurrection suppression;
+- `702f7f2` — authenticated account data export;
 - `d9ef20f` — executable local alpha read-capacity evidence;
 - `b382cbd` — isolated browser gate and accessibility audit;
 - `be8c435` — closure and final-audit preparation;
@@ -56,6 +61,10 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 - `49cf598`, `4287596`, `90289f1` — ingestion, projections, discovery.
 
 ## Genuine external blockers
+
+The current prerequisite-by-prerequisite verification is recorded in
+`external-gate-audit.md`; it found all browser, staging, digest, and operator
+inputs absent and did not expose values or mutate external state.
 
 1. Authorized staging host, URL, registry, protected environment, and secrets.
 2. Two disposable OAuth/PDS browser accounts with redacted storage state.

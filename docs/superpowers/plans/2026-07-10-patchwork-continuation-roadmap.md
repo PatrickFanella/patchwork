@@ -577,6 +577,12 @@ any future selected slice must receive.
 
 **Phase 8 exit gate:** Patchwork either enters a bounded, supported pilot with explicit safety constraints or is closed with no live infrastructure or ambiguous roadmap commitments.
 
+External-gate audit: `docs/operations/evidence/phase-8/external-gate-audit.md`.
+All 15 remaining checklist items were checked against current runtime and tool
+state. Their browser accounts, staging/registry credentials, digest manifests,
+alert receiver, and human approvals are absent; no additional local runtime
+prerequisite was found. The items remain open and the decision remains `NO-GO`.
+
 ## Global acceptance suite
 
 Run this suite at each phase close, adding phase-specific tests as they land:
