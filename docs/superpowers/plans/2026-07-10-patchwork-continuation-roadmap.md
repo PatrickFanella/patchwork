@@ -398,11 +398,17 @@ Live provider authorization remains part of the Phase 6 exit journey.
 - Modify: `apps/web/vite.config.ts`
 - Test: `apps/web/src/features/api-client.test.ts`
 
-- [ ] Permit fixture data only when `VITE_DATA_MODE=fixture` in a local demo build.
-- [ ] Treat network, authentication, validation, and server failures as visible typed error states.
-- [ ] Ensure production builds fail if fixture mode is configured.
-- [ ] Add retry controls without duplicating successful mutations.
-- [ ] Commit as `fix(web): prohibit fixture fallback in production`.
+- [x] Permit fixture data only when `VITE_DATA_MODE=fixture` in a local demo build.
+- [x] Treat network, authentication, validation, and server failures as visible typed error states.
+- [x] Ensure production builds fail if fixture mode is configured.
+- [x] Add retry controls without duplicating successful mutations.
+- [x] Commit as `fix(web): prohibit fixture fallback in production`.
+
+Evidence: `docs/operations/evidence/phase-6/production-data-mode.md`. Production
+and default builds start discovery empty, query only the API, retain typed
+failure states, and expose retry only for idempotent reads. Demo records are
+split into an explicit local fixture module and are absent from the production
+artifact. Vite rejects `VITE_DATA_MODE=fixture` for a production build.
 
 ### Task 6.3: Complete the alpha browser journey
 

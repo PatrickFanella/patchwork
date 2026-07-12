@@ -111,6 +111,77 @@ describe('api client', () => {
         }
 
         expect(result.error).toContain('validation');
+        expect(result).toMatchObject({
+            code: 'INVALID_QUERY',
+            kind: 'validation',
+            retryable: false,
+        });
+    });
+
+    it.each([
+        [401, 'AUTH_REQUIRED', 'authentication', false],
+        [503, 'SERVICE_UNAVAILABLE', 'server', true],
+    ] as const)(
+        'classifies HTTP %i as a typed %s failure',
+        async (status, code, kind, retryable) => {
+            globalThis.fetch = vi.fn(async () =>
+                createJsonResponse(
+                    { error: { code, message: 'Request failed.' } },
+                    false,
+                    status,
+                ),
+            ) as unknown as typeof fetch;
+
+            const result = await fetchDirectoryCardsFromApi(baseDiscoveryState);
+
+            expect(result).toMatchObject({
+                ok: false,
+                code,
+                kind,
+                retryable,
+            });
+        },
+    );
+
+    it('classifies fetch rejection as a retryable network failure', async () => {
+        globalThis.fetch = vi.fn(async () => {
+            throw new TypeError('fetch failed');
+        }) as unknown as typeof fetch;
+
+        const result = await fetchDirectoryCardsFromApi(baseDiscoveryState);
+
+        expect(result).toMatchObject({
+            ok: false,
+            code: 'NETWORK_ERROR',
+            kind: 'network',
+            retryable: true,
+        });
+    });
+
+    it('rejects discovery rows without durable record identity', async () => {
+        globalThis.fetch = vi.fn(async () =>
+            createJsonResponse({
+                results: [
+                    {
+                        title: 'Unidentified request',
+                        summary: 'Missing URI and author DID.',
+                        status: 'open',
+                        category: 'food',
+                        urgency: 'medium',
+                        updatedAt: '2026-07-11T00:00:00.000Z',
+                    },
+                ],
+            }),
+        ) as unknown as typeof fetch;
+
+        const result = await fetchFeedRecordsFromApi(baseDiscoveryState, 'feed');
+
+        expect(result).toMatchObject({
+            ok: false,
+            code: 'INVALID_API_RESPONSE',
+            kind: 'validation',
+            retryable: false,
+        });
     });
 
     it('maps chat initiation fallback payload from API', async () => {

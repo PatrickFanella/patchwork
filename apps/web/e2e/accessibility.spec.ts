@@ -166,14 +166,11 @@ test.describe('Form accessibility', () => {
         ).toBeVisible();
     });
 
-    test('volunteer form inputs have associated labels', async ({ page }) => {
+    test('deferred prototype routes are identified without simulated forms', async ({ page }) => {
         await page.goto('/volunteer');
         await page.waitForLoadState('networkidle');
-
-        const labels = page.locator('label[for]');
-        const labelCount = await labels.count();
-
-        expect(labelCount).toBeGreaterThan(0);
+        await expect(page.getByText('Deferred from the alpha')).toBeVisible();
+        await expect(page.locator('form')).toHaveCount(0);
     });
 });
 

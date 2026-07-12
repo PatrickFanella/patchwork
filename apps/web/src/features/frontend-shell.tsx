@@ -69,7 +69,6 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Panel } from '../components/Panel';
-import { CoreFlowSurfaces } from '../components/surfaces';
 import { TextLink } from '../components/TextLink';
 import {
     type ApiDataOrigin,
@@ -102,12 +101,20 @@ import {
 } from '@patchwork/shared';
 import {
     defaultDiscoveryCenter,
-    defaultVolunteerDraft,
-    initialFeedRecords,
-    initialResourceCards,
     type FeedRecordEnvelope,
-} from './fixtures';
+} from './discovery-runtime';
 import { useAuth } from '../auth/AuthProvider';
+import { resolveWebDataMode } from './data-mode';
+
+const webDataMode = resolveWebDataMode(import.meta.env, {
+    command: import.meta.env.PROD ? 'build' : 'serve',
+    mode: import.meta.env.MODE,
+});
+
+const dataOriginLabel = (origin: ApiDataOrigin): string =>
+    origin === 'api' ? 'DB-backed API'
+    : origin === 'fixture' ? 'Local fixture demo'
+    : 'API unavailable';
 
 const appRoutes = [
     '/',
@@ -128,6 +135,18 @@ const appRoutes = [
     '/legal/privacy',
     '/legal/community-guidelines',
 ] as const;
+
+const deferredFixtureRoutes = new Set<AppRoute>([
+    '/volunteer',
+    '/chat',
+    '/settings',
+    '/moderation',
+    '/inbox',
+    '/notifications',
+    '/scheduling',
+    '/feedback',
+    '/groups',
+]);
 
 type AppRoute = (typeof appRoutes)[number];
 
@@ -735,7 +754,6 @@ const DashboardRoute = ({
                 </section>
             </div>
 
-            <CoreFlowSurfaces />
         </>
     );
 };
@@ -747,6 +765,7 @@ interface MapRouteProps {
     isLoading: boolean;
     errorMessage?: string;
     dataOrigin: ApiDataOrigin;
+    onRetry: () => void;
     selectedPostId?: string;
     onSelectPost: (id: string | undefined) => void;
     onTriageAction: (postId: string, action: MapTriageAction) => void;
@@ -760,6 +779,7 @@ const MapRoute = ({
     isLoading,
     errorMessage,
     dataOrigin,
+    onRetry,
     selectedPostId,
     onSelectPost,
     onTriageAction,
@@ -812,15 +832,16 @@ const MapRoute = ({
                 </p>
                 <div className='mt-3 flex flex-wrap gap-2'>
                     <Badge tone={dataOrigin === 'api' ? 'success' : 'info'}>
-                        {dataOrigin === 'api' ?
-                            'DB-backed API'
-                        :   'Fallback dataset'}
+                        {dataOriginLabel(dataOrigin)}
                     </Badge>
                 </div>
                 {errorMessage ?
-                    <p className='mh-alert mt-3 text-xs font-bold'>
-                        API sync issue: {errorMessage}
-                    </p>
+                    <div role='alert' className='mh-alert mt-3 text-xs font-bold'>
+                        <p>API sync issue: {errorMessage}</p>
+                        <Button type='button' variant='neutral' className='mt-2 px-3 py-1 text-xs' onClick={onRetry}>
+                            Retry discovery
+                        </Button>
+                    </div>
                 :   null}
             </header>
 
@@ -1089,6 +1110,7 @@ interface FeedRouteProps {
     isLoading: boolean;
     errorMessage?: string;
     dataOrigin: ApiDataOrigin;
+    onRetry: () => void;
     onNavigate: (route: AppRoute) => void;
     onOpenChat: (record: FeedRecordEnvelope, surface: ChatEntrySurface) => void;
     onUpdateCard: (id: string, patch: Partial<Omit<FeedAidCard, 'id'>>) => void;
@@ -1107,6 +1129,7 @@ const FeedRoute = ({
     isLoading,
     errorMessage,
     dataOrigin,
+    onRetry,
     onNavigate,
     onOpenChat,
     onUpdateCard,
@@ -1148,15 +1171,16 @@ const FeedRoute = ({
                 </p>
                 <div className='mt-3 flex flex-wrap gap-2'>
                     <Badge tone={dataOrigin === 'api' ? 'success' : 'info'}>
-                        {dataOrigin === 'api' ?
-                            'DB-backed API'
-                        :   'Fallback dataset'}
+                        {dataOriginLabel(dataOrigin)}
                     </Badge>
                 </div>
                 {errorMessage ?
-                    <p className='mh-alert mt-3 text-xs font-bold'>
-                        API sync issue: {errorMessage}
-                    </p>
+                    <div role='alert' className='mh-alert mt-3 text-xs font-bold'>
+                        <p>API sync issue: {errorMessage}</p>
+                        <Button type='button' variant='neutral' className='mt-2 px-3 py-1 text-xs' onClick={onRetry}>
+                            Retry discovery
+                        </Button>
+                    </div>
                 :   null}
             </header>
 
@@ -1759,6 +1783,7 @@ interface ResourceRouteProps {
     isLoading: boolean;
     errorMessage?: string;
     dataOrigin: ApiDataOrigin;
+    onRetry: () => void;
     resourceCards: readonly ResourceDirectoryCard[];
 }
 
@@ -1769,6 +1794,7 @@ const ResourceRoute = ({
     isLoading,
     errorMessage,
     dataOrigin,
+    onRetry,
     resourceCards,
 }: ResourceRouteProps) => {
     const [activeCategory, setActiveCategory] =
@@ -1826,15 +1852,16 @@ const ResourceRoute = ({
                 </p>
                 <div className='mt-3 flex flex-wrap gap-2'>
                     <Badge tone={dataOrigin === 'api' ? 'success' : 'info'}>
-                        {dataOrigin === 'api' ?
-                            'DB-backed API'
-                        :   'Fallback dataset'}
+                        {dataOriginLabel(dataOrigin)}
                     </Badge>
                 </div>
                 {errorMessage ?
-                    <p className='mh-alert mt-3 text-xs font-bold'>
-                        API sync issue: {errorMessage}
-                    </p>
+                    <div role='alert' className='mh-alert mt-3 text-xs font-bold'>
+                        <p>API sync issue: {errorMessage}</p>
+                        <Button type='button' variant='neutral' className='mt-2 px-3 py-1 text-xs' onClick={onRetry}>
+                            Retry directory
+                        </Button>
+                    </div>
                 :   null}
             </header>
 
@@ -2018,16 +2045,28 @@ const toggleInList = <TValue extends string>(
     return [...list, value];
 };
 
-const VolunteerRoute = () => {
-    const [draft, setDraft] = useState<VolunteerOnboardingDraft>(
-        defaultVolunteerDraft,
-    );
-    const [skillsText, setSkillsText] = useState(
-        defaultVolunteerDraft.skills.join(', '),
-    );
-    const [windowsText, setWindowsText] = useState(
-        defaultVolunteerDraft.availabilityWindows.join(', '),
-    );
+const VolunteerRoute = ({ did }: { did: string }) => {
+    const [draft, setDraft] = useState<VolunteerOnboardingDraft>(() => ({
+        did,
+        displayName: '',
+        capabilities: [],
+        availability: 'within-24h',
+        contactPreference: 'chat-only',
+        skills: [],
+        availabilityWindows: [],
+        preferredCategories: [],
+        preferredUrgencies: [],
+        maxDistanceKm: 5,
+        acceptsLateNight: false,
+        checkpoints: {
+            identityCheck: 'pending',
+            safetyTraining: 'pending',
+            communityReference: 'pending',
+        },
+        notes: '',
+    }));
+    const [skillsText, setSkillsText] = useState('');
+    const [windowsText, setWindowsText] = useState('');
     const [errors, setErrors] = useState<
         readonly VolunteerOnboardingValidationIssue[]
     >([]);
@@ -3134,19 +3173,24 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         () => readDiscoveryStateFromUrl(defaultShellDiscoveryState),
     );
 
-    const [feedRecords, setFeedRecords] =
-        useState<FeedRecordEnvelope[]>(initialFeedRecords);
-    const [resourceCards, setResourceCards] =
-        useState<ResourceDirectoryCard[]>(initialResourceCards);
+    const [feedRecords, setFeedRecords] = useState<FeedRecordEnvelope[]>([]);
+    const [resourceCards, setResourceCards] = useState<
+        ResourceDirectoryCard[]
+    >([]);
     const [isAidLoading, setIsAidLoading] = useState(false);
     const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     const [aidErrorMessage, setAidErrorMessage] = useState<string>();
     const [directoryErrorMessage, setDirectoryErrorMessage] =
         useState<string>();
-    const [aidDataOrigin, setAidDataOrigin] =
-        useState<ApiDataOrigin>('fallback');
+    const [aidDataOrigin, setAidDataOrigin] = useState<ApiDataOrigin>(
+        webDataMode === 'fixture' ? 'fixture' : 'unavailable',
+    );
     const [directoryDataOrigin, setDirectoryDataOrigin] =
-        useState<ApiDataOrigin>('fallback');
+        useState<ApiDataOrigin>(
+            webDataMode === 'fixture' ? 'fixture' : 'unavailable',
+        );
+    const [aidReload, setAidReload] = useState(0);
+    const [directoryReload, setDirectoryReload] = useState(0);
     const [selectedMapPostId, setSelectedMapPostId] = useState<string>();
     const [chatIntent, setChatIntent] = useState<ChatInitiationIntent>();
     const [chatState, setChatState] = useState<ChatLaunchState>(
@@ -3157,6 +3201,25 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const [chatRequestPreview, setChatRequestPreview] = useState<string>();
 
     const currentUserDid = auth.session?.did ?? '';
+
+    useEffect(() => {
+        if (import.meta.env.VITE_DATA_MODE !== 'fixture') {
+            return;
+        }
+
+        let active = true;
+        void import('./fixtures').then(
+            ({ fixtureFeedRecords, fixtureResourceCards }) => {
+                if (!active) return;
+                setFeedRecords([...fixtureFeedRecords]);
+                setResourceCards([...fixtureResourceCards]);
+            },
+        );
+
+        return () => {
+            active = false;
+        };
+    }, []);
 
     const discoveryQueryString = useMemo(
         () => serializeDiscoveryFilterState(discoveryState),
@@ -3199,6 +3262,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         if (currentRoute !== '/map' && currentRoute !== '/feed') {
             return undefined;
         }
+        if (webDataMode === 'fixture') return undefined;
 
         const controller = new AbortController();
         setIsAidLoading(true);
@@ -3220,8 +3284,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                     return;
                 }
 
-                setAidDataOrigin('fallback');
-                setAidErrorMessage(result.error);
+                setAidDataOrigin('unavailable');
+                setAidErrorMessage(
+                    `${result.kind} ${result.code}: ${result.error}`,
+                );
             })
             .finally(() => {
                 if (!controller.signal.aborted) {
@@ -3232,12 +3298,13 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         return () => {
             controller.abort();
         };
-    }, [currentRoute, discoveryState]);
+    }, [aidReload, currentRoute, discoveryState]);
 
     useEffect(() => {
         if (currentRoute !== '/resources') {
             return undefined;
         }
+        if (webDataMode === 'fixture') return undefined;
 
         const controller = new AbortController();
         setIsDirectoryLoading(true);
@@ -3255,8 +3322,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                     return;
                 }
 
-                setDirectoryDataOrigin('fallback');
-                setDirectoryErrorMessage(result.error);
+                setDirectoryDataOrigin('unavailable');
+                setDirectoryErrorMessage(
+                    `${result.kind} ${result.code}: ${result.error}`,
+                );
             })
             .finally(() => {
                 if (!controller.signal.aborted) {
@@ -3267,7 +3336,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         return () => {
             controller.abort();
         };
-    }, [currentRoute, discoveryState]);
+    }, [currentRoute, directoryReload, discoveryState]);
 
     const navigate = (route: AppRoute) => {
         if (typeof window !== 'undefined') {
@@ -3410,9 +3479,18 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         currentRoute === '/posting' ||
         currentRoute === '/chat' ||
         currentRoute === '/settings';
+    const isDeferredFixtureRoute =
+        webDataMode !== 'fixture' && deferredFixtureRoutes.has(currentRoute);
 
     const content =
-        requiresAuthentication && !auth.session ?
+        isDeferredFixtureRoute ?
+            <Panel title='Deferred from the alpha'>
+                <p>
+                    This prototype surface is available only in the explicit
+                    local fixture demo and is not part of the production alpha.
+                </p>
+            </Panel>
+        : requiresAuthentication && !auth.session ?
             <Panel title='Sign in required'>
                 <p>
                     This action uses your authenticated AT Protocol identity.
@@ -3432,6 +3510,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 isLoading={isAidLoading}
                 errorMessage={aidErrorMessage}
                 dataOrigin={aidDataOrigin}
+                onRetry={() => setAidReload(value => value + 1)}
                 selectedPostId={selectedMapPostId}
                 onSelectPost={setSelectedMapPostId}
                 onOpenChat={openChatFromRecord}
@@ -3461,6 +3540,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 isLoading={isAidLoading}
                 errorMessage={aidErrorMessage}
                 dataOrigin={aidDataOrigin}
+                onRetry={() => setAidReload(value => value + 1)}
                 onNavigate={navigate}
                 onOpenChat={openChatFromRecord}
                 onUpdateCard={(id, patch) => {
@@ -3519,9 +3599,11 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 isLoading={isDirectoryLoading}
                 errorMessage={directoryErrorMessage}
                 dataOrigin={directoryDataOrigin}
+                onRetry={() => setDirectoryReload(value => value + 1)}
                 resourceCards={resourceCards}
             />
-        : currentRoute === '/volunteer' ? <VolunteerRoute />
+        : currentRoute === '/volunteer' ?
+            <VolunteerRoute did={currentUserDid} />
         : currentRoute === '/chat' ?
             <ChatRoute
                 currentUserDid={currentUserDid}

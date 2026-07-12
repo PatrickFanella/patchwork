@@ -11,7 +11,10 @@ import type {
     DirectoryResourceCategory,
     ResourceDirectoryCard,
 } from '../resource-directory-ux';
-import { defaultDiscoveryCenter, type FeedRecordEnvelope } from './fixtures';
+import {
+    defaultDiscoveryCenter,
+    type FeedRecordEnvelope,
+} from './discovery-runtime';
 import type {
     SettingsChangeAudit,
     UserSettings,
@@ -21,7 +24,7 @@ import {
     type AidPostRecord,
 } from '@patchwork/at-lexicons';
 
-export type ApiDataOrigin = 'api' | 'fallback';
+export type ApiDataOrigin = 'api' | 'fixture' | 'unavailable';
 
 export interface ApiClientSuccess<TData> {
     ok: true;
@@ -31,6 +34,9 @@ export interface ApiClientSuccess<TData> {
 export interface ApiClientFailure {
     ok: false;
     error: string;
+    code: string;
+    kind: 'network' | 'authentication' | 'validation' | 'conflict' | 'server';
+    retryable: boolean;
 }
 
 export type ApiClientResult<TData> = ApiClientSuccess<TData> | ApiClientFailure;
@@ -278,6 +284,48 @@ const toErrorMessage = (payload: unknown, fallback: string): string => {
     return readString(errorPayload, 'message') ?? fallback;
 };
 
+const toErrorCode = (payload: unknown, fallback: string): string => {
+    if (!isRecord(payload) || !isRecord(payload['error'])) return fallback;
+    return readString(payload['error'], 'code') ?? fallback;
+};
+
+const failureForResponse = (
+    payload: unknown,
+    status: number,
+): ApiClientFailure => {
+    const kind: ApiClientFailure['kind'] =
+        status === 401 || status === 403 ? 'authentication'
+        : status === 409 ? 'conflict'
+        : status === 400 || status === 422 ? 'validation'
+        : 'server';
+    return {
+        ok: false,
+        error: toErrorMessage(payload, `API request failed (${status}).`),
+        code: toErrorCode(payload, `HTTP_${status}`),
+        kind,
+        retryable: status === 408 || status === 429 || status >= 500,
+    };
+};
+
+const networkFailure = (error: unknown): ApiClientFailure => ({
+    ok: false,
+    error:
+        error instanceof Error ? error.message : 'Unable to reach API endpoint.',
+    code: error instanceof DOMException && error.name === 'AbortError' ?
+        'REQUEST_TIMEOUT'
+    :   'NETWORK_ERROR',
+    kind: 'network',
+    retryable: true,
+});
+
+const invalidResponseFailure = (message: string): ApiClientFailure => ({
+    ok: false,
+    error: message,
+    code: 'INVALID_API_RESPONSE',
+    kind: 'validation',
+    retryable: false,
+});
+
 const requestJson = async (
     path: string,
     params: URLSearchParams,
@@ -311,13 +359,7 @@ const requestJson = async (
         const payload = await response.json().catch(() => undefined);
 
         if (!response.ok) {
-            return {
-                ok: false,
-                error: toErrorMessage(
-                    payload,
-                    `API request failed (${response.status}).`,
-                ),
-            };
+            return failureForResponse(payload, response.status);
         }
 
         return {
@@ -325,13 +367,7 @@ const requestJson = async (
             data: payload,
         };
     } catch (error) {
-        return {
-            ok: false,
-            error:
-                error instanceof Error ?
-                    error.message
-                :   'Unable to reach API endpoint.',
-        };
+        return networkFailure(error);
     } finally {
         clearTimeout(timeoutId);
     }
@@ -377,13 +413,7 @@ const requestJsonPost = async (
         const payload = await response.json().catch(() => undefined);
 
         if (!response.ok) {
-            return {
-                ok: false,
-                error: toErrorMessage(
-                    payload,
-                    `API request failed (${response.status}).`,
-                ),
-            };
+            return failureForResponse(payload, response.status);
         }
 
         return {
@@ -391,13 +421,7 @@ const requestJsonPost = async (
             data: payload,
         };
     } catch (error) {
-        return {
-            ok: false,
-            error:
-                error instanceof Error ?
-                    error.message
-                :   'Unable to reach API endpoint.',
-        };
+        return networkFailure(error);
     } finally {
         clearTimeout(timeoutId);
     }
@@ -443,13 +467,7 @@ const requestJsonPut = async (
         const payload = await response.json().catch(() => undefined);
 
         if (!response.ok) {
-            return {
-                ok: false,
-                error: toErrorMessage(
-                    payload,
-                    `API request failed (${response.status}).`,
-                ),
-            };
+            return failureForResponse(payload, response.status);
         }
 
         return {
@@ -457,13 +475,7 @@ const requestJsonPut = async (
             data: payload,
         };
     } catch (error) {
-        return {
-            ok: false,
-            error:
-                error instanceof Error ?
-                    error.message
-                :   'Unable to reach API endpoint.',
-        };
+        return networkFailure(error);
     } finally {
         clearTimeout(timeoutId);
     }
@@ -494,21 +506,9 @@ const requestJsonDelete = async (
         const payload = await response.json().catch(() => undefined);
         return response.ok ?
                 { ok: true, data: payload }
-            :   {
-                    ok: false,
-                    error: toErrorMessage(
-                        payload,
-                        `API request failed (${response.status}).`,
-                    ),
-                };
+            :   failureForResponse(payload, response.status);
     } catch (error) {
-        return {
-            ok: false,
-            error:
-                error instanceof Error ?
-                    error.message
-                :   'Unable to reach API endpoint.',
-        };
+        return networkFailure(error);
     }
 };
 
@@ -522,13 +522,13 @@ const parseAtAidPostResult = (
     payload: unknown,
 ): ApiClientResult<AtAidPostResult> => {
     if (!isRecord(payload)) {
-        return { ok: false, error: 'Aid-post response was malformed.' };
+        return invalidResponseFailure('Aid-post response was malformed.');
     }
     const uri = readString(payload, 'uri');
     const cid = readString(payload, 'cid');
     const record = aidPostSchema.safeParse(payload['record']);
     if (!uri || !cid || !record.success) {
-        return { ok: false, error: 'Aid-post response was malformed.' };
+        return invalidResponseFailure('Aid-post response was malformed.');
     }
     return { ok: true, data: { uri, cid, record: record.data } };
 };
@@ -605,7 +605,7 @@ export const fetchSettingsFromApi = async (
     }
 
     if (!isRecord(result.data)) {
-        return { ok: false, error: 'Settings response was malformed.' };
+        return invalidResponseFailure('Settings response was malformed.');
     }
 
     return {
@@ -630,7 +630,7 @@ export const updateSettingsViaApi = async (
     }
 
     if (!isRecord(result.data)) {
-        return { ok: false, error: 'Settings update response was malformed.' };
+        return invalidResponseFailure('Settings update response was malformed.');
     }
 
     return {
@@ -654,7 +654,7 @@ export const fetchSettingsAuditFromApi = async (
     }
 
     if (!isRecord(result.data)) {
-        return { ok: false, error: 'Audit trail response was malformed.' };
+        return invalidResponseFailure('Audit trail response was malformed.');
     }
 
     return {
@@ -679,7 +679,7 @@ export const deactivateAccountViaApi = async (
     }
 
     if (!isRecord(result.data)) {
-        return { ok: false, error: 'Deactivation response was malformed.' };
+        return invalidResponseFailure('Deactivation response was malformed.');
     }
 
     return {
@@ -704,7 +704,7 @@ export const exportDataViaApi = async (
     }
 
     if (!isRecord(result.data)) {
-        return { ok: false, error: 'Export response was malformed.' };
+        return invalidResponseFailure('Export response was malformed.');
     }
 
     return {
@@ -783,7 +783,9 @@ const parseDirectoryCategory = (
     return 'other';
 };
 
-const mapAidPayloadToRecords = (payload: unknown): FeedRecordEnvelope[] => {
+const mapAidPayloadToRecords = (
+    payload: unknown,
+): FeedRecordEnvelope[] | undefined => {
     if (!isRecord(payload)) {
         return [];
     }
@@ -793,17 +795,31 @@ const mapAidPayloadToRecords = (payload: unknown): FeedRecordEnvelope[] => {
         return [];
     }
 
-    return rows
-        .map((row, index) => {
+    const mapped = rows.map((row, index) => {
             if (!isRecord(row)) {
                 return undefined;
             }
 
-            const uri =
-                readString(row, 'uri') ??
-                `at://did:example:unknown/app.patchwork.aid.post/remote-${index}`;
-            const authorDid =
-                readString(row, 'authorDid') ?? 'did:example:unknown';
+            const uri = readString(row, 'uri');
+            const authorDid = readString(row, 'authorDid');
+            const title = readString(row, 'title');
+            const summary = readString(row, 'summary');
+            const category = readString(row, 'category');
+            const status = readString(row, 'status');
+            const urgency = readString(row, 'urgency');
+            const updatedAt = readString(row, 'updatedAt');
+            if (
+                !uri ||
+                !authorDid ||
+                !title ||
+                !summary ||
+                !category ||
+                !status ||
+                !urgency ||
+                !updatedAt
+            ) {
+                return undefined;
+            }
 
             const approximateGeo =
                 isRecord(row['approximateGeo']) ?
@@ -823,21 +839,18 @@ const mapAidPayloadToRecords = (payload: unknown): FeedRecordEnvelope[] => {
 
             const createdAt =
                 readString(row, 'createdAt') ??
-                readString(row, 'updatedAt') ??
-                new Date().toISOString();
-            const updatedAt = readString(row, 'updatedAt') ?? createdAt;
+                updatedAt;
 
             return {
                 aidPostUri: uri,
                 recipientDid: authorDid,
                 card: createFeedCard({
                     id: parseRecordIdFromUri(uri, `remote-${index}`),
-                    title: readString(row, 'title') ?? 'Untitled request',
-                    description:
-                        readString(row, 'summary') ?? 'No summary available.',
-                    category: parseAidCategory(readString(row, 'category')),
-                    status: parseAidStatus(readString(row, 'status')),
-                    urgency: parseUrgency(readString(row, 'urgency')),
+                    title,
+                    description: summary,
+                    category: parseAidCategory(category),
+                    status: parseAidStatus(status),
+                    urgency: parseUrgency(urgency),
                     accessibilityTags: [],
                     createdAt,
                     updatedAt,
@@ -850,13 +863,14 @@ const mapAidPayloadToRecords = (payload: unknown): FeedRecordEnvelope[] => {
                         :   undefined,
                 }),
             } satisfies FeedRecordEnvelope;
-        })
-        .filter((value): value is FeedRecordEnvelope => Boolean(value));
+        });
+    if (mapped.some(value => value === undefined)) return undefined;
+    return mapped as FeedRecordEnvelope[];
 };
 
 const mapDirectoryPayloadToCards = (
     payload: unknown,
-): ResourceDirectoryCard[] => {
+): ResourceDirectoryCard[] | undefined => {
     if (!isRecord(payload)) {
         return [];
     }
@@ -866,14 +880,28 @@ const mapDirectoryPayloadToCards = (
         return [];
     }
 
+    const hasMalformedRow = rows.some(row => {
+        if (!isRecord(row)) return true;
+        const approximateGeo = row['approximateGeo'];
+        return (
+            !readString(row, 'uri') ||
+            !readString(row, 'name') ||
+            !isRecord(approximateGeo) ||
+            (readNumber(approximateGeo, 'latitude') ??
+                readNumber(approximateGeo, 'lat')) === undefined ||
+            (readNumber(approximateGeo, 'longitude') ??
+                readNumber(approximateGeo, 'lng')) === undefined
+        );
+    });
+    if (hasMalformedRow) return undefined;
+
     return rows.reduce<ResourceDirectoryCard[]>((cards, row, index) => {
         if (!isRecord(row)) {
             return cards;
         }
 
-        const uri =
-            readString(row, 'uri') ??
-            `at://did:example:resource/app.patchwork.directory.resource/remote-${index}`;
+        const uri = readString(row, 'uri');
+        const name = readString(row, 'name');
         const approximateGeo =
             isRecord(row['approximateGeo']) ? row['approximateGeo'] : undefined;
 
@@ -892,16 +920,20 @@ const mapDirectoryPayloadToCards = (
                 readNumber(approximateGeo, 'precisionKm')
             :   undefined;
 
+        if (!uri || !name || lat === undefined || lng === undefined) {
+            return cards;
+        }
+
         const contact = isRecord(row['contact']) ? row['contact'] : {};
 
         cards.push({
             uri,
             id: parseRecordIdFromUri(uri, `remote-${index}`),
-            name: readString(row, 'name') ?? 'Unnamed resource',
+            name,
             category: parseDirectoryCategory(readString(row, 'category')),
             location: {
-                lat: lat ?? defaultDiscoveryCenter.lat,
-                lng: lng ?? defaultDiscoveryCenter.lng,
+                lat,
+                lng,
                 precisionMeters:
                     precisionKm !== undefined ?
                         Math.round(precisionKm * 1000)
@@ -935,10 +967,9 @@ export const fetchFeedRecordsFromApi = async (
         return result;
     }
 
-    return {
-        ok: true,
-        data: mapAidPayloadToRecords(result.data),
-    };
+    const records = mapAidPayloadToRecords(result.data);
+    return records ? { ok: true, data: records }
+    : invalidResponseFailure('Discovery response was malformed.');
 };
 
 export const fetchDirectoryCardsFromApi = async (
@@ -955,10 +986,9 @@ export const fetchDirectoryCardsFromApi = async (
         return result;
     }
 
-    return {
-        ok: true,
-        data: mapDirectoryPayloadToCards(result.data),
-    };
+    const cards = mapDirectoryPayloadToCards(result.data);
+    return cards ? { ok: true, data: cards }
+    : invalidResponseFailure('Directory response was malformed.');
 };
 
 export const initiateChatViaApi = async (
@@ -979,18 +1009,14 @@ export const initiateChatViaApi = async (
     }
 
     if (!isRecord(result.data)) {
-        return {
-            ok: false,
-            error: 'Chat initiation response was malformed.',
-        };
+        return invalidResponseFailure('Chat initiation response was malformed.');
     }
 
     const conversationUri = readString(result.data, 'conversationUri');
     if (!conversationUri) {
-        return {
-            ok: false,
-            error: 'Chat initiation did not return a conversation URI.',
-        };
+        return invalidResponseFailure(
+            'Chat initiation did not return a conversation URI.',
+        );
     }
 
     const fallbackNoticeRaw =
@@ -1124,10 +1150,9 @@ export const transitionAidPostViaApi = async (
     }
 
     if (!isRecord(result.data)) {
-        return {
-            ok: false,
-            error: 'Lifecycle transition response was malformed.',
-        };
+        return invalidResponseFailure(
+            'Lifecycle transition response was malformed.',
+        );
     }
 
     return {
@@ -1148,10 +1173,7 @@ export const queryAidPostLifecycleViaApi = async (
     }
 
     if (!isRecord(result.data)) {
-        return {
-            ok: false,
-            error: 'Lifecycle query response was malformed.',
-        };
+        return invalidResponseFailure('Lifecycle query response was malformed.');
     }
 
     return {

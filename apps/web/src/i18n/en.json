@@ -61,7 +61,6 @@
         "heading": "Map triage",
         "description": "Approximate-area clustering with privacy-safe radii and direct handoff actions.",
         "dbBackedApi": "DB-backed API",
-        "fallbackDataset": "Fallback dataset",
         "apiSyncIssue": "API sync issue: {{message}}",
         "clusterOverviewTitle": "Cluster overview",
         "noClusters": "No clusters for current filters. Try widening radius or clearing category/status chips.",

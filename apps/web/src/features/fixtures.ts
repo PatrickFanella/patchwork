@@ -1,19 +1,9 @@
-import { createFeedCard, type FeedAidCard } from '../feed-ux';
+import { createFeedCard } from '../feed-ux';
 import type { ResourceDirectoryCard } from '../resource-directory-ux';
-import type { VolunteerOnboardingDraft } from '../volunteer-onboarding';
+import type { FeedRecordEnvelope } from './discovery-runtime';
 
-export interface FeedRecordEnvelope {
-    aidPostUri: string;
-    recipientDid: string;
-    card: FeedAidCard;
-}
-
-export const defaultDiscoveryCenter = {
-    lat: 40.7128,
-    lng: -74.006,
-} as const;
-
-export const initialFeedRecords: FeedRecordEnvelope[] = [
+/** Local demo data. Runtime callers must gate this behind VITE_DATA_MODE=fixture. */
+export const fixtureFeedRecords: FeedRecordEnvelope[] = [
     {
         aidPostUri: 'at://did:example:resident-1/app.patchwork.aid.post/post-1',
         recipientDid: 'did:example:resident-1',
@@ -80,7 +70,8 @@ export const initialFeedRecords: FeedRecordEnvelope[] = [
     },
 ];
 
-export const initialResourceCards: ResourceDirectoryCard[] = [
+/** Local demo data. Runtime callers must gate this behind VITE_DATA_MODE=fixture. */
+export const fixtureResourceCards: ResourceDirectoryCard[] = [
     {
         uri: 'at://did:example:org/app.patchwork.directory.resource/food-01',
         id: 'food-01',
@@ -151,23 +142,3 @@ export const initialResourceCards: ResourceDirectoryCard[] = [
         },
     },
 ];
-
-export const defaultVolunteerDraft: VolunteerOnboardingDraft = {
-    did: 'did:example:helper001',
-    displayName: 'Ari',
-    capabilities: ['transport', 'food-delivery'],
-    availability: 'within-24h',
-    contactPreference: 'chat-or-call',
-    skills: ['First aid', 'Meal delivery'],
-    availabilityWindows: ['weekday_evenings', 'weekend_mornings'],
-    preferredCategories: ['medical', 'food'],
-    preferredUrgencies: ['high', 'critical'],
-    maxDistanceKm: 15,
-    acceptsLateNight: true,
-    checkpoints: {
-        identityCheck: 'approved',
-        safetyTraining: 'approved',
-        communityReference: 'pending',
-    },
-    notes: 'Comfortable with intake triage and multilingual support.',
-};

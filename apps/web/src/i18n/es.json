@@ -61,7 +61,6 @@
         "heading": "Triaje de mapa",
         "description": "Agrupaci\u00f3n de \u00e1rea aproximada con radios seguros para la privacidad y acciones directas de traspaso.",
         "dbBackedApi": "API respaldada por BD",
-        "fallbackDataset": "Conjunto de datos de respaldo",
         "apiSyncIssue": "Problema de sincronizaci\u00f3n de API: {{message}}",
         "clusterOverviewTitle": "Resumen de cl\u00fasteres",
         "noClusters": "No hay cl\u00fasteres para los filtros actuales. Intenta ampliar el radio o limpiar los chips de categor\u00eda/estado.",
