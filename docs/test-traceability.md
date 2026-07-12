@@ -20,11 +20,11 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Database-enabled full repository suite | 832 passed |
+| Database-enabled full repository suite | 836 passed |
 | Direct lifecycle service integration | 9 passed |
 | PostgreSQL integration, including HTTP boundary | 24 passed |
 | Browser Chromium suite | 39 passed, 1 externally gated case skipped |
-| Diagnostic coverage without database suites | 58.24% statements, 45.95% branches, 51.50% functions, 59.46% lines |
+| Diagnostic coverage without database suites | 58.22% statements, 45.95% branches, 51.44% functions, 59.44% lines |
 | External AT protocol | Two-account create/read/update/close/delete and ownership denial verified manually |
 
 Counts can change as tests are consolidated. Readiness depends on covered boundaries, not the aggregate.

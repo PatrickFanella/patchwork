@@ -198,7 +198,8 @@ jobs:
     deploy-staging:
         runs-on: ubuntu-latest
         needs: [quality-gates, e2e-production]
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        # Superseded by deploy-staging.yml after this CI workflow succeeds.
+        if: ${{ false }}
         timeout-minutes: 15
 
         steps:
@@ -271,11 +272,8 @@ jobs:
 
             - name: Staging smoke checks (#108)
               run: |
-                  echo "Staging smoke gate -- validating deployment readiness"
-                  echo "PASS: All images built with immutable tags"
-                  echo "PASS: OCI labels verified on all images"
-                  echo "PASS: Artifact metadata recorded"
-                  echo "Staging deployment eligible for promotion"
+                  echo "Legacy staging job is disabled; deploy-staging.yml owns deployment."
+                  exit 1
 
     # -----------------------------------------------------------------------
     # Wave 4 (#110): Progressive delivery observability checkpoints
@@ -283,7 +281,8 @@ jobs:
     progressive-delivery-gate:
         runs-on: ubuntu-latest
         needs: deploy-staging
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        # Superseded by deployed readiness and browser gates in deploy-staging.yml.
+        if: ${{ false }}
         timeout-minutes: 10
 
         steps:
@@ -295,18 +294,14 @@ jobs:
                   echo "=== Progressive Delivery Gate ==="
                   echo "Strategy: canary (5% -> 25% -> 50% -> 100%)"
                   echo ""
-                  echo "Checkpoint: health-probe ......... PASS"
-                  echo "Checkpoint: smoke-test ........... PASS"
-                  echo "Checkpoint: error-rate-check ..... PASS"
-                  echo "Checkpoint: latency-check ........ PASS"
-                  echo "Checkpoint: saturation-check ..... PASS"
+                  echo "Legacy simulated checkpoint job is disabled."
                   echo ""
                   echo "Burn-rate thresholds:"
                   echo "  error_rate: max 2.0x budget over 5m"
                   echo "  latency_p95: max 1.5x budget over 5m"
                   echo "  saturation: max 1.5x budget over 10m"
                   echo ""
-                  echo "Result: All checkpoints passed -- canary eligible"
+                  exit 1
 
             - name: Rollback trigger configuration audit (#110)
               run: |

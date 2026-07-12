@@ -1,49 +1,51 @@
-# Progressive Delivery Runbook (#110)
+# Staging Delivery Runbook
 
 ## Overview
 
-Patchwork uses a canary-based progressive delivery strategy to reduce blast
-radius during production deploys. Traffic is shifted incrementally while
-observability checkpoints validate each step.
+Patchwork currently uses an atomic, digest-pinned Compose deployment for the
+single staging host. Canary traffic shifting is not available until a real
+traffic-control layer exists; the older percentage model and echo-only CI job
+were not deployment evidence and are disabled.
 
-## Canary Rollout Strategy
+## Build-once promotion flow
 
-| Step | Traffic Weight | Bake Time | Smoke Check |
-|------|---------------|-----------|-------------|
-| canary-5% | 5% | 5 minutes | Required |
-| canary-25% | 25% | 5 minutes | Required |
-| canary-50% | 50% | 10 minutes | Required |
-| full-rollout | 100% | -- | -- |
+1. `CI` completes quality and PostgreSQL/service integration gates on `main`.
+2. `deploy-staging.yml` builds each of four runtime targets exactly once.
+3. Trivy rejects high/critical findings before publication.
+4. Images are pushed to GHCR, resolved to registry digests, keyless-signed with
+   Cosign, and recorded in `artifact-digests.json`.
+5. The protected `staging` environment authorizes deployment.
+6. The host pulls those exact digests, applies all migration jobs, and starts
+   services with `--no-build`.
+7. Deep readiness and the real two-account OAuth/PDS browser test determine
+   success. A failure invokes the previous digest manifest automatically.
 
-See `DEFAULT_CANARY_STEPS` in `packages/shared/src/progressive-delivery.ts`.
-
-## Rollout State Machine
+## Deployment state sequence
 
 ```
-not-started --> in-progress --> baking --> in-progress --> ... --> completed
-                    |              |
-                    v              v
-               rolled-back    rolled-back
-                    |              |
-                    v              v
-                aborted        aborted
+CI accepted -> images scanned -> images signed -> environment approved
+     -> migrations -> deep readiness -> browser smoke -> current manifest
+                              |                  |
+                              +---- failure -----+
+                                      |
+                              previous manifest
 ```
 
 Valid transitions are enforced by `isValidTransition()` and `ROLLOUT_TRANSITIONS`.
 
 ## Deployment Observability Checkpoints
 
-At each rollout step, the following checkpoints are evaluated:
+The deployment is accepted only when these executable checkpoints succeed:
 
 | Checkpoint | What It Checks |
 |-----------|----------------|
-| `health-probe` | Service `/health` endpoint returns 200 |
-| `smoke-test` | Service `/health/ready` returns 200 |
-| `error-rate-check` | Error rate below SLO burn threshold |
-| `latency-check` | p95 latency below SLO burn threshold |
-| `saturation-check` | Memory/queue saturation below threshold |
+| migration jobs | API, indexer, and moderation jobs exit zero |
+| service readiness | Each database-backed runtime returns 200 from `/health/ready` |
+| browser smoke | Real OAuth/PDS create, discover, report, block, close, delete passes |
+| artifact redaction | Failure traces contain none of the supplied sensitive values |
 
-Checkpoint results are visible in the CI `progressive-delivery-gate` job.
+Metrics-based canary promotion remains Task 7.3/production follow-up and must
+not be represented as passing until real telemetry is queried.
 
 ## SLO Burn-Rate Rollback Triggers
 
@@ -68,72 +70,16 @@ checks current rates against these thresholds.
 | `manual-abort` | Operator manually aborted the rollout |
 | `bake-timeout-exceeded` | Step did not complete within expected time |
 
-## Manual Override Procedures
-
-### Pause Rollout
-
-Freeze traffic at the current weight while investigating an issue.
+## Manual rollback
 
 ```bash
-make deploy-rollout-pause SERVICE=api
+cd "$STAGING_DEPLOY_PATH"
+./rollback-staging-digests.sh "$STAGING_ENV_FILE" docker-compose.staging.yml
 ```
 
-**When to use:** Unexpected behavior observed but not yet confirmed as a problem.
-Does not require elevated privileges.
-
-### Resume Rollout
-
-Continue a paused rollout from where it stopped.
-
-```bash
-make deploy-rollout-resume SERVICE=api
-```
-
-**When to use:** After investigating and confirming the issue is benign.
-
-### Skip Step
-
-Advance past the current bake step to the next traffic weight.
-
-```bash
-make deploy-rollout-skip SERVICE=api
-```
-
-**When to use:** Bake time has been sufficient but the step timer has not expired.
-Requires elevated privileges.
-
-### Abort Rollout
-
-Stop the rollout and route all traffic back to the previous version.
-
-```bash
-make deploy-rollout-abort SERVICE=api
-```
-
-**When to use:** Confirmed issue that requires rolling back. Does not require
-elevated privileges.
-
-### Force Complete
-
-Skip all remaining steps and route 100% traffic to the new version.
-
-```bash
-make deploy-rollout-force SERVICE=api
-```
-
-**When to use:** Emergency situations where the new version must go live
-immediately (e.g., security patch). Requires elevated privileges.
-
-### Manual Rollback
-
-Roll back to a specific previously-deployed version.
-
-```bash
-make rollback SERVICE=api ROLLBACK_TAG=0.9.0-a1b2c3d
-```
-
-**When to use:** Need to revert to a specific known-good version. Requires
-elevated privileges.
+This restores all four runtime images together. It deliberately does not run
+down migrations; see the forward-compatibility constraints in the rollback
+policy.
 
 ## Rollout Telemetry
 
@@ -148,7 +94,7 @@ During a progressive rollout, the following telemetry is emitted:
 4. **CI job output** -- The `progressive-delivery-gate` job prints checkpoint
    results and burn-rate thresholds
 
-### PromQL Queries During Rollout
+### PromQL queries for a future traffic-controlled rollout
 
 ```promql
 # Error rate on canary vs stable (by pod label)
@@ -162,13 +108,15 @@ patchwork_sli_request_duration_seconds{service="api",version="canary"}
 
 ## Escalation
 
-If a rollout causes an incident:
+If a staging deployment causes an incident:
 
-1. **Abort the rollout immediately:** `make deploy-rollout-abort SERVICE=<service>`
+1. **Restore the previous manifest immediately:** run
+   `rollback-staging-digests.sh` as shown above.
 2. Follow the [Incident Response Runbook](incident-response.md)
 3. Open a post-incident review after the rollback is confirmed stable
 4. Update the rollback record with the trigger reason and resolution
 
 ---
 
-*Tracks #110. Part of Wave 4, Lane 1: Release Environment & Promotion.*
+Do not enable percentage-based promotion until the traffic router and live SLO
+queries exist and have failure-drill evidence.

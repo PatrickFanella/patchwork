@@ -471,9 +471,16 @@ Deployment to the real staging host remains Task 7.2 and the Phase 7 exit gate.
 - [ ] Build all four runtime images once, scan them, sign them, and push digest-addressed artifacts to the selected registry.
 - [ ] Deploy those exact digests to staging; do not rebuild in the deployment job.
 - [ ] Run migrations, readiness checks, and the real browser smoke journey after deployment.
-- [ ] Replace echo-only staging checks with commands whose exit status reflects deployed service behavior.
-- [ ] Implement rollback to the prior known-good image digests and document database forward-compatibility constraints.
-- [ ] Commit as `ci: deploy immutable images to real staging`.
+- [x] Replace echo-only staging checks with commands whose exit status reflects deployed service behavior.
+- [x] Implement rollback to the prior known-good image digests and document database forward-compatibility constraints.
+- [x] Commit the locally verified delivery mechanism as `ci: deploy immutable images to real staging`.
+
+Local evidence: `docs/operations/evidence/phase-7/immutable-delivery.md`.
+The protected workflow builds each target once, scans before publication,
+signs and records registry digests, deploys with `--no-build`, runs migrations,
+deep readiness, and the real browser journey, and automatically restores the
+previous four-image manifest on failure. The first three items remain open
+until GHCR publication and an authorized staging deployment actually run.
 
 ### Task 7.3: Prove backup, restore, monitoring, and incident response
 

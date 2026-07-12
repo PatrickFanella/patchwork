@@ -27,6 +27,7 @@ services:
             staging-internal:
 
     patchwork-api:
+        image: ${PATCHWORK_API_IMAGE:-patchwork-api:local}
         build:
             context: .
             dockerfile: Dockerfile
@@ -74,6 +75,7 @@ services:
                     - patchwork-staging-api
 
     patchwork-spool:
+        image: ${PATCHWORK_INDEXER_IMAGE:-patchwork-indexer:local}
         build:
             context: .
             dockerfile: Dockerfile
@@ -106,6 +108,7 @@ services:
                     - patchwork-staging-spool
 
     patchwork-indexer-migrations:
+        image: ${PATCHWORK_INDEXER_IMAGE:-patchwork-indexer:local}
         build:
             context: .
             dockerfile: Dockerfile
@@ -124,6 +127,7 @@ services:
             staging-internal:
 
     patchwork-thimble:
+        image: ${PATCHWORK_MODERATION_IMAGE:-patchwork-moderation:local}
         build:
             context: .
             dockerfile: Dockerfile
@@ -154,6 +158,7 @@ services:
             staging-internal:
 
     patchwork-moderation-migrations:
+        image: ${PATCHWORK_MODERATION_IMAGE:-patchwork-moderation:local}
         build:
             context: .
             dockerfile: Dockerfile
@@ -172,6 +177,7 @@ services:
             staging-internal:
 
     patchwork-api-migrations:
+        image: ${PATCHWORK_API_IMAGE:-patchwork-api:local}
         build:
             context: .
             dockerfile: Dockerfile
@@ -191,6 +197,7 @@ services:
             staging-internal:
 
     patchwork-web:
+        image: ${PATCHWORK_WEB_IMAGE:-patchwork-web:local}
         build:
             context: .
             dockerfile: Dockerfile

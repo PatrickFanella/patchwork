@@ -1,0 +1,174 @@
+name: Deploy staging
+
+on:
+    workflow_run:
+        workflows: [CI]
+        types: [completed]
+    workflow_dispatch:
+        inputs:
+            source_sha:
+                description: Full commit SHA already accepted by CI
+                required: true
+
+permissions:
+    contents: read
+    packages: write
+    id-token: write
+    checks: read
+
+env:
+    REGISTRY: ghcr.io/${{ github.repository_owner }}
+    SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}
+
+jobs:
+    publish:
+        if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: true
+            matrix:
+                include:
+                    - service: api
+                      image: patchwork-api
+                      target: api-runtime
+                    - service: indexer
+                      image: patchwork-indexer
+                      target: indexer-runtime
+                    - service: moderation
+                      image: patchwork-moderation
+                      target: moderation-runtime
+                    - service: web
+                      image: patchwork-web
+                      target: web-runtime
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ env.SOURCE_SHA }}
+            - name: Verify manual source passed CI
+              if: github.event_name == 'workflow_dispatch'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  successful=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/check-runs" \
+                    --jq '[.check_runs[] | select(.name == "quality-gates" or .name == "e2e-production") | .conclusion] | sort | join(",")')
+                  [[ "$successful" == "success,success" ]]
+            - uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+            - uses: sigstore/cosign-installer@v3
+            - name: Build once
+              run: |
+                  image="${REGISTRY}/${{ matrix.image }}:${SOURCE_SHA}"
+                  docker build --target ${{ matrix.target }} \
+                    --build-arg GIT_SHA="${SOURCE_SHA}" \
+                    --build-arg GIT_BRANCH=main \
+                    --build-arg BUILD_VERSION="${SOURCE_SHA::12}" \
+                    --build-arg CI_RUN_ID="${GITHUB_RUN_ID}" \
+                    --build-arg VITE_API_BASE_URL="${{ vars.STAGING_VITE_API_BASE_URL }}" \
+                    --build-arg VITE_DATA_MODE=api \
+                    -t "$image" .
+            - name: Scan before publication
+              uses: aquasecurity/trivy-action@0.28.0
+              with:
+                  image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ env.SOURCE_SHA }}
+                  severity: HIGH,CRITICAL
+                  exit-code: '1'
+            - name: Push, resolve digest, and sign
+              run: |
+                  image="${REGISTRY}/${{ matrix.image }}:${SOURCE_SHA}"
+                  docker push "$image"
+                  digest_ref=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
+                  [[ "$digest_ref" =~ @sha256:[0-9a-f]{64}$ ]]
+                  cosign sign --yes "$digest_ref"
+                  cosign verify "$digest_ref" \
+                    --certificate-identity-regexp="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/deploy-staging.yml@.*" \
+                    --certificate-oidc-issuer=https://token.actions.githubusercontent.com >/dev/null
+                  printf '%s' "$digest_ref" > "digest-${{ matrix.service }}.txt"
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: digest-${{ matrix.service }}
+                  path: digest-${{ matrix.service }}.txt
+                  retention-days: 14
+
+    manifest:
+        needs: publish
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/download-artifact@v4
+              with:
+                  pattern: digest-*
+                  merge-multiple: true
+            - name: Assemble digest manifest
+              run: |
+                  jq -n \
+                    --arg sha "$SOURCE_SHA" \
+                    --arg api "$(cat digest-api.txt)" \
+                    --arg indexer "$(cat digest-indexer.txt)" \
+                    --arg moderation "$(cat digest-moderation.txt)" \
+                    --arg web "$(cat digest-web.txt)" \
+                    '{gitSha:$sha,images:{api:$api,indexer:$indexer,moderation:$moderation,web:$web}}' \
+                    > artifact-digests.json
+                  jq -e '.images[] | test("@sha256:[0-9a-f]{64}$")' artifact-digests.json >/dev/null
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: staging-artifact-digests
+                  path: artifact-digests.json
+                  retention-days: 30
+
+    deploy:
+        needs: manifest
+        runs-on: ubuntu-latest
+        environment: staging
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ env.SOURCE_SHA }}
+            - uses: actions/download-artifact@v4
+              with:
+                  name: staging-artifact-digests
+            - name: Configure staging SSH
+              run: |
+                  install -d -m 0700 ~/.ssh
+                  printf '%s\n' '${{ secrets.STAGING_SSH_PRIVATE_KEY }}' > ~/.ssh/id_ed25519
+                  chmod 0600 ~/.ssh/id_ed25519
+                  printf '%s\n' '${{ secrets.STAGING_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
+            - name: Transfer and deploy exact digests
+              run: |
+                  remote="${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}"
+                  destination="${{ vars.STAGING_DEPLOY_PATH }}"
+                  ssh "$remote" "mkdir -p '$destination'"
+                  scp artifact-digests.json docker-compose.staging.yml \
+                    scripts/deploy-staging-digests.sh scripts/rollback-staging-digests.sh \
+                    "$remote:$destination/"
+                  if ! ssh "$remote" \
+                    "cd '$destination' && chmod 0750 *.sh && ./deploy-staging-digests.sh artifact-digests.json '${{ vars.STAGING_ENV_FILE }}' docker-compose.staging.yml"; then
+                      ssh "$remote" \
+                        "cd '$destination' && ./rollback-staging-digests.sh '${{ vars.STAGING_ENV_FILE }}' docker-compose.staging.yml"
+                      exit 1
+                  fi
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '22'
+                  cache: npm
+            - run: npm ci
+            - run: npx playwright install --with-deps chromium
+              working-directory: apps/web
+            - name: Real OAuth/PDS browser smoke
+              env:
+                  PATCHWORK_E2E_BASE_URL: ${{ vars.STAGING_PUBLIC_ORIGIN }}
+                  PATCHWORK_E2E_EXACT_LATITUDE: ${{ secrets.STAGING_E2E_EXACT_LATITUDE }}
+                  PATCHWORK_E2E_EXACT_LONGITUDE: ${{ secrets.STAGING_E2E_EXACT_LONGITUDE }}
+                  PATCHWORK_E2E_PRIVATE_MARKER: ${{ secrets.STAGING_E2E_PRIVATE_MARKER }}
+                  PATCHWORK_ARTIFACT_REDACTION_TERMS: ${{ secrets.STAGING_ARTIFACT_REDACTION_TERMS }}
+              run: |
+                  printf '%s' '${{ secrets.STAGING_E2E_REQUESTER_STATE_B64 }}' | base64 -d > requester-state.json
+                  printf '%s' '${{ secrets.STAGING_E2E_HELPER_STATE_B64 }}' | base64 -d > helper-state.json
+                  export PATCHWORK_E2E_REQUESTER_STATE="$PWD/requester-state.json"
+                  export PATCHWORK_E2E_HELPER_STATE="$PWD/helper-state.json"
+                  if ! npm run test:e2e -w @patchwork/web -- e2e/at-record-lifecycle.spec.ts; then
+                    npm run test:e2e:redact
+                    exit 1
+                  fi
+                  npm run test:e2e:redact

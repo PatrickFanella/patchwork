@@ -1,20 +1,16 @@
 # Rollback Policy -- Immutable Versioning & Safe Rollback (#109)
 
-## Immutable Image Tagging
+## Immutable image digests
 
-All deployable artifacts use immutable tags in the format:
-
-```
-<semver>-<git-sha-short>
-```
-
-Example: `0.9.0-a1b2c3d`
+Tags are human-readable build references only. Deployment authority is the
+registry digest recorded in `artifact-digests.json`, for example
+`ghcr.io/example/patchwork-api@sha256:<64 hex characters>`.
 
 ### Tag Rules
 
-1. **Never overwrite tags.** Once an image is tagged, that tag is permanent.
-2. **Tags are derived from source.** The semver comes from `BUILD_VERSION`, the
-   SHA from `git rev-parse --short=7 HEAD`.
+1. **Never deploy a tag.** Host scripts reject any image without `@sha256:`.
+2. **Build once.** The deployment job consumes the digest of the scanned and
+   signed image; it never rebuilds source.
 3. **OCI labels** are embedded in every image for traceability:
    - `org.opencontainers.image.revision` -- git SHA
    - `org.opencontainers.image.version` -- semver
@@ -22,37 +18,26 @@ Example: `0.9.0-a1b2c3d`
    - `com.patchwork.ci.run-id` -- CI run ID
    - `com.patchwork.service` -- service name
 
-### Generating Tags
+4. **Promote as a set.** API, indexer, moderation, and web digests share one
+   manifest and roll forward or backward together.
+
+## One-command staging rollback
 
 ```bash
-# Print the current tag
-make image-tag
-
-# Build all images with immutable tags
-make image-build
-
-# Build with a custom version
-make image-build BUILD_VERSION=1.0.0
-```
-
-## One-Command Rollback
-
-To roll back a service to a previously-deployed tag:
-
-```bash
-make rollback SERVICE=api ROLLBACK_TAG=0.9.0-a1b2c3d
+./scripts/rollback-staging-digests.sh /etc/patchwork/staging.env docker-compose.staging.yml
 ```
 
 This command:
-1. Locates the specified image tag in the local registry
-2. Re-tags it as the deployment target
-3. Restarts the service with the previous version
+1. Reads `/var/lib/patchwork/releases/previous-artifact-digests.json`.
+2. Rejects mutable references and pulls the four exact digests.
+3. Restarts runtime services with `--no-build --no-deps`.
+4. Requires deep readiness before updating the current manifest pointer.
 
 ### Rollback Policy Defaults
 
 | Parameter | Value |
 |-----------|-------|
-| Retained versions | 5 |
+| Retained versions | Current and previous digest manifests on host; registry retention is operator policy |
 | Rollback window | 1 hour after deploy |
 | Requires approval | No (auto for listed triggers) |
 | Auto-rollback triggers | SLO burn exceeded, error rate spike, health check failure, smoke test failure |
@@ -75,16 +60,11 @@ characteristics:
 
 **Example:** Adding a new nullable column, creating a new index.
 
-### 2. Separate Rollback Migration
+### 2. Expand/contract migration
 
-**When:** Migration has a paired down-migration script.
-
-**Rollback procedure:**
-1. Run the down-migration: `npm run db:migrate:down -w @patchwork/api`
-2. Verify data integrity.
-3. Roll back the application.
-
-**Example:** Renaming a column with both up and down migrations.
+Breaking schema contraction must occur only after the rollback window closes
+and all retained application digests are known compatible. Patchwork currently
+has no automated down-migration command; documentation must not imply one.
 
 ### 3. Manual DBA (Emergency Only)
 
@@ -109,10 +89,9 @@ import { classifyMigrationRollback } from '@patchwork/shared';
 const guidance = classifyMigrationRollback({
     hasDropStatements: false,
     hasRenameStatements: false,
-    hasDownMigration: true,
+    hasDownMigration: false,
 });
-// guidance.strategy === 'separate-rollback-migration'
-// guidance.safeRollback === true
+// Additive migrations remain compatible with the previous app digest.
 ```
 
 ## Release Notes Template
@@ -123,10 +102,10 @@ Every release should include artifact and version references:
 ## Release v0.9.0
 
 ### Artifacts
-- API: `patchwork-api:0.9.0-a1b2c3d`
-- Indexer: `patchwork-spool:0.9.0-a1b2c3d`
-- Moderation: `patchwork-thimble:0.9.0-a1b2c3d`
-- Web: `patchwork-web:0.9.0-a1b2c3d`
+- API: `ghcr.io/example/patchwork-api@sha256:<digest>`
+- Indexer: `ghcr.io/example/patchwork-indexer@sha256:<digest>`
+- Moderation: `ghcr.io/example/patchwork-moderation@sha256:<digest>`
+- Web: `ghcr.io/example/patchwork-web@sha256:<digest>`
 
 ### Git
 - Commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
@@ -139,13 +118,11 @@ Every release should include artifact and version references:
 ### Rollback
 To roll back all services:
 \`\`\`bash
-make rollback SERVICE=api ROLLBACK_TAG=<previous-tag>
-make rollback SERVICE=spool ROLLBACK_TAG=<previous-tag>
-make rollback SERVICE=thimble ROLLBACK_TAG=<previous-tag>
-make rollback SERVICE=web ROLLBACK_TAG=<previous-tag>
+./scripts/rollback-staging-digests.sh /etc/patchwork/staging.env docker-compose.staging.yml
 \`\`\`
 ```
 
 ---
 
-*Tracks #109. Part of Wave 4, Lane 1: Release Environment & Promotion.*
+The release record must attach the exact `artifact-digests.json` used by the
+host and the result of readiness/browser verification.
