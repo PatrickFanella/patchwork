@@ -27,24 +27,36 @@ services:
         depends_on:
             postgres:
                 condition: service_healthy
+            patchwork-api-migrations:
+                condition: service_completed_successfully
             patchwork-indexer-migrations:
                 condition: service_completed_successfully
             patchwork-spool:
                 condition: service_healthy
+            patchwork-thimble:
+                condition: service_healthy
         environment:
             NODE_ENV: production
             LOG_LEVEL: ${LOG_LEVEL:-info}
-            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:-did:example:patchwork}
+            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            ATPROTO_OAUTH_CLIENT_ID: ${ATPROTO_OAUTH_CLIENT_ID:?Set ATPROTO_OAUTH_CLIENT_ID}
+            ATPROTO_OAUTH_REDIRECT_URI: ${ATPROTO_OAUTH_REDIRECT_URI:?Set ATPROTO_OAUTH_REDIRECT_URI}
+            ATPROTO_SESSION_ENCRYPTION_KEY: ${ATPROTO_SESSION_ENCRYPTION_KEY:?Set ATPROTO_SESSION_ENCRYPTION_KEY}
             API_HOST: 0.0.0.0
             API_PORT: 4000
-            API_PUBLIC_ORIGIN: ${PATCHWORK_PUBLIC_ORIGIN:-https://patchwork.subcult.tv}
+            API_PUBLIC_ORIGIN: ${PATCHWORK_PUBLIC_ORIGIN:?Set PATCHWORK_PUBLIC_ORIGIN}
             API_TRUSTED_PROXIES: ${API_TRUSTED_PROXIES:-}
             API_MAX_PROJECTION_LAG_SECONDS: ${API_MAX_PROJECTION_LAG_SECONDS:-300}
-            API_DATA_SOURCE: ${API_DATA_SOURCE:-postgres}
+            API_DATA_SOURCE: postgres
             API_DATABASE_URL: postgresql://patchwork:${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}@patchwork-postgres:5432/patchwork
             API_MODERATION_SERVICE_URL: http://patchwork-thimble:4200
             MODERATION_SERVICE_TOKEN: ${MODERATION_SERVICE_TOKEN:?Set MODERATION_SERVICE_TOKEN in .env}
+        healthcheck:
+            test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:4000/health/ready >/dev/null']
+            interval: 10s
+            timeout: 3s
+            retries: 18
         networks:
             internal:
             web:
@@ -72,7 +84,7 @@ services:
         environment:
             NODE_ENV: production
             LOG_LEVEL: ${LOG_LEVEL:-info}
-            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:-did:example:patchwork}
+            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
             INDEXER_PORT: 4100
             INDEXER_FIREHOSE_URL: ${INDEXER_FIREHOSE_URL:-wss://jetstream2.us-east.bsky.network/subscribe}
@@ -95,6 +107,9 @@ services:
             postgres:
                 condition: service_healthy
         environment:
+            NODE_ENV: production
+            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
+            ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
             DATABASE_URL: postgresql://patchwork:${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}@patchwork-postgres:5432/patchwork
         networks:
             internal:
@@ -109,12 +124,17 @@ services:
         environment:
             NODE_ENV: production
             LOG_LEVEL: ${LOG_LEVEL:-info}
-            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:-did:example:patchwork}
+            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
             DATABASE_URL: postgresql://patchwork:${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}@patchwork-postgres:5432/patchwork
             MODERATION_PORT: 4200
             MODERATION_WORKER_CONCURRENCY: ${MODERATION_WORKER_CONCURRENCY:-2}
             MODERATION_SERVICE_TOKEN: ${MODERATION_SERVICE_TOKEN:?Set MODERATION_SERVICE_TOKEN in .env}
+        healthcheck:
+            test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:4200/health/ready >/dev/null']
+            interval: 10s
+            timeout: 3s
+            retries: 18
         depends_on:
             postgres:
                 condition: service_healthy
@@ -134,7 +154,29 @@ services:
             postgres:
                 condition: service_healthy
         environment:
+            NODE_ENV: production
+            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
+            ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
             DATABASE_URL: postgresql://patchwork:${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}@patchwork-postgres:5432/patchwork
+        networks:
+            internal:
+
+    patchwork-api-migrations:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: api-runtime
+        restart: "no"
+        command: ['npm', 'run', 'db:migrate', '-w', '@patchwork/api']
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            NODE_ENV: production
+            ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
+            ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            API_DATA_SOURCE: postgres
+            API_DATABASE_URL: postgresql://patchwork:${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}@patchwork-postgres:5432/patchwork
         networks:
             internal:
 
@@ -145,11 +187,13 @@ services:
             target: web-runtime
             args:
                 VITE_APP_NAME: Patchwork
-                VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://patchwork.subcult.tv/api}
+                VITE_API_BASE_URL: ${VITE_API_BASE_URL:?Set VITE_API_BASE_URL}
+                VITE_DATA_MODE: api
         container_name: patchwork-web
         restart: unless-stopped
         depends_on:
-            - patchwork-api
+            patchwork-api:
+                condition: service_healthy
         networks:
             web:
                 aliases:

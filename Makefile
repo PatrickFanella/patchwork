@@ -139,7 +139,9 @@ deploy-pull: ## Pull latest upstream images referenced by compose file
 
 deploy-db-migrate: deploy-network ## Run DB migrations via production API container
 	$(DC) -f $(COMPOSE_FILE) up -d postgres
-	$(DC) -f $(COMPOSE_FILE) run --build --rm patchwork-api npm run db:migrate -w @patchwork/api
+	$(DC) -f $(COMPOSE_FILE) run --build --rm patchwork-api-migrations
+	$(DC) -f $(COMPOSE_FILE) run --build --rm patchwork-indexer-migrations
+	$(DC) -f $(COMPOSE_FILE) run --build --rm patchwork-moderation-migrations
 
 # ---------------------------------------------------------------------------
 # Staging environment (#108)
@@ -169,19 +171,21 @@ staging-logs: ## Tail staging stack logs
 
 staging-db-migrate: staging-network ## Run DB migrations via staging API container
 	$(DC) -f $(STAGING_COMPOSE_FILE) up -d postgres
-	$(DC) -f $(STAGING_COMPOSE_FILE) run --build --rm patchwork-api npm run db:migrate -w @patchwork/api
+	$(DC) -f $(STAGING_COMPOSE_FILE) run --build --rm patchwork-api-migrations
+	$(DC) -f $(STAGING_COMPOSE_FILE) run --build --rm patchwork-indexer-migrations
+	$(DC) -f $(STAGING_COMPOSE_FILE) run --build --rm patchwork-moderation-migrations
 
 staging-smoke: ## Run smoke checks against staging endpoints
 	@echo "Running staging smoke checks..."
 	@PASS=0; FAIL=0; \
 	for svc in api:4000 spool:4100 thimble:4200; do \
 		name=$${svc%%:*}; port=$${svc##*:}; \
-		url="http://patchwork-staging-$${name}:$${port}/health"; \
+		url="http://patchwork-staging-$${name}:$${port}/health/ready"; \
 		if curl -sf --max-time 5 "$$url" > /dev/null 2>&1; then \
-			echo "  PASS: $$name /health"; \
+			echo "  PASS: $$name /health/ready"; \
 			PASS=$$((PASS + 1)); \
 		else \
-			echo "  FAIL: $$name /health"; \
+			echo "  FAIL: $$name /health/ready"; \
 			FAIL=$$((FAIL + 1)); \
 		fi; \
 	done; \

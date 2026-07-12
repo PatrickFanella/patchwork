@@ -7,19 +7,21 @@ ARG GIT_BRANCH=unknown
 ARG BUILD_VERSION=0.0.0
 ARG CI_RUN_ID=local
 
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
+COPY apps/mobile/package.json ./apps/mobile/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY services/api/package.json ./services/api/package.json
 COPY services/indexer/package.json ./services/indexer/package.json
 COPY services/moderation-worker/package.json ./services/moderation-worker/package.json
 COPY packages/at-lexicons/package.json ./packages/at-lexicons/package.json
+COPY packages/at-client/package.json ./packages/at-client/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 
-RUN npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 
 FROM deps AS source
 
@@ -75,8 +77,10 @@ FROM source AS web-build
 
 ARG VITE_APP_NAME=Patchwork
 ARG VITE_API_BASE_URL=https://patchwork.subcult.tv/api
+ARG VITE_DATA_MODE=api
 ENV VITE_APP_NAME=${VITE_APP_NAME}
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_DATA_MODE=${VITE_DATA_MODE}
 
 RUN npm run build -w @patchwork/web
 

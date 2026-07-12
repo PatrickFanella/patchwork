@@ -446,12 +446,19 @@ and the Phase 6 exit gate remain open.
 - Create: `docs/operations/staging-secrets.md`
 - Modify: `docs/operations/staging-environment.md`
 
-- [ ] Provide PostgreSQL connectivity to API, indexer, and moderation worker.
-- [ ] Run migrations as a one-shot prerequisite before application readiness.
-- [ ] Require real service DID, OAuth metadata, public origins, encryption keys, and database credentials through deployment secret injection.
-- [ ] Remove all `did:example`, fixture datasource, and simulated-success defaults from production/staging manifests.
-- [ ] Add health checks that validate dependencies and stream freshness rather than process liveness alone.
-- [ ] Commit as `feat(ops): complete persistent staging topology`.
+- [x] Provide PostgreSQL connectivity to API, indexer, and moderation worker.
+- [x] Run migrations as a one-shot prerequisite before application readiness.
+- [x] Require real service DID, OAuth metadata, public origins, encryption keys, and database credentials through deployment secret injection.
+- [x] Remove all `did:example`, fixture datasource, and simulated-success defaults from production/staging manifests.
+- [x] Add health checks that validate dependencies and stream freshness rather than process liveness alone.
+- [x] Commit as `feat(ops): complete persistent staging topology`.
+
+Evidence: `docs/operations/evidence/phase-7/persistent-topology.md`. Both
+manifests render only with injected production values, order all three
+migration jobs before readiness, and gate web/API startup through dependency
+readiness. All four Node 22-compatible image targets build, and a disposable
+Compose database applied API 11, indexer 3, and moderation 2 migrations.
+Deployment to the real staging host remains Task 7.2 and the Phase 7 exit gate.
 
 ### Task 7.2: Publish and deploy immutable artifacts
 

@@ -20,6 +20,8 @@ Both environments use:
 - Identical health check configurations
 - The same network isolation model (`internal` + `web` networks)
 - Production `NODE_ENV=production` with `PATCHWORK_ENV=staging` for metrics labeling
+- Three one-shot migration prerequisites and dependency-aware `/health/ready`
+  probes; process liveness alone is insufficient
 
 ## Configuration Parity
 
@@ -33,11 +35,19 @@ where necessary (hostnames, DIDs, database passwords):
 | `ATPROTO_SERVICE_DID` | Real DID | Staging DID |
 | `API_PUBLIC_ORIGIN` | `https://patchwork.subcult.tv` | `https://staging.patchwork.subcult.tv` |
 | `PATCHWORK_POSTGRES_PASSWORD` | Production secret | Staging secret |
+| `ATPROTO_OAUTH_CLIENT_ID` | Production metadata URL | Staging metadata URL |
+| `ATPROTO_OAUTH_REDIRECT_URI` | Production callback | Staging callback |
+| `ATPROTO_SESSION_ENCRYPTION_KEY` | Production encryption key | Staging encryption key |
+| `MODERATION_SERVICE_TOKEN` | Production internal token | Staging internal token |
+
+See `docs/operations/staging-secrets.md` for the complete injection and rotation
+contract. Neither manifest supplies identity, datasource, origin, OAuth,
+encryption, moderation-token, or database-secret fallbacks.
 
 Parity is enforced programmatically by `checkStagingParity()` in
 `packages/shared/src/staging.ts`.
 
-## Auto-Deploy Pipeline
+## Intended deployment pipeline
 
 ```
 push to main
@@ -55,15 +65,19 @@ deploy-staging job (build immutable images, verify labels, smoke check)
 progressive-delivery-gate job (canary readiness, rollback trigger audit)
 ```
 
-The `deploy-staging` job runs automatically on every push to `main` after all
-quality gates pass. See `.github/workflows/ci.yml`.
+The current CI file models these stages but does not yet publish or deploy
+digest-addressed artifacts. Task 7.2 must replace its build/echo scaffolding
+before this flow is operational; do not interpret a green local Compose check
+as deployment evidence.
 
 ## Smoke Checks
 
 Before promotion from staging to production, the following smoke checks must pass:
 
-1. **Health probes** -- `GET /health` returns 200 for api, indexer, and moderation-worker
-2. **Readiness probes** -- `GET /health/ready` returns 200 (not 503) for all services
+1. **Readiness probes** -- `GET /health/ready` returns 200 for API, indexer,
+   and moderation worker only after database, schema, stream freshness, and
+   internal service dependencies are usable
+2. **Migration prerequisites** -- all three one-shot jobs exited successfully
 3. **Image label verification** -- OCI labels contain correct git SHA and version
 
 Run smoke checks manually:
@@ -107,4 +121,6 @@ Both must pass for `allowed: true`. See the `PromotionGateResult` type for detai
 
 ---
 
-*Tracks #108. Part of Wave 4, Lane 1: Release Environment & Promotion.*
+Local manifest validation proves topology shape only. Real staging readiness,
+backup/restore, rollback, alerts, and incident drills remain Phase 7 exit
+evidence.

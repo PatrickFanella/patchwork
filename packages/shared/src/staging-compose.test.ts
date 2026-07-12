@@ -1,0 +1,92 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const repositoryRoot = resolve(import.meta.dirname, '../../..');
+const composeEnvironment = {
+    ...process.env,
+    PATCHWORK_POSTGRES_PASSWORD: 'test-production-password',
+    PATCHWORK_STAGING_POSTGRES_PASSWORD: 'test-staging-password',
+    ATPROTO_SERVICE_DID: 'did:web:patchwork.test',
+    STAGING_ATPROTO_SERVICE_DID: 'did:web:staging.patchwork.test',
+    PATCHWORK_PUBLIC_ORIGIN: 'https://patchwork.test',
+    STAGING_PUBLIC_ORIGIN: 'https://staging.patchwork.test',
+    VITE_API_BASE_URL: 'https://patchwork.test/api',
+    STAGING_VITE_API_BASE_URL: 'https://staging.patchwork.test/api',
+    ATPROTO_OAUTH_CLIENT_ID: 'https://patchwork.test/oauth/client-metadata.json',
+    ATPROTO_OAUTH_REDIRECT_URI: 'https://patchwork.test/oauth/callback',
+    STAGING_ATPROTO_OAUTH_CLIENT_ID:
+        'https://staging.patchwork.test/oauth/client-metadata.json',
+    STAGING_ATPROTO_OAUTH_REDIRECT_URI:
+        'https://staging.patchwork.test/oauth/callback',
+    ATPROTO_SESSION_ENCRYPTION_KEY: 'test-production-encryption-key',
+    STAGING_ATPROTO_SESSION_ENCRYPTION_KEY: 'test-staging-encryption-key',
+    MODERATION_SERVICE_TOKEN: 'test-production-service-token',
+    STAGING_MODERATION_SERVICE_TOKEN: 'test-staging-service-token',
+};
+
+interface ComposeService {
+    command?: string[];
+    depends_on?: Record<string, { condition?: string }>;
+    environment?: Record<string, string>;
+    healthcheck?: { test?: string[] };
+}
+
+const renderCompose = (filename: string) => {
+    const output = execFileSync(
+        'docker',
+        ['compose', '-f', filename, 'config', '--format', 'json'],
+        { cwd: repositoryRoot, env: composeEnvironment, encoding: 'utf8' },
+    );
+    return JSON.parse(output) as { services: Record<string, ComposeService> };
+};
+
+describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
+    '%s persistent topology',
+    filename => {
+        it('requires secrets, orders all migrations, and probes dependency readiness', () => {
+            const raw = readFileSync(resolve(repositoryRoot, filename), 'utf8');
+            expect(raw).not.toContain('did:example');
+            expect(raw).not.toContain('API_DATA_SOURCE:-');
+
+            const { services } = renderCompose(filename);
+            for (const migration of [
+                'patchwork-api-migrations',
+                'patchwork-indexer-migrations',
+                'patchwork-moderation-migrations',
+            ]) {
+                expect(services[migration]?.command?.join(' ')).toContain(
+                    'db:migrate',
+                );
+            }
+            expect(
+                services['patchwork-api']?.depends_on?.[
+                    'patchwork-api-migrations'
+                ]?.condition,
+            ).toBe('service_completed_successfully');
+            for (const runtime of [
+                'patchwork-api',
+                'patchwork-spool',
+                'patchwork-thimble',
+            ]) {
+                expect(services[runtime]?.healthcheck?.test?.join(' ')).toContain(
+                    '/health/ready',
+                );
+            }
+            const api = services['patchwork-api']?.environment;
+            expect(api).toMatchObject({
+                API_DATA_SOURCE: 'postgres',
+                ATPROTO_OAUTH_CLIENT_ID: expect.stringMatching(/^https:/),
+                ATPROTO_OAUTH_REDIRECT_URI: expect.stringMatching(/^https:/),
+                ATPROTO_SESSION_ENCRYPTION_KEY: expect.any(String),
+            });
+        });
+    },
+);
+
+it('builds runtime images on the AT dependency supported Node major', () => {
+    const dockerfile = readFileSync(resolve(repositoryRoot, 'Dockerfile'), 'utf8');
+    expect(dockerfile).toContain('FROM node:22-alpine AS deps');
+    expect(dockerfile).not.toContain('FROM node:20');
+});
