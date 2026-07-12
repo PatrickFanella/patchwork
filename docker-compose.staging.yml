@@ -48,6 +48,8 @@ services:
             API_TRUSTED_PROXIES: ${STAGING_API_TRUSTED_PROXIES:-}
             API_DATA_SOURCE: ${API_DATA_SOURCE:-postgres}
             API_DATABASE_URL: postgresql://patchwork:${PATCHWORK_STAGING_POSTGRES_PASSWORD:?Set PATCHWORK_STAGING_POSTGRES_PASSWORD in .env}@patchwork-staging-postgres:5432/patchwork
+            API_MODERATION_SERVICE_URL: http://patchwork-staging-thimble:4200
+            MODERATION_SERVICE_TOKEN: ${STAGING_MODERATION_SERVICE_TOKEN:?Set STAGING_MODERATION_SERVICE_TOKEN in .env}
         networks:
             staging-internal:
             staging-web:
@@ -91,6 +93,7 @@ services:
             DATABASE_URL: postgresql://patchwork:${PATCHWORK_STAGING_POSTGRES_PASSWORD:?Set PATCHWORK_STAGING_POSTGRES_PASSWORD in .env}@patchwork-staging-postgres:5432/patchwork
             MODERATION_PORT: 4200
             MODERATION_WORKER_CONCURRENCY: ${MODERATION_WORKER_CONCURRENCY:-2}
+            MODERATION_SERVICE_TOKEN: ${STAGING_MODERATION_SERVICE_TOKEN:?Set STAGING_MODERATION_SERVICE_TOKEN in .env}
         depends_on:
             postgres:
                 condition: service_healthy
@@ -98,9 +101,6 @@ services:
                 condition: service_completed_successfully
         networks:
             staging-internal:
-            staging-web:
-                aliases:
-                    - patchwork-staging-thimble
 
     patchwork-moderation-migrations:
         build:

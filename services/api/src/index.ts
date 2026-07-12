@@ -30,11 +30,16 @@ import { PostgresLifecycleRepository } from './db/lifecycle-repository.js';
 import { PostgresRoleRepository } from './db/role-repository.js';
 import { BlockService } from './block-service.js';
 import { ReportService } from './report-service.js';
+import {
+    AuthorizationError,
+    requireCapability,
+} from './authorization-guard.js';
 import { createLifecycleTransitionHandler } from './http/lifecycle-transition-handler.js';
 import { createMethodRouter } from './http/router.js';
 import { readJsonBody } from './http/json-body.js';
 import { authenticateRequest } from './http/authenticated-request.js';
 import { createGracefulShutdown } from './http/graceful-shutdown.js';
+import { createModerationGateway } from './http/moderation-gateway.js';
 import { securityHeaders } from './http/security-headers.js';
 import {
     assertCsrfProtection,
@@ -96,6 +101,14 @@ const authenticateApiRequest =
                 resolveSession: token => atAuthRuntime.service.current(token),
                 resolveRole: did => roleRepository.resolve(did),
             })
+    :   undefined;
+
+const moderationGateway =
+    config.API_MODERATION_SERVICE_URL && config.MODERATION_SERVICE_TOKEN ?
+        createModerationGateway({
+            baseUrl: config.API_MODERATION_SERVICE_URL,
+            serviceToken: config.MODERATION_SERVICE_TOKEN,
+        })
     :   undefined;
 
 const aidPostCommandService =
@@ -574,6 +587,69 @@ const handleAidPostCommandRoute = (
     return true;
 };
 
+const moderationApiRoutes = new Map<string, 'GET' | 'POST'>([
+    ['/moderation/queue', 'GET'],
+    ['/moderation/policy/apply', 'POST'],
+    ['/moderation/state', 'POST'],
+    ['/moderation/audit', 'POST'],
+]);
+
+const handleModerationGatewayRoute = (
+    request: IncomingMessage,
+    response: ServerResponse,
+    requestUrl: URL,
+): boolean => {
+    const method = moderationApiRoutes.get(requestUrl.pathname);
+    if (!method) return false;
+    if (request.method !== method) {
+        writeJson(
+            response,
+            405,
+            { error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.' } },
+            { allow: method },
+        );
+        return true;
+    }
+    void (async () => {
+        try {
+            if (!authenticateApiRequest || !moderationGateway) {
+                throw new PublicHttpError(
+                    503,
+                    'MODERATION_SERVICE_UNAVAILABLE',
+                    'The moderation service is unavailable.',
+                );
+            }
+            const authenticated = await authenticateApiRequest(request);
+            requireCapability(
+                authenticated.principal.authorization,
+                'moderate:content',
+            );
+            const result =
+                method === 'GET' ?
+                    await moderationGateway.readQueue(authenticated.principal.did)
+                :   await moderationGateway.command({
+                        path: requestUrl.pathname,
+                        actorDid: authenticated.principal.did,
+                        body: await readJsonBody(request),
+                    });
+            writeJson(response, result.statusCode, result.body);
+        } catch (error) {
+            if (error instanceof AuthorizationError) {
+                writeJson(response, error.statusCode, {
+                    error: { code: error.code, message: 'Insufficient capability.' },
+                });
+                return;
+            }
+            if (error instanceof AtClientError) {
+                writeAtAuthError(response, error);
+                return;
+            }
+            writeRouteError(response, error);
+        }
+    })();
+    return true;
+};
+
 interface ApiRouteResult {
     statusCode: number;
     body: unknown;
@@ -603,6 +679,10 @@ const contractRoutes = [
     '/aid/post/handoff',
     '/blocks',
     '/reports',
+    '/moderation/queue',
+    '/moderation/policy/apply',
+    '/moderation/state',
+    '/moderation/audit',
     '/health',
     '/health/ready',
     '/metrics',
@@ -732,6 +812,10 @@ export const createApiServer = () => {
         }
 
         if (handleDurableSafetyRoute(request, response, requestUrl)) {
+            return;
+        }
+
+        if (handleModerationGatewayRoute(request, response, requestUrl)) {
             return;
         }
 

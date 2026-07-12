@@ -79,6 +79,8 @@ The API retains two datasource modes, but fixture mode is test-only:
 2. Set in `.env`:
     - `API_DATA_SOURCE=postgres`
     - `API_DATABASE_URL=postgresql://patchwork:patchwork@localhost:5432/patchwork`
+    - `API_MODERATION_SERVICE_URL=http://localhost:4200`
+    - matching `MODERATION_SERVICE_TOKEN` values for API and moderation worker
 3. Run migrations: `npm run db:migrate`
 4. Optionally seed deterministic discovery data: `npm run db:seed`
 5. Start API in postgres mode: `npm run dev:api`

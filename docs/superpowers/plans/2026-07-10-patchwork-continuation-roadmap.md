@@ -278,7 +278,7 @@ Compose. Development and tests may still opt into the explicit fixture runtime.
 
 - [x] Remove query-parameter login, token refresh, mutation, and administrative routes.
 - [ ] Convert mutations to `POST`, `PATCH`, or `DELETE` with JSON bodies and explicit idempotency keys.
-- [ ] Verify logs and request IDs never contain passwords, tokens, exact coordinates, or unredacted DIDs where redaction is required.
+- [x] Verify logs and request IDs never contain passwords, tokens, exact coordinates, or unredacted DIDs where redaction is required.
 - [x] Add a repository scan that fails CI if sensitive or mutation data is read from `URLSearchParams` in runtime entrypoints.
 - [ ] Commit as `fix(security): remove query-string credentials and mutations`.
 

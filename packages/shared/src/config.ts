@@ -55,6 +55,8 @@ const apiSchema = baseSchema.merge(atprotoSchema).extend({
                 .map(entry => entry.trim())
                 .filter(Boolean),
         ),
+    API_MODERATION_SERVICE_URL: optionalUrlField,
+    MODERATION_SERVICE_TOKEN: optionalSecretField,
     API_DATA_SOURCE: z.enum(['fixture', 'postgres']).default('fixture'),
     API_DATABASE_URL: optionalUrlField,
     DATABASE_URL: optionalUrlField,
@@ -91,6 +93,7 @@ const moderationWorkerSchema = baseSchema.merge(atprotoSchema).extend({
         .min(1)
         .max(64)
         .default(2),
+    MODERATION_SERVICE_TOKEN: optionalSecretField,
 });
 
 type AnySchema = z.ZodTypeAny;
@@ -167,6 +170,8 @@ export interface ProductionApiConfig extends ProductionConfigBase {
     ATPROTO_OAUTH_CLIENT_ID?: string;
     ATPROTO_OAUTH_REDIRECT_URI?: string;
     ATPROTO_SESSION_ENCRYPTION_KEY?: string;
+    API_MODERATION_SERVICE_URL?: string;
+    MODERATION_SERVICE_TOKEN?: string;
 }
 
 export interface AtAuthRuntimeConfig extends ProductionApiConfig {
@@ -233,6 +238,12 @@ export const validateProductionConfig = (
                 'Set it to your real service DID (e.g. did:web:your-domain.com).',
         );
     }
+
+    if (!config.API_MODERATION_SERVICE_URL || !config.MODERATION_SERVICE_TOKEN) {
+        throw new Error(
+            'FATAL: API_MODERATION_SERVICE_URL and MODERATION_SERVICE_TOKEN are required in production.',
+        );
+    }
 };
 
 /**
@@ -253,6 +264,17 @@ export const validateProductionServiceConfig = (
         throw new Error(
             'FATAL: ATPROTO_SERVICE_DID must not use a did:example: value in production. ' +
                 'Set it to your real service DID (e.g. did:web:your-domain.com).',
+        );
+    }
+};
+
+export const validateModerationWorkerRuntimeConfig = (config: {
+    NODE_ENV: string;
+    MODERATION_SERVICE_TOKEN?: string;
+}): void => {
+    if (config.NODE_ENV === 'production' && !config.MODERATION_SERVICE_TOKEN) {
+        throw new Error(
+            'FATAL: MODERATION_SERVICE_TOKEN is required in production.',
         );
     }
 };

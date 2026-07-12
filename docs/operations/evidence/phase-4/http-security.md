@@ -83,8 +83,8 @@ before ordinary writes, window reset, untrusted forwarding rejection, trusted
 single-hop acceptance, and forwarded-chain rejection. Credentialed CORS is
 emitted only for an exactly allowed origin and never uses a wildcard.
 
-Task 4.2 remains open only for complete capability enforcement across routes
-that survive the compatibility-route removal pass.
+The compatibility-removal and service-auth checkpoints below close capability
+enforcement for the routes that remain.
 
 ## Unsafe compatibility removal checkpoint
 
@@ -99,6 +99,21 @@ fixture runtime returns `503` instead of mutating process memory.
 The web posting path now uses authenticated `POST /at/aid-posts`, rounds public
 coordinates, and enforces at least 1 km precision. A repository test scans API
 and moderation runtime entrypoints and fails on `FromParams`, body-field query
-parsing, or sensitive query keys. The remaining Phase 4 gap is explicit,
-effectful idempotency-key enforcement for every mutation and authenticated
-service-to-service moderation authorization.
+parsing, or sensitive query keys. The following checkpoint closes authenticated
+service-to-service moderation; effectful idempotency-key enforcement remains.
+
+## Moderation service-auth checkpoint
+
+The API is now the browser-facing moderation boundary. It restores the opaque
+session, resolves the PostgreSQL role, requires `moderate:content`, removes any
+body-supplied actor fields, and forwards the authenticated DID. The worker is
+reachable only on the internal Compose network and accepts moderation commands
+only with a constant-time validated service bearer credential. Production API
+and worker startup fail if their shared boundary configuration is absent.
+
+Unit coverage proves the forwarded credential and actor replacement. Live
+worker HTTP coverage proves missing credentials return `401`; under PostgreSQL,
+the immutable audit entry records the gateway actor rather than the hostile
+body actor. Worker error logging emits only a fixed event and route pathname.
+The remaining Phase 4 gap is effectful idempotency enforcement across every
+mutation.

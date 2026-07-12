@@ -4,6 +4,7 @@ import {
     validateProductionConfig,
     validateProductionServiceConfig,
     validateAtAuthRuntimeConfig,
+    validateModerationWorkerRuntimeConfig,
     checkServiceHealth,
 } from './config.js';
 
@@ -58,6 +59,20 @@ describe('config schema', () => {
     });
 });
 
+describe('validateModerationWorkerRuntimeConfig', () => {
+    it('requires a service credential in production', () => {
+        expect(() =>
+            validateModerationWorkerRuntimeConfig({ NODE_ENV: 'production' }),
+        ).toThrow(/MODERATION_SERVICE_TOKEN/);
+        expect(() =>
+            validateModerationWorkerRuntimeConfig({
+                NODE_ENV: 'production',
+                MODERATION_SERVICE_TOKEN: 'configured-secret',
+            }),
+        ).not.toThrow();
+    });
+});
+
 describe('validateAtAuthRuntimeConfig', () => {
     it('allows fixture auth only in test mode', () => {
         expect(() =>
@@ -86,6 +101,8 @@ describe('validateAtAuthRuntimeConfig', () => {
                 ATPROTO_SERVICE_DID: 'did:example:test-service',
                 API_DATA_SOURCE: 'postgres',
                 DATABASE_URL: 'postgresql://localhost/patchwork',
+                API_MODERATION_SERVICE_URL: 'http://moderation:4200',
+                MODERATION_SERVICE_TOKEN: 'service-secret',
             }),
         ).toThrow(/ATPROTO_OAUTH_CLIENT_ID/);
     });
@@ -161,8 +178,21 @@ describe('validateProductionConfig', () => {
                 ATPROTO_SERVICE_DID: 'did:web:patchwork.example.com',
                 API_DATA_SOURCE: 'postgres',
                 DATABASE_URL: 'postgresql://localhost/patchwork',
+                API_MODERATION_SERVICE_URL: 'http://moderation:4200',
+                MODERATION_SERVICE_TOKEN: 'service-secret',
             }),
         ).not.toThrow();
+    });
+
+    it('requires the moderation service boundary in production', () => {
+        expect(() =>
+            validateProductionConfig({
+                NODE_ENV: 'production',
+                ATPROTO_SERVICE_DID: 'did:web:patchwork.example.com',
+                API_DATA_SOURCE: 'postgres',
+                DATABASE_URL: 'postgresql://localhost/patchwork',
+            }),
+        ).toThrow(/API_MODERATION_SERVICE_URL/);
     });
 
     it('accepts API_DATABASE_URL as alternative to DATABASE_URL', () => {
@@ -172,6 +202,8 @@ describe('validateProductionConfig', () => {
                 ATPROTO_SERVICE_DID: 'did:web:patchwork.example.com',
                 API_DATA_SOURCE: 'postgres',
                 API_DATABASE_URL: 'postgresql://localhost/patchwork',
+                API_MODERATION_SERVICE_URL: 'http://moderation:4200',
+                MODERATION_SERVICE_TOKEN: 'service-secret',
             }),
         ).not.toThrow();
     });

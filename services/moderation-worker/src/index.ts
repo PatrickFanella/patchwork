@@ -9,6 +9,7 @@ import {
     CONTRACT_VERSION,
     loadModerationWorkerConfig,
     validateProductionServiceConfig,
+    validateModerationWorkerRuntimeConfig,
     checkServiceHealth,
     type ModerationDecisionEvent,
     type ServiceHealth,
@@ -18,11 +19,13 @@ import {
 } from '@patchwork/shared';
 import { ModerationMetrics } from './metrics.js';
 import { createModerationRuntime } from './moderation-runtime.js';
+import { hasValidServiceCredential } from './service-auth.js';
 
 const config = loadModerationWorkerConfig();
 
 // Production startup guard
 validateProductionServiceConfig(config);
+validateModerationWorkerRuntimeConfig(config);
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -138,6 +141,20 @@ const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
         });
         request.on('error', reject);
     });
+};
+
+const withAuthenticatedActor = (
+    request: IncomingMessage,
+    body: unknown,
+): unknown => {
+    const actorDid = request.headers['x-patchwork-actor-did'];
+    if (typeof actorDid !== 'string' || !actorDid.startsWith('did:')) {
+        throw new Error('AUTHENTICATED_ACTOR_REQUIRED');
+    }
+    return {
+        ...(typeof body === 'object' && body !== null ? body : {}),
+        actorDid,
+    };
 };
 
 const policyAction = (value: string): ModerationPolicyAction => {
@@ -257,10 +274,25 @@ export const createModerationServer = () => createServer((request, response) => 
             writeJson(response, 405, { error: { code: 'METHOD_NOT_ALLOWED' } });
             return;
         }
+        if (
+            requestUrl.pathname.startsWith('/moderation/') &&
+            !hasValidServiceCredential(request, config.MODERATION_SERVICE_TOKEN)
+        ) {
+            writeJson(response, 401, {
+                error: { code: 'SERVICE_AUTH_REQUIRED' },
+            });
+            return;
+        }
         const startTime = Date.now();
         void Promise.resolve()
             .then(() => route.method === 'POST' ? readJsonBody(request) : undefined)
-            .then(body => route.handler(body))
+            .then(body =>
+                route.handler(
+                    requestUrl.pathname === '/moderation/policy/apply' ?
+                        withAuthenticatedActor(request, body)
+                    :   body,
+                ),
+            )
             .then(result => {
                 sliCollector.recordRequest(
                     requestUrl.pathname,
@@ -280,13 +312,19 @@ export const createModerationServer = () => createServer((request, response) => 
 
                 writeJson(response, result.statusCode, result.body);
             })
-            .catch(error => {
+            .catch(() => {
                 sliCollector.recordRequest(
                     requestUrl.pathname,
                     Date.now() - startTime,
                 );
                 sliCollector.recordError(requestUrl.pathname);
-                console.error('[moderation-worker] route error:', error);
+                console.error(
+                    JSON.stringify({
+                        level: 'error',
+                        event: 'moderation_route_failed',
+                        pathname: requestUrl.pathname,
+                    }),
+                );
                 writeJson(response, 500, { error: 'Internal Server Error' });
             });
         return;

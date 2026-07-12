@@ -95,6 +95,10 @@ permission and accepted origins receive explicit credential permission.
 and fails if fixture `FromParams` routes, moderation URL-body parsing, or
 sensitive query keys return. Worker live HTTP coverage proves the former query
 mutation is now `405` and the JSON route refuses fixture persistence.
+`moderation-gateway.test.ts` proves the API forwards its service credential and
+session-derived actor while stripping hostile actor fields. Worker live HTTP
+coverage proves credential rejection; its PostgreSQL branch proves the durable
+audit actor came from the authenticated gateway header.
 
 ### Browser E2E
 
