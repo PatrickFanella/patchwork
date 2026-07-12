@@ -46,6 +46,12 @@ import { createMethodRouter } from './http/router.js';
 import { readJsonBody } from './http/json-body.js';
 import { authenticateRequest } from './http/authenticated-request.js';
 import { createGracefulShutdown } from './http/graceful-shutdown.js';
+import { securityHeaders } from './http/security-headers.js';
+import {
+    assertCsrfProtection,
+    createCsrfToken,
+    serializeCsrfCookie,
+} from './http/csrf.js';
 import {
     ensureRequestId,
     PublicHttpError,
@@ -338,12 +344,19 @@ const handleRealAuthRoute = (
                 const result = await atAuthRuntime.service.completeLogin(
                     requestUrl.searchParams,
                 );
+                const csrfToken = createCsrfToken();
                 response.writeHead(302, {
                     location: result.returnTo,
-                    'set-cookie': serializeSessionCookie(
-                        result.sessionToken,
-                        config.NODE_ENV === 'production',
-                    ),
+                    'set-cookie': [
+                        serializeSessionCookie(
+                            result.sessionToken,
+                            config.NODE_ENV === 'production',
+                        ),
+                        serializeCsrfCookie(
+                            csrfToken,
+                            config.NODE_ENV === 'production',
+                        ),
+                    ],
                 });
                 response.end();
                 return;
@@ -377,17 +390,18 @@ const handleRealAuthRoute = (
                 requestUrl.pathname === '/auth/session'
             ) {
                 await atAuthRuntime.service.logout(authenticated.sessionToken);
+                response.setHeader('set-cookie', [
+                    serializeSessionCookie(
+                        '',
+                        config.NODE_ENV === 'production',
+                        0,
+                    ),
+                    serializeCsrfCookie('', config.NODE_ENV === 'production', 0),
+                ]);
                 writeJson(
                     response,
                     200,
                     { deleted: true },
-                    {
-                        'set-cookie': serializeSessionCookie(
-                            '',
-                            config.NODE_ENV === 'production',
-                            0,
-                        ),
-                    },
                 );
                 return;
             }
@@ -871,11 +885,21 @@ export const createApiServer = () => {
         for (const [key, value] of Object.entries(corsHeaders)) {
             response.setHeader(key, value);
         }
+        for (const [key, value] of Object.entries(securityHeaders(config.NODE_ENV))) {
+            response.setHeader(key, value);
+        }
 
         // --- Handle OPTIONS preflight ---
         if (request.method === 'OPTIONS') {
             response.writeHead(204);
             response.end();
+            return;
+        }
+
+        try {
+            assertCsrfProtection(request, config.API_PUBLIC_ORIGIN);
+        } catch (error) {
+            writePublicError(response, error);
             return;
         }
 

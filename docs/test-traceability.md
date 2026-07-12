@@ -83,6 +83,10 @@ The lifecycle PostgreSQL HTTP suite covers missing and expired sessions plus
 authorization derived from the durable role instead of hostile body fields.
 `graceful-shutdown.test.ts` uses a real Node server to prove immediate refusal
 of new connections, active-request drain, pool-close ordering, and idempotency.
+`perimeter.test.ts` verifies restrictive security headers, production HSTS,
+double-submit CSRF validation, constant-origin policy, and Secure/Strict CSRF
+cookie attributes. The live server suite proves middleware rejection and header
+emission on an actual HTTP response.
 
 ### Browser E2E
 

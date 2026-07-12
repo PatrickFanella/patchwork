@@ -63,6 +63,21 @@ const REQUEST_TIMEOUT_MS = 6_000;
 const DEFAULT_NEARBY_RADIUS_KM = 20;
 const DEFAULT_FEED_RADIUS_KM = 100;
 
+const csrfHeaders = (): Record<string, string> => {
+    if (typeof document === 'undefined') return {};
+    for (const cookie of document.cookie.split(';')) {
+        const [name, ...parts] = cookie.trim().split('=');
+        if (name === 'patchwork_csrf') {
+            try {
+                return { 'x-csrf-token': decodeURIComponent(parts.join('=')) };
+            } catch {
+                return {};
+            }
+        }
+    }
+    return {};
+};
+
 type AidQueryScope = 'map' | 'feed';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -349,6 +364,7 @@ const requestJsonPost = async (
                 headers: {
                     'content-type': 'application/json',
                     accept: 'application/json',
+                    ...csrfHeaders(),
                 },
                 body: JSON.stringify(body),
                 signal: controller.signal,
@@ -413,6 +429,7 @@ const requestJsonPut = async (
                 headers: {
                     'content-type': 'application/json',
                     accept: 'application/json',
+                    ...csrfHeaders(),
                 },
                 body: JSON.stringify(body),
                 signal: controller.signal,
@@ -462,6 +479,7 @@ const requestJsonDelete = async (
                 headers: {
                     'content-type': 'application/json',
                     accept: 'application/json',
+                    ...csrfHeaders(),
                 },
                 body: JSON.stringify(body),
                 signal,

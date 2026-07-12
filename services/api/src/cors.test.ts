@@ -120,6 +120,9 @@ describe('getCorsHeaders', () => {
             expect(headers['access-control-allow-headers']).toContain(
                 'Authorization',
             );
+            expect(headers['access-control-allow-headers']).toContain(
+                'X-CSRF-Token',
+            );
             expect(headers['access-control-max-age']).toBe('86400');
             expect(headers['vary']).toBe('Origin');
         });

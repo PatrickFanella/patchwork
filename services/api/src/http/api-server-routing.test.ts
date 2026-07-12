@@ -9,6 +9,7 @@ describe('API server method routing', () => {
         process.env.NODE_ENV = 'test';
         process.env.ATPROTO_SERVICE_DID = 'did:example:patchwork-test';
         process.env.API_DATA_SOURCE = 'fixture';
+        process.env.API_PUBLIC_ORIGIN = 'https://patchwork.test';
         const { createApiServer } = await import('../index.js');
         server = createApiServer();
         await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -81,6 +82,25 @@ describe('API server method routing', () => {
         expect(response.status).toBe(413);
         await expect(response.json()).resolves.toMatchObject({
             error: { code: 'REQUEST_BODY_TOO_LARGE' },
+        });
+    });
+
+    it('applies security headers and rejects cookie mutations without CSRF proof', async () => {
+        const response = await fetch(`${origin}/account/settings`, {
+            method: 'PUT',
+            headers: {
+                origin: 'https://patchwork.test',
+                cookie: 'patchwork_session=session; patchwork_csrf=expected',
+                'content-type': 'application/json',
+            },
+            body: '{}',
+        });
+
+        expect(response.status).toBe(403);
+        expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+        expect(response.headers.get('x-frame-options')).toBe('DENY');
+        await expect(response.json()).resolves.toMatchObject({
+            error: { code: 'CSRF_TOKEN_INVALID' },
         });
     });
 });

@@ -15,7 +15,7 @@ export interface CorsHeaders {
 }
 
 const ALLOWED_METHODS = 'GET, POST, PUT, DELETE, OPTIONS';
-const ALLOWED_HEADERS = 'Content-Type, Authorization';
+const ALLOWED_HEADERS = 'Content-Type, Authorization, X-CSRF-Token';
 const MAX_AGE = '86400'; // 24 hours
 
 const LOCALHOST_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;

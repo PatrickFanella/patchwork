@@ -55,3 +55,17 @@ PostgreSQL pool only after the drain. A 30-second deadline force-closes remainin
 connections so orchestration cannot hang indefinitely. A real-server test holds
 one request open, proves a new connection is refused, releases the request, and
 then proves exactly-once resource closure.
+
+## Browser perimeter checkpoint
+
+All API responses now include a deny-by-default CSP, frame denial, MIME sniffing
+protection, no-referrer policy, restricted browser permissions, and same-site
+resource policy; production also sends one-year HSTS. Cookie-authenticated
+mutations require the configured origin and equal `patchwork_csrf` cookie/header
+tokens compared in constant time. Login issues a distinct Strict CSRF cookie
+alongside the HttpOnly session cookie, production marks both Secure, logout
+clears both, CORS admits the CSRF header, and the web client supplies it.
+
+Pure perimeter tests and a real HTTP server test prove header emission and CSRF
+rejection. Trusted-proxy and rate-limit policy work remains, so Task 4.2 is not
+yet complete.
