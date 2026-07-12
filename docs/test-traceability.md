@@ -152,6 +152,14 @@ CI uploads `coverage/coverage-summary.json`, LCOV, and the HTML-compatible data 
 
 Tests for contract-only or fixture-only expansion systems were removed from the active repository on 2026-07-10. Their TypeScript remains subject to lint, typecheck, and build. A deferred feature must receive tests at the appropriate persistence and external boundary when it is selected for implementation; the old fixture corpus should not be restored wholesale.
 
+## Phase 7 recovery operations
+
+`packages/shared/src/recovery-operations.test.ts` ties the recovery scripts,
+runtime metric emitters, and executable alert rules to the Task 7.3 contract.
+The committed Phase 7 evidence separately records the disposable PostgreSQL
+restore and negative-path drills. These local checks prove mechanism behavior;
+they do not replace alert delivery or browser validation on real staging.
+
 ## Local full-matrix procedure
 
 ```sh

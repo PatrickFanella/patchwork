@@ -922,6 +922,16 @@ export const createApiServer = () => {
     return createServer((request, response) => {
         ensureRequestId(response);
         const requestUrl = new URL(request.url ?? '/', 'http://localhost');
+        const requestStartedAt = Date.now();
+        response.once('finish', () => {
+            sliCollector.recordRequest(
+                requestUrl.pathname,
+                Date.now() - requestStartedAt,
+            );
+            if (response.statusCode >= 500) {
+                sliCollector.recordError(requestUrl.pathname);
+            }
+        });
 
         // --- CORS headers on every response ---
         const origin = request.headers.origin as string | undefined;

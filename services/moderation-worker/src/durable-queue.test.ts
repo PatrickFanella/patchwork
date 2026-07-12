@@ -583,6 +583,7 @@ describe('durable queue/state backend (issue #96)', () => {
             const metrics = new ModerationMetrics();
 
             metrics.recordEnqueue(SUBJECT_URI_1);
+            metrics.setOldestItemAgeSeconds(901);
             metrics.recordAction('delist');
             metrics.recordError();
 
@@ -592,6 +593,8 @@ describe('durable queue/state backend (issue #96)', () => {
             expect(output).toContain('moderation_queue_latency_seconds');
             expect(output).toContain('moderation_actions_total');
             expect(output).toContain('moderation_errors_total');
+            expect(output).toContain('moderation_queue_oldest_item_age_seconds');
+            expect(output).toContain(' 901');
             expect(output).toContain('action="delist"');
         });
 

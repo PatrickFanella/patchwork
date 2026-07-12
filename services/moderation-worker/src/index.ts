@@ -202,11 +202,25 @@ const routeHandlers: Readonly<Record<string, ModerationRouteDefinition>> = {
             body: payload,
         };
     } },
-    '/metrics': { method: 'GET', handler: () => ({
-        statusCode: 200,
-        body: renderPrometheusMetrics(),
-        contentType: 'text/plain; version=0.0.4',
-    }) },
+    '/metrics': { method: 'GET', handler: async () => {
+        const pending =
+            runtime.mode === 'postgres' ?
+                (await runtime.queue.list()).filter(item => item.queueStatus === 'queued')
+            :   runtime.queue.listPending();
+        metrics.setQueueDepth(pending.length);
+        const oldestRequestedAt = pending
+            .map(item => Date.parse(item.requestedAt))
+            .filter(Number.isFinite)
+            .sort((left, right) => left - right)[0];
+        metrics.setOldestItemAgeSeconds(
+            oldestRequestedAt === undefined ? 0 : (Date.now() - oldestRequestedAt) / 1000,
+        );
+        return {
+            statusCode: 200,
+            body: renderPrometheusMetrics(),
+            contentType: 'text/plain; version=0.0.4',
+        };
+    } },
     '/decisions/sample': { method: 'GET', handler: () => ({
         statusCode: 200,
         body: sampleDecision,

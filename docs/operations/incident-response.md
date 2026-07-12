@@ -126,6 +126,37 @@ Each procedure references the alert rules defined in
 [alerting-policy.md](alerting-policy.md). All services emit structured alert
 logs via `formatAlertLog()` in `packages/shared/src/alerting.ts`.
 
+### API error rate
+
+Confirm the failing route from SLI counters and logs, verify PostgreSQL and PDS
+health, then roll back the immutable four-image manifest if the regression
+started with the current release. Never enable fixture fallback as mitigation.
+
+### Indexer disconnect or lag
+
+Check `patchwork_event_source_connected`, event-source lag, checkpoint health,
+and PostgreSQL readiness. Restarting the indexer is safe only after recording
+the last durable cursor; prove that it resumes from that cursor and does not
+duplicate projections. Escalate if the source remains disconnected for ten
+minutes.
+
+### Moderation queue age
+
+Inspect the oldest durable queued case, lease owner and expiry, retry time, and
+last failure code. Recover expired leases or repair the failing dependency;
+never delete cases merely to clear the gauge.
+
+### Database unavailable
+
+Stop writes, determine whether the failure is transient or data-loss related,
+and choose restart, immutable rollback, or empty-database restore. Follow the
+disaster-recovery runbook for restoration and require new OAuth login afterward.
+
+Every game day records UTC timestamps, commands, alert transition and delivery,
+operator decision, recovery observation, and follow-up fixes in the Phase 7
+evidence file. Local simulations do not satisfy the staging alert-delivery gate.
+
+
 ### 4.1 `error_rate_high` (P1 Critical)
 
 **Condition**: HTTP 5xx error rate exceeds 5% over a 5-minute window.

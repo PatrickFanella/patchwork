@@ -1,34 +1,7 @@
-#!/bin/sh
-# backup-postgres.sh -- Logical backup of the Patchwork Postgres database.
-#
-# Uses pg_dump in custom format (compressed) with configurable retention.
-# Designed for cron scheduling; exit codes integrate with monitoring.
-#
-# Exit codes:
-#   0 -- backup completed successfully
-#   1 -- configuration or environment error
-#   2 -- pg_dump failed
-#   3 -- retention cleanup failed (backup itself succeeded)
-#
-# Environment variables:
-#   PGHOST          -- Postgres host (default: localhost)
-#   PGPORT          -- Postgres port (default: 5432)
-#   PGUSER          -- Postgres user (default: patchwork)
-#   PGDATABASE      -- database name  (default: patchwork)
-#   PGPASSWORD      -- password (or use .pgpass / PGPASSFILE)
-#   BACKUP_DIR      -- directory to store backups (default: /backups/patchwork)
-#   BACKUP_RETENTION_DAYS -- days to keep old backups (default: 7)
-#
-# Usage:
-#   ./scripts/backup-postgres.sh
-#
-# Tracks: #107
+#!/usr/bin/env bash
+# Create, validate, checksum, and atomically publish a Patchwork PostgreSQL backup.
 
-set -eu
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
+set -Eeuo pipefail
 
 PGHOST="${PGHOST:-localhost}"
 PGPORT="${PGPORT:-5432}"
@@ -36,104 +9,79 @@ PGUSER="${PGUSER:-patchwork}"
 PGDATABASE="${PGDATABASE:-patchwork}"
 BACKUP_DIR="${BACKUP_DIR:-/backups/patchwork}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
-
+PATCHWORK_BACKUP_METRICS_FILE="${PATCHWORK_BACKUP_METRICS_FILE:-${BACKUP_DIR}/backup.prom}"
 TIMESTAMP="$(date -u '+%Y%m%d_%H%M%S')"
 BACKUP_FILE="${BACKUP_DIR}/${PGDATABASE}_${TIMESTAMP}.dump"
+START_EPOCH="$(date +%s)"
+TEMP_DIR=''
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+log() { printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 
-log() {
-    printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1"
+atomic_write_metrics() {
+    local success="$1" now temporary
+    now="$(date +%s)"
+    temporary="${PATCHWORK_BACKUP_METRICS_FILE}.tmp.$$"
+    mkdir -p "$(dirname "$PATCHWORK_BACKUP_METRICS_FILE")"
+    {
+        printf '# TYPE patchwork_backup_last_attempt_success gauge\n'
+        printf 'patchwork_backup_last_attempt_success{project="patchwork",environment="staging"} %s\n' "$success"
+        printf '# TYPE patchwork_backup_last_attempt_timestamp_seconds gauge\n'
+        printf 'patchwork_backup_last_attempt_timestamp_seconds{project="patchwork",environment="staging"} %s\n' "$now"
+        if [[ "$success" == 1 ]]; then
+            printf '# TYPE patchwork_backup_last_success_timestamp_seconds gauge\n'
+            printf 'patchwork_backup_last_success_timestamp_seconds{project="patchwork",environment="staging"} %s\n' "$now"
+        elif [[ -f "$PATCHWORK_BACKUP_METRICS_FILE" ]]; then
+            grep 'patchwork_backup_last_success_timestamp_seconds' "$PATCHWORK_BACKUP_METRICS_FILE" || true
+        fi
+    } >"$temporary"
+    mv "$temporary" "$PATCHWORK_BACKUP_METRICS_FILE"
 }
 
-log_json() {
-    # Emit a structured JSON log line for monitoring integration.
-    printf '{"timestamp":"%s","event":"backup","database":"%s","file":"%s","size_bytes":%s,"duration_seconds":%s,"status":"%s"}\n' \
-        "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
-        "$PGDATABASE" \
-        "$1" \
-        "$2" \
-        "$3" \
-        "$4"
+cleanup() { [[ -z "$TEMP_DIR" ]] || rm -rf -- "$TEMP_DIR"; }
+on_error() {
+    local status=$?
+    atomic_write_metrics 0 || true
+    log "ERROR: backup failed with status ${status}; no archive was published."
+    exit "$status"
 }
+trap cleanup EXIT
+trap on_error ERR
 
-# ---------------------------------------------------------------------------
-# Pre-flight checks
-# ---------------------------------------------------------------------------
-
-if ! command -v pg_dump >/dev/null 2>&1; then
-    log "ERROR: pg_dump not found in PATH."
+for command in pg_dump pg_restore; do
+    command -v "$command" >/dev/null 2>&1 || { log "ERROR: ${command} not found in PATH."; exit 1; }
+done
+if command -v sha256sum >/dev/null 2>&1; then
+    sha256() { sha256sum "$1" | awk '{print $1}'; }
+elif command -v shasum >/dev/null 2>&1; then
+    sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
+else
+    log 'ERROR: sha256sum or shasum is required.'
     exit 1
 fi
 
-if [ ! -d "$BACKUP_DIR" ]; then
-    log "Creating backup directory: ${BACKUP_DIR}"
-    mkdir -p "$BACKUP_DIR" || {
-        log "ERROR: Failed to create backup directory."
-        exit 1
-    }
-fi
+mkdir -p "$BACKUP_DIR"
+TEMP_DIR="$(mktemp -d "${BACKUP_DIR}/.backup.XXXXXX")"
+TEMP_DUMP="${TEMP_DIR}/archive.dump"
+log "Creating backup of ${PGDATABASE} on ${PGHOST}:${PGPORT}."
+pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -Fc -f "$TEMP_DUMP"
+[[ -s "$TEMP_DUMP" ]]
+pg_restore --list "$TEMP_DUMP" >/dev/null
 
-# ---------------------------------------------------------------------------
-# Execute backup
-# ---------------------------------------------------------------------------
+CHECKSUM="$(sha256 "$TEMP_DUMP")"
+SIZE="$(wc -c <"$TEMP_DUMP" | tr -d ' ')"
+END_EPOCH="$(date +%s)"
+DURATION="$((END_EPOCH - START_EPOCH))"
+printf '%s  %s\n' "$CHECKSUM" "$(basename "$BACKUP_FILE")" >"${TEMP_DIR}/archive.sha256"
+printf '{"created_at":"%s","database":"%s","size_bytes":%s,"sha256":"%s","duration_seconds":%s}\n' \
+    "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$PGDATABASE" "$SIZE" "$CHECKSUM" "$DURATION" >"${TEMP_DIR}/archive.json"
 
-log "Starting backup of '${PGDATABASE}' on ${PGHOST}:${PGPORT} as ${PGUSER}."
-log "Backup file: ${BACKUP_FILE}"
+mv "$TEMP_DUMP" "$BACKUP_FILE"
+mv "${TEMP_DIR}/archive.sha256" "${BACKUP_FILE}.sha256"
+mv "${TEMP_DIR}/archive.json" "${BACKUP_FILE}.json"
+atomic_write_metrics 1
+trap - ERR
 
-START_EPOCH="$(date +%s)"
-
-if pg_dump \
-    -h "$PGHOST" \
-    -p "$PGPORT" \
-    -U "$PGUSER" \
-    -d "$PGDATABASE" \
-    -Fc \
-    -f "$BACKUP_FILE"; then
-
-    END_EPOCH="$(date +%s)"
-    DURATION="$((END_EPOCH - START_EPOCH))"
-
-    # Get file size (portable across Linux and macOS).
-    if [ -f "$BACKUP_FILE" ]; then
-        FILE_SIZE="$(wc -c < "$BACKUP_FILE" | tr -d ' ')"
-    else
-        FILE_SIZE=0
-    fi
-
-    log "Backup completed successfully in ${DURATION}s (${FILE_SIZE} bytes)."
-    log_json "$BACKUP_FILE" "$FILE_SIZE" "$DURATION" "success"
-else
-    END_EPOCH="$(date +%s)"
-    DURATION="$((END_EPOCH - START_EPOCH))"
-    log "ERROR: pg_dump failed after ${DURATION}s."
-    log_json "$BACKUP_FILE" "0" "$DURATION" "failed"
-    exit 2
-fi
-
-# ---------------------------------------------------------------------------
-# Retention cleanup
-# ---------------------------------------------------------------------------
-
-log "Cleaning up backups older than ${BACKUP_RETENTION_DAYS} days."
-
-# Use find to remove old dump files. Only delete files matching our naming
-# pattern to avoid accidentally removing unrelated files.
-CLEANUP_EXIT=0
-find "$BACKUP_DIR" \
-    -maxdepth 1 \
-    -name "${PGDATABASE}_*.dump" \
-    -type f \
-    -mtime "+${BACKUP_RETENTION_DAYS}" \
-    -print \
-    -delete || CLEANUP_EXIT=$?
-
-if [ "$CLEANUP_EXIT" -ne 0 ]; then
-    log "WARNING: Retention cleanup encountered errors (exit ${CLEANUP_EXIT}). Backup itself succeeded."
-    exit 3
-fi
-
-log "Backup and cleanup complete."
-exit 0
+find "$BACKUP_DIR" -maxdepth 1 -type f \
+    \( -name "${PGDATABASE}_*.dump" -o -name "${PGDATABASE}_*.dump.sha256" -o -name "${PGDATABASE}_*.dump.json" \) \
+    -mtime "+${BACKUP_RETENTION_DAYS}" -delete
+log "Published validated backup ${BACKUP_FILE} (${SIZE} bytes, ${DURATION}s)."

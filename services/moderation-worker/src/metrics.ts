@@ -44,6 +44,7 @@ export class ModerationMetrics {
     private readonly latencySamples: number[] = [];
     private readonly actionCounters = new Map<string, number>();
     private errorCount = 0;
+    private oldestItemAgeSeconds = 0;
     private readonly enqueueTimestamps = new Map<string, number>();
 
     /** Record when a queue item is enqueued (for latency tracking). */
@@ -68,6 +69,10 @@ export class ModerationMetrics {
     /** Set the current queue depth (e.g., from store count). */
     setQueueDepth(depth: number): void {
         this.queueDepth = depth;
+    }
+
+    setOldestItemAgeSeconds(ageSeconds: number): void {
+        this.oldestItemAgeSeconds = Math.max(0, ageSeconds);
     }
 
     /** Record a policy action being applied. */
@@ -130,6 +135,12 @@ export class ModerationMetrics {
         );
 
         lines.push(
+            '# HELP moderation_queue_oldest_item_age_seconds Age of the oldest queued moderation item.',
+            '# TYPE moderation_queue_oldest_item_age_seconds gauge',
+            `moderation_queue_oldest_item_age_seconds{${SERVICE_LABELS}} ${this.oldestItemAgeSeconds}`,
+        );
+
+        lines.push(
             '# HELP moderation_queue_latency_seconds Time from enqueue to dequeue in seconds.',
         );
         lines.push('# TYPE moderation_queue_latency_seconds gauge');
@@ -189,6 +200,7 @@ export class ModerationMetrics {
         this.latencySamples.length = 0;
         this.actionCounters.clear();
         this.errorCount = 0;
+        this.oldestItemAgeSeconds = 0;
         this.enqueueTimestamps.clear();
     }
 }

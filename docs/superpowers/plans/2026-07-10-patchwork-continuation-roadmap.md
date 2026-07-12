@@ -498,6 +498,16 @@ until GHCR publication and an authorized staging deployment actually run.
 - [ ] Record commands, timestamps, observed alerts, recovery decisions, and follow-up fixes in the phase evidence document.
 - [ ] Commit as `ops: prove staging recovery and alerting`.
 
+Local progress: backup publication is now archive-validated, checksummed, and
+atomic; restore is empty-target-only, invalidates all restored sessions, runs
+operator-defined invariants, and reports RTO/RPO measurements. Seven executable
+Prometheus rules validate with `promtool`, and the API, indexer, moderation, and
+backup paths emit their required source metrics. An isolated PostgreSQL 16
+drill recovered workflow, projection, and moderation state while removing all
+sessions. Evidence: `docs/operations/evidence/phase-7/staging-readiness.md`.
+The staging checkboxes remain open until the same restore and both incident
+exercises run through the authorized staging alert receiver and browser path.
+
 **Phase 7 exit gate:** A real staging URL runs immutable artifacts, passes the browser journey, restores from backup, rolls back safely, and emits actionable alerts during documented failure drills.
 
 ## Phase 8 — Evaluate the alpha and control future scope
