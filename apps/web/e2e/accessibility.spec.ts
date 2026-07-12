@@ -16,9 +16,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-
-// Uncomment when @axe-core/playwright is installed:
-// import AxeBuilder from '@axe-core/playwright';
+import AxeBuilder from '@axe-core/playwright';
 
 /**
  * Key application routes tested for accessibility compliance.
@@ -321,118 +319,40 @@ test.describe('Keyboard tab order across routes (#99)', () => {
     });
 });
 
-/**
- * axe-core automated accessibility audit.
- *
- * Uncomment the following tests after installing @axe-core/playwright:
- *   npm install -D @axe-core/playwright
- */
-
-/*
 test.describe('axe-core automated audit', () => {
-    test('home page has no critical accessibility violations', async ({
-        page,
-    }) => {
-        await page.goto('/');
-        await page.waitForLoadState('networkidle');
+    for (const route of A11Y_ROUTES) {
+        test(`${route.label} has no detectable WCAG 2 A/AA violations`, async ({
+            page,
+        }) => {
+            await page.goto(route.path);
+            await page.waitForLoadState('networkidle');
 
-        const results = await new AxeBuilder({ page })
-            .withTags(['wcag2a', 'wcag2aa'])
-            .analyze();
+            const results = await new AxeBuilder({ page })
+                .withTags([
+                    'wcag2a',
+                    'wcag2aa',
+                    'wcag21a',
+                    'wcag21aa',
+                    'wcag22aa',
+                ])
+                .analyze();
 
-        expect(results.violations.filter(v => v.impact === 'critical')).toEqual(
-            [],
-        );
-    });
-
-    test('map page has no critical accessibility violations', async ({
-        page,
-    }) => {
-        await page.goto('/map');
-        await page.waitForLoadState('networkidle');
-
-        const results = await new AxeBuilder({ page })
-            .withTags(['wcag2a', 'wcag2aa'])
-            .analyze();
-
-        expect(results.violations.filter(v => v.impact === 'critical')).toEqual(
-            [],
-        );
-    });
-
-    test('feed page has no critical accessibility violations', async ({
-        page,
-    }) => {
-        await page.goto('/feed');
-        await page.waitForLoadState('networkidle');
-
-        const results = await new AxeBuilder({ page })
-            .withTags(['wcag2a', 'wcag2aa'])
-            .analyze();
-
-        expect(results.violations.filter(v => v.impact === 'critical')).toEqual(
-            [],
-        );
-    });
-
-    test('posting form has no critical accessibility violations', async ({
-        page,
-    }) => {
-        await page.goto('/posting');
-        await page.waitForLoadState('networkidle');
-
-        const results = await new AxeBuilder({ page })
-            .withTags(['wcag2a', 'wcag2aa'])
-            .analyze();
-
-        expect(results.violations.filter(v => v.impact === 'critical')).toEqual(
-            [],
-        );
-    });
-
-    test('resource directory has no critical accessibility violations', async ({
-        page,
-    }) => {
-        await page.goto('/resources');
-        await page.waitForLoadState('networkidle');
-
-        const results = await new AxeBuilder({ page })
-            .withTags(['wcag2a', 'wcag2aa'])
-            .analyze();
-
-        expect(results.violations.filter(v => v.impact === 'critical')).toEqual(
-            [],
-        );
-    });
-
-    test('volunteer form has no critical accessibility violations', async ({
-        page,
-    }) => {
-        await page.goto('/volunteer');
-        await page.waitForLoadState('networkidle');
-
-        const results = await new AxeBuilder({ page })
-            .withTags(['wcag2a', 'wcag2aa'])
-            .analyze();
-
-        expect(results.violations.filter(v => v.impact === 'critical')).toEqual(
-            [],
-        );
-    });
-
-    test('chat page has no critical accessibility violations', async ({
-        page,
-    }) => {
-        await page.goto('/chat');
-        await page.waitForLoadState('networkidle');
-
-        const results = await new AxeBuilder({ page })
-            .withTags(['wcag2a', 'wcag2aa'])
-            .analyze();
-
-        expect(results.violations.filter(v => v.impact === 'critical')).toEqual(
-            [],
-        );
-    });
+            expect(results.violations).toEqual([]);
+        });
+    }
 });
-*/
+
+test('critical routes reflow at 320 CSS pixels without page-level horizontal scrolling', async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    for (const route of A11Y_ROUTES) {
+        await page.goto(route.path);
+        await page.waitForLoadState('networkidle');
+        const dimensions = await page.evaluate(() => ({
+            viewport: document.documentElement.clientWidth,
+            content: document.documentElement.scrollWidth,
+        }));
+        expect(dimensions, route.label).toEqual({ viewport: 320, content: 320 });
+    }
+});

@@ -16,6 +16,7 @@ package scripts, HTTP routes, migrations, Compose, and CI workflows.
 | 5 | P1 | README quick start ran only API migrations | Three migration runners exist in package scripts | Fixed |
 | 6 | P1 | Incident runbook described log-derived alerts as current delivery | `monitoring/prometheus/patchwork-alerts.yml` has executable rules | Fixed |
 | 7 | P1 | Staging environment lists example on-call addresses as if assigned | No named accepted owner exists in go/no-go evidence | Open; must be replaced during approval |
+| 31 | P1 | Browser evidence assumed any service already listening on port 5173 was Patchwork | Playwright allowed server reuse and could attach to an unrelated development server | Fixed with strict dedicated port 41739 and server reuse disabled |
 | 8 | P2 | README opening still calls the repository a prototype | Matrix says pre-alpha `NO-GO`, with substantial durable alpha paths | Accepted conservative wording |
 | 9 | P2 | Historical implementation plan says “fully AT Protocol-native” | Matrix explicitly says no subsystem is production-ready | Historical plan; superseded |
 | 10 | P2 | Full-app plan says core journeys are fully implemented | Expansion matrix freezes it and marks it historical | Superseded banner retained |
@@ -47,13 +48,13 @@ Verdict: **Conditional pass** for repository handoff; **fail for launch**.
 | Level | Count |
 | --- | ---: |
 | P0 blocker | 0 |
-| P1 major | 7 |
+| P1 major | 8 |
 | P2 minor/historical | 16 |
 | P3 nit/accepted | 4 |
 | Pending evidence | 3 |
-| **Total** | **30** |
+| **Total** | **31** |
 
-All seven P1 documentation inconsistencies were fixed or converted to explicit
+All eight P1 documentation inconsistencies were fixed or converted to explicit
 unassigned placeholders in this pass. Pending issues 28–30 still require human
 or external evidence and are represented as `NO-GO` conditions; draft legal
 documents are now conspicuously marked not in force. Historical evidence is

@@ -58,7 +58,7 @@ export const LoginPage = () => {
                 <button
                     type='submit'
                     disabled={auth.status === 'redirecting'}
-                    className='border-2 border-mh-border bg-mh-accent px-4 py-2 font-bold text-white'
+                    className='mh-button mh-button--primary px-4 py-2 font-bold'
                 >
                     {auth.status === 'redirecting' ?
                         'Opening your provider…'

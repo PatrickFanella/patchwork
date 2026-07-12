@@ -3,13 +3,13 @@ import { expect, test } from '@playwright/test';
 const subjectUri =
     'at://did:plc:subject/app.patchwork.aid.post/browser-safety-1';
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, baseURL }) => {
+    if (!baseURL) throw new Error('Playwright baseURL is required.');
     await page.context().addCookies([
         {
             name: 'patchwork_csrf',
             value: 'browser-csrf-token',
-            domain: 'localhost',
-            path: '/',
+            url: baseURL,
         },
     ]);
     await page.route('http://localhost:4000/**', async route => {

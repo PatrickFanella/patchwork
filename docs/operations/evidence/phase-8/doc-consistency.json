@@ -1,7 +1,7 @@
 {
   "reviewDate": "2026-07-11",
   "verdict": "conditional-pass-repository-fail-launch",
-  "summary": { "p0": 0, "p1": 7, "p2": 16, "p3": 4, "pending": 3, "total": 30 },
+  "summary": { "p0": 0, "p1": 8, "p2": 16, "p3": 4, "pending": 3, "total": 31 },
   "issues": [
     { "id": 1, "severity": "P1", "status": "fixed", "topic": "matrix moderation retention" },
     { "id": 2, "severity": "P1", "status": "fixed", "topic": "traceability moderation runtime" },
@@ -32,6 +32,7 @@
     { "id": 27, "severity": "P3", "status": "historical", "topic": "dated counts" },
     { "id": 28, "severity": "Pending Evidence", "status": "launch-blocking", "topic": "account deletion promise" },
     { "id": 29, "severity": "Pending Evidence", "status": "launch-blocking", "topic": "data export promise" },
-    { "id": 30, "severity": "Pending Evidence", "status": "external", "topic": "external resource inventory" }
+    { "id": 30, "severity": "Pending Evidence", "status": "external", "topic": "external resource inventory" },
+    { "id": 31, "severity": "P1", "status": "fixed", "topic": "browser server ownership" }
   ]
 }

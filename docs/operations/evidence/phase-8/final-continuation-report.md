@@ -31,10 +31,10 @@ paths without fixture fallback.
 - database-enabled repository suite: 848 tests;
 - PostgreSQL/HTTP integration: 24 tests;
 - direct service integration: 9 tests;
-- Chromium: 39 passed, 1 authorized-external test skipped;
+- Chromium: 48 passed, 1 authorized-external test skipped;
 - migrations: API 12, indexer 3, moderation 3; clean application and replay;
-- coverage: 58.25% statements, 45.85% branches, 51.70% functions,
-  59.43% lines;
+- database-enabled coverage: 64.50% statements, 51.20% branches, 58.46%
+  functions, 65.71% lines;
 - build, lint, typecheck, artifact redaction, and high-severity audit pass;
 - eleven Prometheus alert rules validate with `promtool`.
 

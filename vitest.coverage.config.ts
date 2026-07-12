@@ -2,6 +2,10 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
     test: {
+        // PostgreSQL suites share migration tables in TEST_DATABASE_URL. Running
+        // files concurrently can deadlock their migration and TRUNCATE setup,
+        // making the coverage gate nondeterministic.
+        fileParallelism: false,
         include: [
             'apps/**/*.{test,spec}.{ts,tsx}',
             'services/**/*.{test,spec}.{ts,tsx}',
