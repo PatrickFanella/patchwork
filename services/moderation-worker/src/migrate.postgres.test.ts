@@ -30,6 +30,7 @@ describeWithPostgres('moderation database migrations', () => {
             applied: [
                 '001_create_moderation_tables.sql',
                 '002_durable_moderation.sql',
+                '003_retention_enforcement.sql',
             ],
             skipped: [],
         });
@@ -53,6 +54,7 @@ describeWithPostgres('moderation database migrations', () => {
             skipped: [
                 '001_create_moderation_tables.sql',
                 '002_durable_moderation.sql',
+                '003_retention_enforcement.sql',
             ],
         });
     });

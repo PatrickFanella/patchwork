@@ -16,6 +16,8 @@ transitions must still be demonstrated on the authorized staging stack.
 | `PatchworkBackupStale` | warning | no successful backup for 7.5 hours | Respond within 15 minutes |
 | `PatchworkRetentionFailed` | warning | latest API retention pass failed for 5 minutes | Respond within 15 minutes |
 | `PatchworkRetentionStale` | warning | no successful API retention pass for 2 hours | Respond within 15 minutes |
+| `PatchworkModerationRetentionFailed` | warning | latest moderation retention pass failed for 5 minutes | Respond within 15 minutes |
+| `PatchworkModerationRetentionStale` | warning | no successful moderation retention pass for 2 hours | Respond within 15 minutes |
 
 The API records completed requests and 5xx responses in the shared SLI
 counters. The indexer exports source connection and lag gauges. Moderation

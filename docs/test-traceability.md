@@ -20,7 +20,7 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Database-enabled full repository suite | 836 passed |
+| Database-enabled full repository suite | 848 passed |
 | Direct lifecycle service integration | 9 passed |
 | PostgreSQL integration, including HTTP boundary | 24 passed |
 | Browser Chromium suite | 39 passed, 1 externally gated case skipped |
@@ -168,7 +168,10 @@ records remain. It also proves expired browser/OAuth state, old revoked OAuth
 sessions, and completed HTTP replay entries are pruned without deleting active
 sessions. Scheduler and metric tests cover immediate/repeated non-overlapping
 execution, clean stop, and preservation of the last-success timestamp after a
-failure. Moderation retention remains a separate worker-owned slice.
+failure. `moderation-retention.postgres.test.ts` independently proves the
+worker-owned seven-day boundary: expired audits and resolved cases disappear,
+while queued and recently resolved cases remain. Store tests prove policy
+decisions assign exact deadlines and reopening clears the case deadline.
 
 ## Local full-matrix procedure
 

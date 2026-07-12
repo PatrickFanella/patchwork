@@ -106,13 +106,16 @@ this policy:
 | Account and profile   | Until you deactivate your account            |
 | Aid requests/offers   | Until you delete them, or account deactivation|
 | Messages              | Until you delete them, or account deactivation|
-| Moderation audit logs | 7 days from creation (aligned with `MODERATION_LOG_RETENTION_DAYS`)|
+| Moderation audit logs and resolved casework | 7 days from the policy decision |
 | Server/technical logs | 30 days                                      |
 | Verification records  | Duration of verification tier validity        |
 
-Moderation audit logs follow a 7-day retention window as defined in the
-platform's privacy module. This retention period may change; any changes will
-be documented in this policy and the
+The PostgreSQL moderation runtime assigns an explicit seven-day expiry to every
+policy audit and resolved case. A new report or appeal reopens the case and
+clears its case-expiry deadline. The worker enforces elapsed deadlines hourly;
+active queued casework is never removed by age alone. This retention period may
+change only through a migration, runtime policy update, and documentation in
+this policy and the
 [policy changelog](./changelog.md).
 
 ## 6. Your Rights

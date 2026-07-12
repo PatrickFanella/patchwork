@@ -42,6 +42,12 @@ describeWithPostgres('PostgresModerationAuditStore', () => {
                 'utf8',
             ),
         );
+        await pool.query(
+            await readFile(
+                new URL('./migrations/003_retention_enforcement.sql', import.meta.url),
+                'utf8',
+            ),
+        );
     });
 
     beforeEach(async () => {
@@ -76,15 +82,25 @@ describeWithPostgres('PostgresModerationAuditStore', () => {
         const stored = await pool.query<{
             queue_status: string;
             visibility: string;
+            retention_until: Date;
         }>(
-            `SELECT queue_status, visibility FROM moderation_queue_items
+            `SELECT queue_status, visibility, retention_until FROM moderation_queue_items
              WHERE subject_uri = $1`,
             [queued.subjectUri],
         );
         expect(stored.rows[0]).toEqual({
             queue_status: 'resolved',
             visibility: 'delisted',
+            retention_until: new Date('2026-07-18T23:11:00.000Z'),
         });
+        const auditRetention = await pool.query<{ retention_until: Date }>(
+            `SELECT retention_until FROM moderation_audit_records
+             WHERE idempotency_key = $1`,
+            [command.idempotencyKey],
+        );
+        expect(auditRetention.rows[0]?.retention_until).toEqual(
+            new Date('2026-07-18T23:11:00.000Z'),
+        );
     });
 
     it('deduplicates concurrent delivery of one policy command', async () => {

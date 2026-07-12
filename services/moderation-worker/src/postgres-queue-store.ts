@@ -76,7 +76,8 @@ export class PostgresModerationQueueStore {
                  appeal_state = EXCLUDED.appeal_state,
                  context = EXCLUDED.context,
                  requested_at = EXCLUDED.requested_at,
-                 updated_at = EXCLUDED.updated_at`,
+                 updated_at = EXCLUDED.updated_at,
+                 retention_until = NULL`,
             [
                 item.subjectUri,
                 item.queueId,

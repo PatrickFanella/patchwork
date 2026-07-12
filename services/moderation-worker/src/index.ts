@@ -34,6 +34,7 @@ const runtime = await createModerationRuntime({
     nodeEnv: config.NODE_ENV,
     ...(databaseUrl ? { databaseUrl } : {}),
     metrics,
+    retentionIntervalMs: config.MODERATION_RETENTION_INTERVAL_SECONDS * 1_000,
 });
 const durableService = runtime.mode === 'postgres' ? runtime.service : undefined;
 

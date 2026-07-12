@@ -45,6 +45,9 @@ export class ModerationMetrics {
     private readonly actionCounters = new Map<string, number>();
     private errorCount = 0;
     private oldestItemAgeSeconds = 0;
+    private retentionLastAttemptSuccess = 1;
+    private retentionLastAttemptTimestampSeconds = 0;
+    private retentionLastSuccessTimestampSeconds = 0;
     private readonly enqueueTimestamps = new Map<string, number>();
 
     /** Record when a queue item is enqueued (for latency tracking). */
@@ -84,6 +87,20 @@ export class ModerationMetrics {
     /** Record an error. */
     recordError(): void {
         this.errorCount++;
+    }
+
+    recordRetentionSuccess(at = new Date()): void {
+        const timestamp = Math.floor(at.getTime() / 1_000);
+        this.retentionLastAttemptSuccess = 1;
+        this.retentionLastAttemptTimestampSeconds = timestamp;
+        this.retentionLastSuccessTimestampSeconds = timestamp;
+    }
+
+    recordRetentionFailure(at = new Date()): void {
+        this.retentionLastAttemptSuccess = 0;
+        this.retentionLastAttemptTimestampSeconds = Math.floor(
+            at.getTime() / 1_000,
+        );
     }
 
     /** Get the current queue depth. */
@@ -172,6 +189,15 @@ export class ModerationMetrics {
             `moderation_errors_total{${SERVICE_LABELS}} ${this.errorCount}`,
         );
 
+        lines.push(
+            '# TYPE moderation_retention_last_attempt_success gauge',
+            `moderation_retention_last_attempt_success{${SERVICE_LABELS}} ${this.retentionLastAttemptSuccess}`,
+            '# TYPE moderation_retention_last_attempt_timestamp_seconds gauge',
+            `moderation_retention_last_attempt_timestamp_seconds{${SERVICE_LABELS}} ${this.retentionLastAttemptTimestampSeconds}`,
+            '# TYPE moderation_retention_last_success_timestamp_seconds gauge',
+            `moderation_retention_last_success_timestamp_seconds{${SERVICE_LABELS}} ${this.retentionLastSuccessTimestampSeconds}`,
+        );
+
         // SLI-aligned metrics for cross-service consistency
         lines.push(
             '# HELP patchwork_sli_request_total Total moderation actions (SLI-aligned).',
@@ -201,6 +227,9 @@ export class ModerationMetrics {
         this.actionCounters.clear();
         this.errorCount = 0;
         this.oldestItemAgeSeconds = 0;
+        this.retentionLastAttemptSuccess = 1;
+        this.retentionLastAttemptTimestampSeconds = 0;
+        this.retentionLastSuccessTimestampSeconds = 0;
         this.enqueueTimestamps.clear();
     }
 }

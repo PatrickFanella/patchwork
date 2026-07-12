@@ -108,6 +108,12 @@ const moderationWorkerSchema = baseSchema.merge(atprotoSchema).extend({
         .min(1)
         .max(64)
         .default(2),
+    MODERATION_RETENTION_INTERVAL_SECONDS: z.coerce
+        .number()
+        .int()
+        .min(60)
+        .max(86_400)
+        .default(3_600),
     MODERATION_SERVICE_TOKEN: optionalSecretField,
 });
 

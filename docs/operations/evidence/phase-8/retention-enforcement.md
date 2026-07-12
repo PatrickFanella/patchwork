@@ -1,7 +1,6 @@
 # API private-data retention enforcement
 
-Status: **implemented and locally verified; moderation retention and policy
-approval pending**
+Status: **implemented and locally verified; formal policy approval pending**
 
 API migration 0012 adds partial indexes for elapsed workflow, block, audit, and
 revoked-session cleanup. PostgreSQL startup immediately begins a retention pass
@@ -27,8 +26,18 @@ Focused evidence:
 - four PostgreSQL/scheduler behavior tests pass;
 - API retention metrics preserve last success across failure;
 - API typecheck and 239-test database-enabled API suite pass;
-- nine Prometheus rules validate with `promtool`.
+- eleven Prometheus rules validate with `promtool`.
 
-This does not close the `RETENTION` go/no-go condition. The moderation worker
-must independently enforce its seven-day queue/audit policy, and the complete
-backup/deletion policy still requires privacy approval.
+The moderation worker independently assigns seven-day deadlines to policy
+audits and resolved cases, clears case expiry when a new report or appeal
+reopens work, and runs a non-overlapping hourly cleanup transaction. Active and
+recent casework survive. Worker failure/staleness metrics feed two additional
+validated alerts.
+
+The combined focused evidence includes API retention behavior, moderation
+migration/store/retention/scheduler behavior, clean API migration 0012 and
+moderation migration 003 replay, and eleven valid Prometheus rules.
+
+This does not close the `RETENTION` go/no-go condition until the complete
+backup/deletion policy receives formal privacy approval and the scheduled jobs
+are observed in authorized staging.

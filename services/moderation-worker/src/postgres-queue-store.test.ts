@@ -40,6 +40,12 @@ describeWithPostgres('PostgresModerationQueueStore', () => {
                 'utf8',
             ),
         );
+        await pool.query(
+            await readFile(
+                new URL('./migrations/003_retention_enforcement.sql', import.meta.url),
+                'utf8',
+            ),
+        );
     });
 
     beforeEach(async () => {
@@ -73,6 +79,37 @@ describeWithPostgres('PostgresModerationQueueStore', () => {
         expect(second).not.toBeNull();
         expect(first?.subjectUri).not.toBe(second?.subjectUri);
         expect(new Set([first?.subjectUri, second?.subjectUri]).size).toBe(2);
+    });
+
+    it('clears a resolved-case retention deadline when a new report reopens it', async () => {
+        const reopened = item('reopened');
+        await store.enqueue(reopened);
+        await pool.query(
+            `UPDATE moderation_queue_items
+             SET queue_status = 'resolved', retention_until = '2026-07-18T00:00:00Z'
+             WHERE subject_uri = $1`,
+            [reopened.subjectUri],
+        );
+
+        await store.enqueue({
+            ...reopened,
+            reportCount: 2,
+            requestedAt: '2026-07-12T00:00:00.000Z',
+            updatedAt: '2026-07-12T00:00:00.000Z',
+        });
+
+        const stored = await pool.query<{
+            queue_status: string;
+            retention_until: Date | null;
+        }>(
+            `SELECT queue_status, retention_until FROM moderation_queue_items
+             WHERE subject_uri = $1`,
+            [reopened.subjectUri],
+        );
+        expect(stored.rows[0]).toEqual({
+            queue_status: 'queued',
+            retention_until: null,
+        });
     });
 
     it('requeues failures after backoff and excludes terminal failures', async () => {

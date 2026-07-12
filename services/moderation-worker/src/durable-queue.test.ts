@@ -671,6 +671,25 @@ describe('durable queue/state backend (issue #96)', () => {
             expect(metrics.getTotalActions()).toBe(0);
             expect(metrics.getErrorCount()).toBe(0);
         });
+
+        it('keeps the last retention success visible after a failed pass', () => {
+            const metrics = new ModerationMetrics();
+            metrics.recordRetentionSuccess(
+                new Date('2026-07-11T00:00:00Z'),
+            );
+            metrics.recordRetentionFailure(
+                new Date('2026-07-11T01:00:00Z'),
+            );
+
+            const output = metrics.renderPrometheus();
+            expect(output).toContain(
+                'moderation_retention_last_attempt_success',
+            );
+            expect(output).toContain(
+                'moderation_retention_last_success_timestamp_seconds',
+            );
+            expect(output).toContain('1783728000');
+        });
     });
 
     describe('queue store operations', () => {

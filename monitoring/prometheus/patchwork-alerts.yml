@@ -46,3 +46,13 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations: { runbook_url: "docs/operations/incident-response.md#retention-enforcement" }
+      - alert: PatchworkModerationRetentionFailed
+        expr: moderation_retention_last_attempt_success{service="moderation-worker",environment="staging"} == 0
+        for: 5m
+        labels: { severity: warning }
+        annotations: { runbook_url: "docs/operations/incident-response.md#retention-enforcement" }
+      - alert: PatchworkModerationRetentionStale
+        expr: time() - moderation_retention_last_success_timestamp_seconds{service="moderation-worker",environment="staging"} > 7200
+        for: 5m
+        labels: { severity: warning }
+        annotations: { runbook_url: "docs/operations/incident-response.md#retention-enforcement" }

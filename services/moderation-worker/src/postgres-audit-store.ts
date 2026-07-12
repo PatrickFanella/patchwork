@@ -146,6 +146,9 @@ export class PostgresModerationAuditStore {
                 };
             }
             const next = applyModerationTransition(current, command.action);
+            const retentionUntil = new Date(
+                new Date(command.occurredAt).getTime() + 7 * 24 * 60 * 60 * 1_000,
+            ).toISOString();
             const audit: ModerationAuditRecord = {
                 actionId: `action:${command.idempotencyKey}`,
                 queueId: current.queueId,
@@ -166,7 +169,8 @@ export class PostgresModerationAuditStore {
             await client.query(
                 `UPDATE moderation_queue_items
                  SET queue_status = $2, visibility = $3, appeal_state = $4,
-                     updated_at = $5, lease_owner = NULL, lease_expires_at = NULL
+                     updated_at = $5, lease_owner = NULL, lease_expires_at = NULL,
+                     retention_until = $6
                  WHERE subject_uri = $1`,
                 [
                     current.subjectUri,
@@ -174,13 +178,15 @@ export class PostgresModerationAuditStore {
                     next.visibility,
                     next.appealState,
                     command.occurredAt,
+                    next.queueStatus === 'resolved' ? retentionUntil : null,
                 ],
             );
             await client.query(
                 `INSERT INTO moderation_audit_records (
                     action_id, queue_id, subject_uri, actor_did, action, reason,
-                    occurred_at, idempotency_key, previous_state, next_state
-                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)`,
+                    occurred_at, idempotency_key, previous_state, next_state,
+                    retention_until
+                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11)`,
                 [
                     audit.actionId,
                     audit.queueId,
@@ -192,6 +198,7 @@ export class PostgresModerationAuditStore {
                     audit.idempotencyKey,
                     JSON.stringify(audit.previousState),
                     JSON.stringify(audit.nextState),
+                    retentionUntil,
                 ],
             );
             return {
