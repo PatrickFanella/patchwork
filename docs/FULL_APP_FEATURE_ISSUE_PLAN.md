@@ -3,7 +3,10 @@
 > Historical expansion plan: issue definitions and completion language in this
 > file describe intended outcomes, not verified runtime readiness. Expansion is
 > frozen by the 2026-07-10 continuation roadmap until the durable alpha gate is
-> met. See `docs/architecture/current-state-matrix.md` for current status.
+> met. Phase 8.2 selected no expansion slice while the alpha is `NO-GO`; all
+> entries below are explicitly deferred. See
+> `docs/EXPANSION_DECISION_MATRIX.md` for reevaluation criteria and
+> `docs/architecture/current-state-matrix.md` for current status.
 
 This roadmap extends beyond production hardening and focuses on product completeness:
 

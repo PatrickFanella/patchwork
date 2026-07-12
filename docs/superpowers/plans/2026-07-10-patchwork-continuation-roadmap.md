@@ -536,11 +536,15 @@ human-ownership evidence is incomplete.
 - Create: `docs/EXPANSION_DECISION_MATRIX.md`
 - Modify: `docs/FULL_APP_FEATURE_ISSUE_PLAN.md`
 
-- [ ] Score groups, reputation, organizations, scheduling, mobile, multi-region, connectors, attachments, matching, and richer chat on user evidence, safety risk, protocol fit, operational cost, and dependency readiness.
-- [ ] Choose at most one expansion vertical slice for the milestone following alpha.
-- [ ] Archive or explicitly defer roadmap entries that lack pilot evidence.
-- [ ] Require the selected slice to include its own persistence, authorization, privacy, operational, and E2E acceptance criteria.
-- [ ] Commit as `docs: prioritize post-alpha expansion from evidence`.
+- [x] Score groups, reputation, organizations, scheduling, mobile, multi-region, connectors, attachments, matching, and richer chat on user evidence, safety risk, protocol fit, operational cost, and dependency readiness.
+- [x] Choose at most one expansion vertical slice for the milestone following alpha.
+- [x] Archive or explicitly defer roadmap entries that lack pilot evidence.
+- [x] Require the selected slice to include its own persistence, authorization, privacy, operational, and E2E acceptance criteria.
+- [x] Commit as `docs: prioritize post-alpha expansion from evidence`.
+
+Decision: no expansion slice is selected while the alpha is `NO-GO` and pilot
+evidence is absent. The matrix defines the complete acceptance boundary that
+any future selected slice must receive.
 
 ### Task 8.3: Start a bounded pilot or close the project cleanly
 
