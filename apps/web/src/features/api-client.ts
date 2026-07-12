@@ -590,11 +590,10 @@ export interface AccountActionApiResponse {
 }
 
 export const fetchSettingsFromApi = async (
-    did: string,
+    _did: string,
     signal?: AbortSignal,
 ): Promise<ApiClientResult<SettingsApiGetResponse>> => {
-    const params = new URLSearchParams({ did });
-    const result = await requestJson('/account/settings', params, signal);
+    const result = await requestJsonPost('/account/settings/read', {}, signal);
 
     if (!result.ok) {
         return result;
@@ -969,23 +968,7 @@ export const initiateChatViaApi = async (
     },
     signal?: AbortSignal,
 ): Promise<ApiClientResult<ChatInitiationApiResult>> => {
-    const params = new URLSearchParams({
-        aidPostUri: input.aidPostUri,
-        initiatedByDid: input.initiatedByDid,
-        recipientDid: input.recipientDid,
-        initiatedFrom: input.initiatedFrom,
-        allowInitiation: String(input.allowInitiation),
-    });
-
-    if (input.supportsAtprotoChat !== undefined) {
-        params.set('supportsAtprotoChat', String(input.supportsAtprotoChat));
-    }
-
-    if (input.now) {
-        params.set('now', input.now);
-    }
-
-    const result = await requestJson('/chat/initiate', params, signal);
+    const result = await requestJsonPost('/chat/initiate', input, signal);
     if (!result.ok) {
         return result;
     }
@@ -1150,15 +1133,10 @@ export const transitionAidPostViaApi = async (
 
 export const queryAidPostLifecycleViaApi = async (
     postUri: string,
-    actorRole?: string,
+    _actorRole?: string,
     signal?: AbortSignal,
 ): Promise<ApiClientResult<LifecycleQueryApiResult>> => {
-    const params = new URLSearchParams({ postUri });
-    if (actorRole) {
-        params.set('actorRole', actorRole);
-    }
-
-    const result = await requestJson('/aid/post/lifecycle', params, signal);
+    const result = await requestJsonPost('/aid/post/lifecycle/query', { postUri }, signal);
 
     if (!result.ok) {
         return result;
@@ -1181,41 +1159,52 @@ export const createAidPostViaApi = async (
     input: AidPostCreateApiInput,
     signal?: AbortSignal,
 ): Promise<ApiClientResult<FeedRecordEnvelope>> => {
-    const body = {
-        authorDid: input.authorDid,
+    const now = input.now ?? new Date().toISOString();
+    const record = aidPostSchema.parse({
+        $type: 'app.patchwork.aid.post',
+        version: '1.0.0',
         title: input.draft.title,
         description: input.draft.description,
         category: input.draft.category,
         urgency: toLexiconUrgency(input.draft.urgency),
-        latitude: Number(input.draft.location.lat.toFixed(6)),
-        longitude: Number(input.draft.location.lng.toFixed(6)),
-        precisionKm: Number(
-            (input.draft.location.precisionMeters / 1000).toFixed(3),
-        ),
-        rkey: input.rkey,
-        now: input.now,
-        trustScore: input.trustScore,
-    };
+        status: 'open',
+        location: {
+            latitude: Number(input.draft.location.lat.toFixed(2)),
+            longitude: Number(input.draft.location.lng.toFixed(2)),
+            precisionKm: Math.max(
+                1,
+                Number((input.draft.location.precisionMeters / 1000).toFixed(3)),
+            ),
+        },
+        createdAt: now,
+        updatedAt: now,
+    });
 
-    const result = await requestJsonPost('/aid/post/create', body, signal);
+    const result = await createAtAidPostViaApi(record, signal);
     if (!result.ok) {
         return result;
     }
 
-    const mapped = mapAidPayloadToRecords({
-        results: [result.data],
-    });
-
-    const [createdRecord] = mapped;
-    if (!createdRecord) {
-        return {
-            ok: false,
-            error: 'Aid post create response was malformed.',
-        };
-    }
-
     return {
         ok: true,
-        data: createdRecord,
+        data: {
+            aidPostUri: result.data.uri,
+            recipientDid: input.authorDid,
+            card: createFeedCard({
+                id: parseRecordIdFromUri(result.data.uri, input.rkey),
+                title: record.title,
+                description: record.description,
+                category: record.category,
+                status: 'open',
+                urgency: input.draft.urgency,
+                accessibilityTags: input.draft.accessibilityTags,
+                createdAt: record.createdAt,
+                updatedAt: record.updatedAt ?? record.createdAt,
+                location: {
+                    lat: record.location.latitude,
+                    lng: record.location.longitude,
+                },
+            }),
+        },
     };
 };

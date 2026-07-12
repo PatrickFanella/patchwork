@@ -245,12 +245,12 @@ Compose. Development and tests may still opt into the explicit fixture runtime.
 - Test: `services/api/src/http/router.test.ts`
 
 - [x] Route by HTTP method and pathname, returning `405` with `Allow` for unsupported methods.
-- [ ] Parse bearer or secure-cookie sessions once and attach an immutable authenticated principal.
-- [ ] Accept command payloads only as bounded JSON bodies; keep credentials and tokens out of URLs.
+- [x] Parse bearer or secure-cookie sessions once and attach an immutable authenticated principal.
+- [x] Accept command payloads only as bounded JSON bodies; keep credentials and tokens out of URLs.
 - [x] Return a stable error envelope with request IDs and no internal exception details.
 - [x] Add graceful shutdown that stops accepting requests, drains active work, and closes pools.
 - [x] Test malformed JSON, oversized bodies, unsupported media types, missing auth, expired auth, and shutdown behavior.
-- [ ] Commit as `refactor(api): add secure method-aware HTTP routing`.
+- [x] Commit the secure routing work as focused verified slices.
 
 ### Task 4.2: Enforce perimeter and authorization policy
 
@@ -264,9 +264,9 @@ Compose. Development and tests may still opt into the explicit fixture runtime.
 - [x] Allow only configured origins and reject credentialed wildcard CORS.
 - [x] Add security headers, secure-cookie requirements, CSRF protection for cookie-authenticated commands, and trusted-proxy configuration.
 - [x] Apply separate rate-limit policies to login, reads, writes, reports, and moderation operations.
-- [ ] Enforce owner, moderator, and service capabilities at every command boundary.
+- [x] Enforce owner, moderator, and service capabilities at every remaining API command boundary.
 - [x] Test origin rejection, CSRF rejection, forwarded-IP spoofing, rate-limit reset, and privilege escalation attempts.
-- [ ] Commit as `feat(security): enforce API perimeter and capabilities`.
+- [x] Commit the API perimeter work as focused verified slices.
 
 ### Task 4.3: Remove unsafe compatibility routes
 
@@ -276,10 +276,10 @@ Compose. Development and tests may still opt into the explicit fixture runtime.
 - Modify: `README.md`
 - Modify: `docs/test-traceability.md`
 
-- [ ] Remove query-parameter login, token refresh, mutation, and administrative routes.
+- [x] Remove query-parameter login, token refresh, mutation, and administrative routes.
 - [ ] Convert mutations to `POST`, `PATCH`, or `DELETE` with JSON bodies and explicit idempotency keys.
 - [ ] Verify logs and request IDs never contain passwords, tokens, exact coordinates, or unredacted DIDs where redaction is required.
-- [ ] Add a repository scan that fails CI if `password`, `accessJwt`, or `refreshJwt` is read from `URLSearchParams` in runtime code.
+- [x] Add a repository scan that fails CI if sensitive or mutation data is read from `URLSearchParams` in runtime entrypoints.
 - [ ] Commit as `fix(security): remove query-string credentials and mutations`.
 
 **Phase 4 exit gate:** The API passes an authenticated authorization matrix and perimeter test suite; no credential or mutation input is transported in a query string.

@@ -83,14 +83,14 @@ The API retains two datasource modes, but fixture mode is test-only:
 4. Optionally seed deterministic discovery data: `npm run db:seed`
 5. Start API in postgres mode: `npm run dev:api`
 
-### DB-backed frontend mode (Map / Feed / Resources / Posting)
+### PostgreSQL-backed frontend mode (Map / Feed / Resources / Posting)
 
 The web client now calls API routes directly for discovery + posting surfaces:
 
 - `GET /query/map`
 - `GET /query/feed`
 - `GET /query/directory`
-- `GET /aid/post/create`
+- `POST /at/aid-posts`
 
 Authenticated AT repository commands are exposed separately:
 
@@ -100,8 +100,10 @@ Authenticated AT repository commands are exposed separately:
 - `POST /at/aid-posts/close`
 - `DELETE /at/aid-posts`
 
-The legacy `/aid/post/create` fixture path is available only under
-`NODE_ENV=test` and returns `410` in a non-test runtime.
+The API runtime exposes no fixture-backed compatibility commands. Deferred chat,
+settings, organization, verification, inbox, feedback, reputation, and
+attachment prototypes are not server routes until they receive durable,
+authenticated implementations.
 
 Recommended local flow:
 
@@ -113,12 +115,17 @@ Recommended local flow:
 In the UI, route headers show a data source badge:
 
 - **DB-backed API** when remote query succeeds
-- **Fallback dataset** when API is unavailable (network-safe local fallback)
+- **Fallback dataset** is test/demo behavior only and is not a production data
+  source
 
 Posting behavior in DB mode:
 
-- `Publish request` calls `GET /aid/post/create`
-- On success, the created post is inserted into Postgres and becomes immediately queryable via `/query/feed` and `/query/map`
+- `Publish request` sends a bounded JSON record to authenticated
+  `POST /at/aid-posts`
+- Public coordinates are rounded and carry at least 1 km precision before the
+  PDS write; exact draft coordinates are not sent
+- Live discovery follows the Phase 5 ingestion/projection path and must not
+  claim immediate visibility until that runtime is connected
 
 Additional seed scripts (API workspace):
 

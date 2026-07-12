@@ -11,28 +11,17 @@ import {
     type HealthCheck,
     SliCollector,
 } from '@patchwork/shared';
-import { createAidPostService } from './aid-post-service.js';
-import { createFixtureChatService } from './chat-service.js';
 import { createPostgresPool } from './db/discovery-events.js';
 import {
     createFixtureQueryService,
     createPostgresQueryService,
 } from './query-service.js';
-import { createFixtureVerificationService } from './verification-service.js';
-import { createFixtureSettingsService } from './settings-service.js';
-import { createFixtureAuthService } from './auth-service.js';
 import { AtClientError } from '@patchwork/at-client';
 import { createAtAuthRuntime } from './auth/runtime.js';
 import { serializeSessionCookie } from './auth/at-auth-service.js';
 import { AidPostCommandService } from './records/aid-post-command-service.js';
 import { ZodError } from 'zod';
-import { createFixtureVolunteerService } from './volunteer-service.js';
 import { createLifecycleService } from './lifecycle-service.js';
-import { createAttachmentService } from './aid-post-service.js';
-import { createOrgPortalService } from './org-portal-service.js';
-import { createInboxService } from './inbox-service.js';
-import { createFeedbackService } from './feedback-service.js';
-import { createReputationService } from './reputation-service.js';
 import { getCorsHeaders } from './cors.js';
 import { selectLimiter, extractClientIp } from './rate-limiter.js';
 import { PostgresBlockRepository } from './db/block-repository.js';
@@ -77,18 +66,6 @@ const resolveQueryService = async () => {
 };
 
 const queryService = await resolveQueryService();
-
-const chatService = createFixtureChatService();
-const verificationService = createFixtureVerificationService();
-const settingsService = createFixtureSettingsService();
-const volunteerService = createFixtureVolunteerService();
-const attachmentService = createAttachmentService();
-const fixtureAuthService =
-    config.NODE_ENV === 'test' ? createFixtureAuthService() : undefined;
-const orgPortalService = createOrgPortalService();
-const inboxService = createInboxService();
-const feedbackService = createFeedbackService();
-const reputationService = createReputationService();
 
 const databaseUrl = config.API_DATABASE_URL ?? config.DATABASE_URL;
 const postgresPool =
@@ -137,12 +114,6 @@ const lifecycleTransitionHandler =
             authenticate: authenticateApiRequest,
         })
     :   undefined;
-
-const aidPostService = createAidPostService(queryService, {
-    dataSource: config.API_DATA_SOURCE,
-    databaseUrl,
-    pool: postgresPool,
-});
 
 const sliCollector = new SliCollector();
 
@@ -315,10 +286,24 @@ const handleRealAuthRoute = (
     void (async () => {
         try {
             if (
-                request.method === 'GET' &&
+                request.method === 'POST' &&
                 requestUrl.pathname === '/oauth/login'
             ) {
-                const handle = requestUrl.searchParams.get('handle');
+                const body = await readJsonBody(request);
+                const handle =
+                    typeof body === 'object' &&
+                    body !== null &&
+                    'handle' in body &&
+                    typeof body.handle === 'string' ?
+                        body.handle.trim()
+                    :   '';
+                const returnTo =
+                    typeof body === 'object' &&
+                    body !== null &&
+                    'returnTo' in body &&
+                    typeof body.returnTo === 'string' ?
+                        body.returnTo
+                    :   '/';
                 if (!handle) {
                     writeJson(response, 400, {
                         error: {
@@ -330,7 +315,7 @@ const handleRealAuthRoute = (
                 }
                 const result = await atAuthRuntime.service.beginLogin(
                     handle,
-                    requestUrl.searchParams.get('returnTo') ?? '/',
+                    returnTo,
                 );
                 response.writeHead(302, { location: result.authorizationUrl });
                 response.end();
@@ -603,82 +588,26 @@ const contractRoutes = [
     '/oauth/client-metadata.json',
     '/oauth/login',
     '/oauth/callback',
+    '/auth/session',
+    '/auth/refresh',
     '/at/aid-posts',
     '/at/aid-posts/close',
     '/at/aid-posts/status/reconcile',
     '/query/map',
     '/query/feed',
     '/query/directory',
-    '/aid/post/create',
-    '/chat/initiate',
-    '/chat/route',
-    '/chat/conversations',
-    '/chat/safety/evaluate',
-    '/chat/safety/block',
-    '/chat/safety/mute',
-    '/chat/safety/report',
-    '/chat/safety/signals/drain',
-    '/chat/safety/metrics',
-    '/chat/message/send',
-    '/chat/message/status',
-    '/chat/message/retry',
-    '/chat/messages',
-    '/chat/route/preference-aware',
-    '/volunteer/profile/upsert',
-    '/volunteer/profiles',
-    '/verification/status',
-    '/verification/grant',
-    '/verification/revoke',
-    '/verification/renew',
-    '/verification/appeal',
-    '/verification/audit',
-    '/account/settings',
-    '/account/settings/audit',
-    '/account/deactivate',
-    '/account/export',
     '/aid/post/transition',
-    '/aid/post/lifecycle',
     '/aid/post/assign',
     '/aid/post/accept',
     '/aid/post/decline',
     '/aid/post/handoff',
-    '/aid/post/timeout-check',
-    '/aid/post/attachments',
-    '/aid/post/attachments/add',
-    '/auth/session',
-    '/auth/refresh',
-    '/org/profile',
-    '/org/create',
-    '/org/member/invite',
-    '/org/member/remove',
-    '/org/member/role',
-    '/org/members',
-    '/org/service/upsert',
-    '/org/service/status',
-    '/org/services',
-    '/org/audit',
-    '/org/metrics',
-    '/inbox',
-    '/inbox/read',
-    '/inbox/read-all',
-    '/inbox/counts',
-    '/feedback',
-    '/feedback/request',
-    '/feedback/user',
-    '/feedback/summary',
-    '/reputation',
-    '/reputation/signals',
+    '/blocks',
+    '/reports',
     '/health',
     '/health/ready',
     '/metrics',
+    '/contracts',
 ] as const;
-
-const requireFixtureAuthService = () => {
-    if (!fixtureAuthService) {
-        throw new Error('Fixture auth is available only when NODE_ENV=test.');
-    }
-    return fixtureAuthService;
-};
 
 const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
     '/health': async () => {
@@ -706,131 +635,9 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
         queryService.queryFeed(requestUrl.searchParams),
     '/query/directory': requestUrl =>
         queryService.queryDirectory(requestUrl.searchParams),
-    '/chat/initiate': requestUrl =>
-        chatService.initiateFromParams(requestUrl.searchParams),
-    '/chat/route': requestUrl =>
-        chatService.routeScenarioFromParams(requestUrl.searchParams),
-    '/chat/conversations': requestUrl =>
-        chatService.listConversationsFromParams(requestUrl.searchParams),
-    '/chat/safety/evaluate': requestUrl =>
-        chatService.evaluateSafetyFromParams(requestUrl.searchParams),
-    '/chat/safety/block': requestUrl =>
-        chatService.blockFromParams(requestUrl.searchParams),
-    '/chat/safety/mute': requestUrl =>
-        chatService.muteFromParams(requestUrl.searchParams),
-    '/chat/safety/report': requestUrl =>
-        chatService.reportFromParams(requestUrl.searchParams),
-    '/chat/message/send': requestUrl =>
-        chatService.sendMessageFromParams(requestUrl.searchParams),
-    '/chat/message/status': requestUrl =>
-        chatService.updateMessageStatusFromParams(requestUrl.searchParams),
-    '/chat/message/retry': requestUrl =>
-        chatService.retryMessageFromParams(requestUrl.searchParams),
-    '/chat/messages': requestUrl =>
-        chatService.getConversationHistoryFromParams(requestUrl.searchParams),
-    '/chat/safety/signals/drain': () => chatService.drainModerationSignals(),
-    '/chat/safety/metrics': () => chatService.safetyMetrics(),
-    '/chat/route/preference-aware': requestUrl =>
-        volunteerService.routePreferenceAwareFromParams(
-            requestUrl.searchParams,
-        ),
-    '/volunteer/profile/upsert': requestUrl =>
-        volunteerService.upsertFromParams(requestUrl.searchParams),
-    '/volunteer/profiles': () => volunteerService.listFromParams(),
-    '/verification/status': requestUrl =>
-        verificationService.getStatus(requestUrl.searchParams),
-    '/verification/grant': requestUrl =>
-        verificationService.grant(requestUrl.searchParams),
-    '/verification/revoke': requestUrl =>
-        verificationService.revoke(requestUrl.searchParams),
-    '/verification/renew': requestUrl =>
-        verificationService.renew(requestUrl.searchParams),
-    '/verification/appeal': requestUrl =>
-        verificationService.appeal(requestUrl.searchParams),
-    '/verification/audit': requestUrl =>
-        verificationService.getAuditTrail(requestUrl.searchParams),
-    '/account/settings': requestUrl =>
-        settingsService.getSettings(requestUrl.searchParams),
-    '/aid/post/create': async requestUrl =>
-        config.NODE_ENV === 'test' ?
-            await aidPostService.createFromParams(requestUrl.searchParams)
-        :   {
-                statusCode: 410,
-                body: {
-                    error: {
-                        code: 'LEGACY_ROUTE_REMOVED',
-                        message: 'Use authenticated POST /at/aid-posts.',
-                    },
-                },
-            },
-    '/aid/post/transition': requestUrl =>
-        lifecycleService.transitionFromParams(requestUrl.searchParams),
-    '/aid/post/lifecycle': requestUrl =>
-        lifecycleService.queryFromParamsAsync(requestUrl.searchParams),
-    '/auth/session': requestUrl =>
-        requireFixtureAuthService().validateSessionFromParams(
-            requestUrl.searchParams,
-        ),
-    '/auth/refresh': requestUrl =>
-        requireFixtureAuthService().refreshSessionFromParams(
-            requestUrl.searchParams,
-        ),
-    '/org/profile': requestUrl =>
-        orgPortalService.getOrg(requestUrl.searchParams),
-    '/org/create': requestUrl =>
-        orgPortalService.createOrg(requestUrl.searchParams),
-    '/org/member/invite': requestUrl =>
-        orgPortalService.inviteMember(requestUrl.searchParams),
-    '/org/member/remove': requestUrl =>
-        orgPortalService.removeMember(requestUrl.searchParams),
-    '/org/member/role': requestUrl =>
-        orgPortalService.updateMemberRole(requestUrl.searchParams),
-    '/org/members': requestUrl =>
-        orgPortalService.listMembers(requestUrl.searchParams),
-    '/org/service/upsert': requestUrl =>
-        orgPortalService.upsertServiceListing(requestUrl.searchParams),
-    '/org/service/status': requestUrl =>
-        orgPortalService.updateServiceStatus(requestUrl.searchParams),
-    '/org/services': requestUrl =>
-        orgPortalService.listServices(requestUrl.searchParams),
-    '/org/audit': requestUrl =>
-        orgPortalService.getAuditTrail(requestUrl.searchParams),
-    '/org/metrics': requestUrl =>
-        orgPortalService.getPerformanceMetrics(requestUrl.searchParams),
-    '/inbox': requestUrl =>
-        inboxService.getInboxFromParams(requestUrl.searchParams),
-    '/inbox/counts': requestUrl =>
-        inboxService.getCountsFromParams(requestUrl.searchParams),
-    '/feedback/request': requestUrl =>
-        feedbackService.getFeedbackForRequestFromParams(requestUrl.searchParams),
-    '/feedback/user': requestUrl =>
-        feedbackService.getFeedbackByUserFromParams(requestUrl.searchParams),
-    '/feedback/summary': requestUrl =>
-        feedbackService.getSummaryFromParams(requestUrl.searchParams),
-    '/reputation': requestUrl =>
-        reputationService.getReputationFromParams(requestUrl.searchParams),
-    '/reputation/signals': requestUrl =>
-        reputationService.getSignalsFromParams(requestUrl.searchParams),
-    '/aid/post/timeout-check': async requestUrl => {
-        const postUri = requestUrl.searchParams.get('postUri');
-        if (!postUri) {
-            return {
-                statusCode: 400,
-                body: { error: { code: 'INVALID_INPUT', message: 'postUri is required.' } },
-            };
-        }
-        return lifecycleService.checkAssignmentTimeoutAsync(
-            postUri,
-            postgresPool
-                ? undefined
-                : requestUrl.searchParams.get('now') ?? undefined,
-        );
-    },
-    '/aid/post/attachments': requestUrl =>
-        attachmentService.getAttachmentsFromParams(requestUrl.searchParams),
 };
 
-const legacyReadPaths = new Set([
+const readPaths = new Set([
     '/health',
     '/health/ready',
     '/metrics',
@@ -838,33 +645,11 @@ const legacyReadPaths = new Set([
     '/query/map',
     '/query/feed',
     '/query/directory',
-    '/chat/conversations',
-    '/chat/messages',
-    '/chat/safety/metrics',
-    '/volunteer/profiles',
-    '/verification/status',
-    '/verification/audit',
-    '/account/settings',
-    '/aid/post/lifecycle',
-    '/auth/session',
-    '/org/profile',
-    '/org/members',
-    '/org/services',
-    '/org/audit',
-    '/org/metrics',
-    '/inbox',
-    '/inbox/counts',
-    '/feedback/request',
-    '/feedback/user',
-    '/feedback/summary',
-    '/reputation',
-    '/reputation/signals',
-    '/aid/post/attachments',
 ]);
 
 const routeRouter = createMethodRouter(
     Object.entries(routeHandlers).map(([pathname, handler]) => ({
-        method: legacyReadPaths.has(pathname) ? 'GET' : 'POST',
+        method: readPaths.has(pathname) ? 'GET' : 'POST',
         pathname,
         handler,
     })),
@@ -951,100 +736,6 @@ export const createApiServer = () => {
         }
 
         if (lifecycleTransitionHandler?.(request, response, requestUrl)) {
-            return;
-        }
-
-        if (
-            request.method === 'POST' &&
-            requestUrl.pathname === '/auth/session'
-        ) {
-            void Promise.resolve()
-                .then(() =>
-                    requireFixtureAuthService().createSessionFromParams(
-                        requestUrl.searchParams,
-                    ),
-                )
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
-            return;
-        }
-
-        if (
-            request.method === 'DELETE' &&
-            requestUrl.pathname === '/auth/session'
-        ) {
-            const result = requireFixtureAuthService().deleteSessionFromParams(
-                requestUrl.searchParams,
-            );
-            writeJson(response, result.statusCode, result.body);
-            return;
-        }
-
-        if (
-            config.NODE_ENV === 'test' &&
-            request.method === 'POST' &&
-            requestUrl.pathname === '/aid/post/create'
-        ) {
-            void readJsonBody(request)
-                .then(body => aidPostService.createFromBody(body))
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
-            return;
-        }
-
-        if (
-            request.method === 'PUT' &&
-            requestUrl.pathname === '/account/settings'
-        ) {
-            void readJsonBody(request)
-                .then(body => settingsService.updateSettings(body))
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
-            return;
-        }
-
-        if (
-            request.method === 'POST' &&
-            requestUrl.pathname === '/account/settings/audit'
-        ) {
-            void readJsonBody(request)
-                .then(body => settingsService.getAuditTrail(body))
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
-            return;
-        }
-
-        if (
-            request.method === 'POST' &&
-            requestUrl.pathname === '/account/deactivate'
-        ) {
-            void readJsonBody(request)
-                .then(body => settingsService.deactivateAccount(body))
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
-            return;
-        }
-
-        if (
-            request.method === 'POST' &&
-            requestUrl.pathname === '/account/export'
-        ) {
-            void readJsonBody(request)
-                .then(body => settingsService.exportAccountData(body))
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
             return;
         }
 
@@ -1187,58 +878,6 @@ export const createApiServer = () => {
                     }
                     writeRouteError(response, error);
                 });
-            return;
-        }
-
-        if (
-            request.method === 'POST' &&
-            requestUrl.pathname === '/aid/post/attachments/add'
-        ) {
-            void readJsonBody(request)
-                .then(body => attachmentService.addAttachment(body))
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
-            return;
-        }
-
-        if (
-            request.method === 'POST' &&
-            requestUrl.pathname === '/inbox/read'
-        ) {
-            void readJsonBody(request)
-                .then(body => inboxService.markReadFromParams(body))
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
-            return;
-        }
-
-        if (
-            request.method === 'POST' &&
-            requestUrl.pathname === '/inbox/read-all'
-        ) {
-            void readJsonBody(request)
-                .then(body => inboxService.markAllReadFromParams(body))
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
-            return;
-        }
-
-        if (
-            request.method === 'POST' &&
-            requestUrl.pathname === '/feedback'
-        ) {
-            void readJsonBody(request)
-                .then(body => feedbackService.submitFeedback(body))
-                .then(result => {
-                    writeJson(response, result.statusCode, result.body);
-                })
-                .catch(error => writeRouteError(response, error));
             return;
         }
 

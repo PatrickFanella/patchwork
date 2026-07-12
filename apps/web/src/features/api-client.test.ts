@@ -150,31 +150,39 @@ describe('api client', () => {
         expect(result.data.fallbackNotice?.safeForUser).toBe(true);
 
         const firstCall = (
-            fetchMock.mock.calls as unknown as Array<[unknown]>
+            fetchMock.mock.calls as unknown as Array<[unknown, RequestInit]>
         )[0];
         const url = firstCall?.[0];
-        expect(String(url)).toContain('/chat/initiate?');
-        expect(String(url)).toContain('allowInitiation=true');
-        expect(String(url)).toContain('supportsAtprotoChat=false');
+        expect(String(url)).toContain('/chat/initiate');
+        expect(String(url)).not.toContain('?');
+        expect(firstCall?.[1].method).toBe('POST');
+        expect(JSON.parse(String(firstCall?.[1].body))).toMatchObject({
+            allowInitiation: true,
+            supportsAtprotoChat: false,
+        });
     });
 
     it('creates aid post via API and maps response to feed record envelope', async () => {
         const fetchMock = vi.fn(async () =>
             createJsonResponse({
                 uri: 'at://did:example:resident-1/app.patchwork.aid.post/post-new-1',
-                authorDid: 'did:example:resident-1',
-                title: 'Need transport to clinic',
-                summary: 'Wheelchair-compatible ride needed by 18:00.',
-                category: 'transport',
-                urgency: 'critical',
-                status: 'open',
-                approximateGeo: {
-                    latitude: 1.301,
-                    longitude: 103.802,
-                    precisionKm: 0.5,
+                cid: 'bafy-created',
+                record: {
+                    $type: 'app.patchwork.aid.post',
+                    version: '1.0.0',
+                    title: 'Need transport to clinic',
+                    description: 'Wheelchair-compatible ride needed by 18:00.',
+                    category: 'transport',
+                    urgency: 'critical',
+                    status: 'open',
+                    location: {
+                        latitude: 1.3,
+                        longitude: 103.8,
+                        precisionKm: 1,
+                    },
+                    createdAt: '2026-02-28T18:00:00.000Z',
+                    updatedAt: '2026-02-28T18:00:00.000Z',
                 },
-                createdAt: '2026-02-28T18:00:00.000Z',
-                updatedAt: '2026-02-28T18:00:00.000Z',
             }),
         );
 
@@ -212,11 +220,16 @@ describe('api client', () => {
         )[0];
         const url = firstCall?.[0];
         const init = firstCall?.[1] as RequestInit | undefined;
-        expect(String(url)).toContain('/aid/post/create');
+        expect(String(url)).toContain('/at/aid-posts');
         expect(init?.method).toBe('POST');
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         expect(body['category']).toBe('transport');
         expect(body['urgency']).toBe('critical');
+        expect(body['location']).toEqual({
+            latitude: 1.3,
+            longitude: 103.8,
+            precisionKm: 1,
+        });
     });
 
     it('creates an authenticated AT aid post with browser credentials', async () => {

@@ -91,6 +91,10 @@ emission on an actual HTTP response.
 plus exact-IP/subnet proxy trust and spoofed forwarded-header rejection.
 `cors.test.ts` proves rejected origins receive neither wildcard nor credential
 permission and accepted origins receive explicit credential permission.
+`query-string-security.test.ts` scans the API and moderation runtime entrypoints
+and fails if fixture `FromParams` routes, moderation URL-body parsing, or
+sensitive query keys return. Worker live HTTP coverage proves the former query
+mutation is now `405` and the JSON route refuses fixture persistence.
 
 ### Browser E2E
 

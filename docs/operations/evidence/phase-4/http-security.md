@@ -30,8 +30,8 @@ and `415` behavior. Every JSON error response receives a new server-generated
 request ID, while unknown exceptions map to a fixed message; a unit test proves
 that internal exception text is absent.
 
-This does not yet satisfy the command-body checklist because unsafe legacy
-query-string mutation and credential routes still exist and must be removed.
+The later compatibility-removal checkpoint closes the remaining command-body
+gap.
 
 ## Central authenticated-principal checkpoint
 
@@ -44,8 +44,8 @@ handlers no longer parse identity independently or construct authorization from
 body fields. PostgreSQL HTTP coverage includes missing and expired sessions,
 durable role elevation, and hostile body identity fields.
 
-The roadmap checkbox remains open until fixture compatibility routes are
-removed or converted; those routes still bypass this boundary.
+The later compatibility-removal checkpoint removes the routes that bypassed
+this boundary.
 
 ## Graceful shutdown checkpoint
 
@@ -85,3 +85,20 @@ emitted only for an exactly allowed origin and never uses a wildcard.
 
 Task 4.2 remains open only for complete capability enforcement across routes
 that survive the compatibility-route removal pass.
+
+## Unsafe compatibility removal checkpoint
+
+The API contract and runtime now expose only the narrow durable alpha surface.
+Deferred fixture-backed chat, settings, verification, organizations, inbox,
+feedback, reputation, volunteer, and attachment endpoints were removed rather
+than promoted without persistence or authorization. OAuth login is POST JSON;
+the OAuth callback retains only protocol-defined query parameters. Moderation
+mutations and private state/audit lookups are method-aware JSON bodies, and its
+fixture runtime returns `503` instead of mutating process memory.
+
+The web posting path now uses authenticated `POST /at/aid-posts`, rounds public
+coordinates, and enforces at least 1 km precision. A repository test scans API
+and moderation runtime entrypoints and fails on `FromParams`, body-field query
+parsing, or sensitive query keys. The remaining Phase 4 gap is explicit,
+effectful idempotency-key enforcement for every mutation and authenticated
+service-to-service moderation authorization.

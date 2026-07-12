@@ -41,8 +41,8 @@ describe('API server method routing', () => {
     });
 
     it('rejects malformed JSON with a stable request-ID error', async () => {
-        const response = await fetch(`${origin}/account/settings`, {
-            method: 'PUT',
+        const response = await fetch(`${origin}/aid/post/transition`, {
+            method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: '{',
         });
@@ -60,8 +60,8 @@ describe('API server method routing', () => {
     });
 
     it('rejects command bodies without application/json', async () => {
-        const response = await fetch(`${origin}/account/settings`, {
-            method: 'PUT',
+        const response = await fetch(`${origin}/aid/post/transition`, {
+            method: 'POST',
             headers: { 'content-type': 'text/plain' },
             body: '{}',
         });
@@ -73,8 +73,8 @@ describe('API server method routing', () => {
     });
 
     it('rejects command bodies larger than one mebibyte', async () => {
-        const response = await fetch(`${origin}/account/settings`, {
-            method: 'PUT',
+        const response = await fetch(`${origin}/aid/post/transition`, {
+            method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ value: 'x'.repeat(1024 * 1024) }),
         });
@@ -86,8 +86,8 @@ describe('API server method routing', () => {
     });
 
     it('applies security headers and rejects cookie mutations without CSRF proof', async () => {
-        const response = await fetch(`${origin}/account/settings`, {
-            method: 'PUT',
+        const response = await fetch(`${origin}/aid/post/transition`, {
+            method: 'POST',
             headers: {
                 origin: 'https://patchwork.test',
                 cookie: 'patchwork_session=session; patchwork_csrf=expected',

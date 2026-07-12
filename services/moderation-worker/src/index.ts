@@ -1,4 +1,10 @@
-import { createServer, type ServerResponse } from 'node:http';
+import {
+    createServer,
+    type IncomingMessage,
+    type ServerResponse,
+} from 'node:http';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
     CONTRACT_VERSION,
     loadModerationWorkerConfig,
@@ -27,7 +33,6 @@ const runtime = await createModerationRuntime({
     metrics,
 });
 const durableService = runtime.mode === 'postgres' ? runtime.service : undefined;
-const fixtureService = runtime.mode === 'fixture' ? runtime.service : undefined;
 
 const sliCollector = new SliCollector();
 
@@ -84,13 +89,55 @@ interface ModerationRouteResult {
 }
 
 type ModerationRouteHandler = (
-    requestUrl: URL,
+    body: unknown,
 ) => ModerationRouteResult | Promise<ModerationRouteResult>;
 
-const required = (params: URLSearchParams, key: string): string => {
-    const value = params.get(key)?.trim();
+interface ModerationRouteDefinition {
+    method: 'GET' | 'POST';
+    handler: ModerationRouteHandler;
+}
+
+const required = (body: unknown, key: string): string => {
+    const record =
+        typeof body === 'object' && body !== null ?
+            (body as Record<string, unknown>)
+        :   {};
+    const raw = record[key];
+    const value = typeof raw === 'string' ? raw.trim() : '';
     if (!value) throw new Error(`Missing required parameter: ${key}`);
     return value;
+};
+
+const optional = (body: unknown, key: string): string | undefined => {
+    if (typeof body !== 'object' || body === null || !(key in body)) return undefined;
+    const value = (body as Record<string, unknown>)[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+};
+
+const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
+    if (!request.headers['content-type']?.toLowerCase().startsWith('application/json')) {
+        throw new Error('UNSUPPORTED_MEDIA_TYPE');
+    }
+    return new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        request.on('data', (chunk: Buffer) => {
+            size += chunk.length;
+            if (size > 1024 * 1024) {
+                reject(new Error('REQUEST_BODY_TOO_LARGE'));
+                return;
+            }
+            chunks.push(chunk);
+        });
+        request.on('end', () => {
+            try {
+                resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+            } catch {
+                reject(new Error('MALFORMED_JSON'));
+            }
+        });
+        request.on('error', reject);
+    });
 };
 
 const policyAction = (value: string): ModerationPolicyAction => {
@@ -108,8 +155,8 @@ const policyAction = (value: string): ModerationPolicyAction => {
     return action;
 };
 
-const routeHandlers: Readonly<Record<string, ModerationRouteHandler>> = {
-    '/health': async () => {
+const routeHandlers: Readonly<Record<string, ModerationRouteDefinition>> = {
+    '/health': { method: 'GET', handler: async () => {
         const result = await checkServiceHealth(
             buildModerationHealthChecks(),
         );
@@ -121,8 +168,8 @@ const routeHandlers: Readonly<Record<string, ModerationRouteHandler>> = {
             checks: result.checks,
         };
         return { statusCode: 200, body: payload };
-    },
-    '/health/ready': async () => {
+    } },
+    '/health/ready': { method: 'GET', handler: async () => {
         const result = await checkServiceHealth(
             buildModerationHealthChecks(),
         );
@@ -137,58 +184,58 @@ const routeHandlers: Readonly<Record<string, ModerationRouteHandler>> = {
             statusCode: result.status === 'not_ready' ? 503 : 200,
             body: payload,
         };
-    },
-    '/metrics': () => ({
+    } },
+    '/metrics': { method: 'GET', handler: () => ({
         statusCode: 200,
         body: renderPrometheusMetrics(),
         contentType: 'text/plain; version=0.0.4',
-    }),
-    '/decisions/sample': () => ({
+    }) },
+    '/decisions/sample': { method: 'GET', handler: () => ({
         statusCode: 200,
         body: sampleDecision,
-    }),
-    '/moderation/queue/enqueue': async requestUrl => {
-        if (!durableService) return fixtureService!.enqueueFromParams(requestUrl.searchParams);
+    }) },
+    '/moderation/queue/enqueue': { method: 'POST', handler: async body => {
+        if (!durableService) return { statusCode: 503, body: { error: { code: 'DURABLE_MODERATION_REQUIRED' } } };
         const item = await durableService.enqueue({
-            subjectUri: required(requestUrl.searchParams, 'subjectUri'),
-            reason: required(requestUrl.searchParams, 'reason'),
-            requestedAt: requestUrl.searchParams.get('requestedAt') ?? undefined,
+            subjectUri: required(body, 'subjectUri'),
+            reason: required(body, 'reason'),
+            requestedAt: optional(body, 'requestedAt'),
         });
         return { statusCode: 200, body: { item } };
-    },
-    '/moderation/queue': async requestUrl => {
-        if (!durableService) return fixtureService!.listQueueFromParams(requestUrl.searchParams);
+    } },
+    '/moderation/queue': { method: 'GET', handler: async () => {
+        if (!durableService) return { statusCode: 503, body: { error: { code: 'DURABLE_MODERATION_REQUIRED' } } };
         const items = await durableService.listQueue();
         return { statusCode: 200, body: { total: items.length, results: items } };
-    },
-    '/moderation/policy/apply': async requestUrl => {
-        if (!durableService) return fixtureService!.applyPolicyFromParams(requestUrl.searchParams);
+    } },
+    '/moderation/policy/apply': { method: 'POST', handler: async body => {
+        if (!durableService) return { statusCode: 503, body: { error: { code: 'DURABLE_MODERATION_REQUIRED' } } };
         const item = await durableService.applyPolicy({
-            subjectUri: required(requestUrl.searchParams, 'subjectUri'),
-            actorDid: required(requestUrl.searchParams, 'actorDid'),
-            action: policyAction(required(requestUrl.searchParams, 'action')),
-            reason: required(requestUrl.searchParams, 'reason'),
-            occurredAt: required(requestUrl.searchParams, 'occurredAt'),
-            idempotencyKey: required(requestUrl.searchParams, 'idempotencyKey'),
+            subjectUri: required(body, 'subjectUri'),
+            actorDid: required(body, 'actorDid'),
+            action: policyAction(required(body, 'action')),
+            reason: required(body, 'reason'),
+            occurredAt: required(body, 'occurredAt'),
+            idempotencyKey: required(body, 'idempotencyKey'),
         });
         return { statusCode: 200, body: { item } };
-    },
-    '/moderation/state': async requestUrl => {
-        if (!durableService) return fixtureService!.getStateFromParams(requestUrl.searchParams);
-        const subjectUri = required(requestUrl.searchParams, 'subjectUri');
+    } },
+    '/moderation/state': { method: 'POST', handler: async body => {
+        if (!durableService) return { statusCode: 503, body: { error: { code: 'DURABLE_MODERATION_REQUIRED' } } };
+        const subjectUri = required(body, 'subjectUri');
         const item = await durableService.getState(subjectUri);
         return {
             statusCode: item ? 200 : 404,
             body: item ? { item } : { error: { code: 'QUEUE_ITEM_NOT_FOUND' } },
         };
-    },
-    '/moderation/audit': async requestUrl => {
-        if (!durableService) return fixtureService!.listAuditFromParams(requestUrl.searchParams);
+    } },
+    '/moderation/audit': { method: 'POST', handler: async body => {
+        if (!durableService) return { statusCode: 503, body: { error: { code: 'DURABLE_MODERATION_REQUIRED' } } };
         const entries = await durableService.listAudit(
-            required(requestUrl.searchParams, 'subjectUri'),
+            required(body, 'subjectUri'),
         );
         return { statusCode: 200, body: { total: entries.length, results: entries } };
-    },
+    } },
 };
 
 const writeJson = (
@@ -200,14 +247,20 @@ const writeJson = (
     response.end(JSON.stringify(body));
 };
 
-const server = createServer((request, response) => {
+export const createModerationServer = () => createServer((request, response) => {
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
 
-    const handler = routeHandlers[requestUrl.pathname];
-    if (handler) {
+    const route = routeHandlers[requestUrl.pathname];
+    if (route) {
+        if (request.method !== route.method) {
+            response.setHeader('allow', route.method);
+            writeJson(response, 405, { error: { code: 'METHOD_NOT_ALLOWED' } });
+            return;
+        }
         const startTime = Date.now();
         void Promise.resolve()
-            .then(() => handler(requestUrl))
+            .then(() => route.method === 'POST' ? readJsonBody(request) : undefined)
+            .then(body => route.handler(body))
             .then(result => {
                 sliCollector.recordRequest(
                     requestUrl.pathname,
@@ -242,14 +295,25 @@ const server = createServer((request, response) => {
     writeJson(response, 404, { error: 'Not Found' });
 });
 
-process.on('SIGTERM', () => {
-    server.close(() => {
-        void runtime.close();
+export const startModerationServer = () => {
+    const server = createModerationServer();
+    server.listen(config.MODERATION_PORT, '0.0.0.0', () => {
+        console.log(
+            `[moderation-worker] listening on http://0.0.0.0:${config.MODERATION_PORT} (concurrency=${config.MODERATION_WORKER_CONCURRENCY})`,
+        );
     });
-});
+    return server;
+};
 
-server.listen(config.MODERATION_PORT, '0.0.0.0', () => {
-    console.log(
-        `[moderation-worker] listening on http://0.0.0.0:${config.MODERATION_PORT} (concurrency=${config.MODERATION_WORKER_CONCURRENCY})`,
-    );
-});
+const isExecutedDirectly =
+    process.argv[1] !== undefined &&
+    fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (isExecutedDirectly) {
+    const server = startModerationServer();
+    process.on('SIGTERM', () => {
+        server.close(() => {
+            void runtime.close();
+        });
+    });
+}
