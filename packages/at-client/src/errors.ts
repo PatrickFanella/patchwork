@@ -8,6 +8,8 @@ export type AtClientErrorCode =
     | 'UNAUTHORIZED'
     | 'NOT_FOUND'
     | 'PDS_UNAVAILABLE'
+    | 'OAUTH_DENIED'
+    | 'OAUTH_STATE_INVALID'
     | 'UPSTREAM_ERROR';
 
 export class AtClientError extends Error {
@@ -62,6 +64,22 @@ export const toAtClientError = (
 
     const status = readStatus(error);
     const message = readMessage(error);
+
+    if (/state.?mismatch|invalid.?state|csrf|nonce/i.test(message)) {
+        return new AtClientError(
+            'OAUTH_STATE_INVALID',
+            'The OAuth callback state is stale or invalid.',
+            { cause: error },
+        );
+    }
+
+    if (/access_denied|authorization.?denied|consent.?denied/i.test(message)) {
+        return new AtClientError(
+            'OAUTH_DENIED',
+            'Authorization was denied by the AT Protocol provider.',
+            { cause: error },
+        );
+    }
 
     if (status === 401 || /invalid.?grant|expired.?session/i.test(message)) {
         return new AtClientError(

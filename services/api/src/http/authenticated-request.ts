@@ -14,11 +14,15 @@ export interface AuthenticatedPrincipal {
 
 export interface AuthenticatedRequest {
     readonly sessionToken: string;
+    readonly session: Readonly<{
+        did: string;
+        expiresAt?: string;
+    }>;
     readonly principal: AuthenticatedPrincipal;
 }
 
 export interface AuthenticationDependencies {
-    resolveSession(token: string): Promise<{ did: string }>;
+    resolveSession(token: string): Promise<{ did: string; expiresAt?: string }>;
     resolveRole(did: string): Promise<PlatformRole>;
 }
 
@@ -80,6 +84,10 @@ export const authenticateRequest = async (
     const authorization = createAuthorizationContext(session.did, role);
     return Object.freeze({
         sessionToken,
+        session: Object.freeze({
+            did: session.did,
+            ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
+        }),
         principal: Object.freeze({
             did: session.did,
             role,

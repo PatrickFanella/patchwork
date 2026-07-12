@@ -20,11 +20,11 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Database-enabled full repository suite | 833 passed across 79 files |
+| Database-enabled full repository suite | 820 passed |
 | Direct lifecycle service integration | 9 passed |
 | PostgreSQL integration, including HTTP boundary | 11 passed |
-| Browser Chromium accessibility | 33 passed |
-| Diagnostic coverage without database suites | 58.92% statements, 46.48% branches, 52.10% functions, 60.05% lines |
+| Browser Chromium accessibility | 35 passed |
+| Diagnostic coverage without database suites | 58.93% statements, 46.31% branches, 52.33% functions, 60.08% lines |
 | External AT protocol | Two-account create/read/update/close/delete and ownership denial verified manually |
 
 Counts can change as tests are consolidated. Readiness depends on covered boundaries, not the aggregate.
@@ -33,7 +33,7 @@ Counts can change as tests are consolidated. Readiness depends on covered bounda
 
 | Capability | Domain/unit | Fixture service | PostgreSQL | HTTP | Browser | External AT | Remaining gap |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| AT OAuth adapter | `packages/at-client/src/oauth-client.test.ts` | — | OAuth state/session restart tests | Auth route unit/service tests | Auth UX models only | OAuth metadata verified; browser callback not yet demonstrated | Real browser OAuth callback |
+| AT OAuth adapter | OAuth adapter plus stable denied/state-error mapping | Cookie-only AuthProvider and API client | OAuth state/session restart tests | Login JSON/redirect, sanitized callback, session/refresh/logout routes | Login/callback recovery, keyboard, labels, live regions | OAuth metadata verified; browser callback not yet demonstrated | Real browser OAuth callback |
 | Aid-post repository CRUD | Lexicon and record-client tests | Command service tests | Session persistence only | Command route tests | Posting form and API-client tests | Two-account lifecycle evidence | Automated disposable-PDS job |
 | AT wire encoding | Integer coordinate adapter tests | — | — | — | — | Live staging PDS accepted records | Other custom record families |
 | Lifecycle rules | `packages/shared/src/lifecycle.test.ts` | `lifecycle-service.integration.test.ts` | Restart, retry, rollback, audit, assignment/handoff, deletion, role, and public-sync state | `lifecycle-transition-handler.postgres.test.ts` | Lifecycle UI is fixture-oriented | Author status reconciliation is command-tested; live stream reconciliation is absent | Concurrent-command proof and automatic stream reconciliation |

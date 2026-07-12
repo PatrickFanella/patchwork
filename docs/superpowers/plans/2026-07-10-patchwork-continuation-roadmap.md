@@ -376,11 +376,18 @@ private location data.
 - Modify: `apps/web/src/features/frontend-shell.tsx`
 - Test: `apps/web/src/auth/auth-flow.test.tsx`
 
-- [ ] Add login, callback, current-session, expiration, refresh, logout, and recoverable-error states.
-- [ ] Preserve the intended destination through login without placing tokens in browser storage or URLs.
-- [ ] Show clear recovery for PDS unavailability, denied authorization, stale callback state, and expired sessions.
-- [ ] Add keyboard and screen-reader coverage for all authentication states.
-- [ ] Commit as `feat(web): integrate AT authentication UX`.
+- [x] Add login, callback, current-session, expiration, refresh, logout, and recoverable-error states.
+- [x] Preserve the intended destination through login without placing tokens in browser storage or URLs.
+- [x] Show clear recovery for PDS unavailability, denied authorization, stale callback state, and expired sessions.
+- [x] Add keyboard and screen-reader coverage for all authentication states.
+- [x] Commit as `feat(web): integrate AT authentication UX`.
+
+Evidence: `docs/operations/evidence/phase-6/authentication-ux.md`. The web now
+uses an HttpOnly-cookie session provider, exposes only DID and browser-session
+expiry, redirects to the provider using an opaque authorization URL, strips
+sensitive return-path parameters, and gates identity-bearing actions. The
+obsolete client model containing access/refresh-token fields was removed.
+Live provider authorization remains part of the Phase 6 exit journey.
 
 ### Task 6.2: Remove production fixture fallback
 

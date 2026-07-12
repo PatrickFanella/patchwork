@@ -25,6 +25,7 @@ describe('authenticated API request', () => {
         expect(resolveSession).toHaveBeenCalledOnce();
         expect(resolveRole).toHaveBeenCalledOnce();
         expect(Object.isFrozen(authenticated)).toBe(true);
+        expect(Object.isFrozen(authenticated.session)).toBe(true);
         expect(Object.isFrozen(authenticated.principal)).toBe(true);
         expect(Object.isFrozen(authenticated.principal.authorization)).toBe(true);
     });

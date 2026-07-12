@@ -107,6 +107,7 @@ import {
     initialResourceCards,
     type FeedRecordEnvelope,
 } from './fixtures';
+import { useAuth } from '../auth/AuthProvider';
 
 const appRoutes = [
     '/',
@@ -3123,6 +3124,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
 };
 
 export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
+    const auth = useAuth();
     const mainContentRef = useRef<HTMLDivElement>(null);
     const [currentRoute, setCurrentRoute] = useState<AppRoute>(() =>
         readCurrentRoute(),
@@ -3154,7 +3156,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const [forceChatFallback, setForceChatFallback] = useState(false);
     const [chatRequestPreview, setChatRequestPreview] = useState<string>();
 
-    const currentUserDid = 'did:example:helper-001';
+    const currentUserDid = auth.session?.did ?? '';
 
     const discoveryQueryString = useMemo(
         () => serializeDiscoveryFilterState(discoveryState),
@@ -3404,8 +3406,25 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         setChatRequestPreview(undefined);
     };
 
+    const requiresAuthentication =
+        currentRoute === '/posting' ||
+        currentRoute === '/chat' ||
+        currentRoute === '/settings';
+
     const content =
-        currentRoute === '/map' ?
+        requiresAuthentication && !auth.session ?
+            <Panel title='Sign in required'>
+                <p>
+                    This action uses your authenticated AT Protocol identity.
+                </p>
+                <a
+                    className='mt-3 inline-block font-bold underline'
+                    href={`/login?returnTo=${encodeURIComponent(currentRoute)}`}
+                >
+                    Sign in to continue
+                </a>
+            </Panel>
+        : currentRoute === '/map' ?
             <MapRoute
                 discoveryState={discoveryState}
                 onPatchDiscovery={patchDiscoveryState}
@@ -3551,6 +3570,29 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                             {routeLabels[route]}
                         </a>
                     ))}
+                    <div className='ml-auto flex items-center gap-2' aria-live='polite'>
+                        {auth.status === 'booting' ?
+                            <span>Checking session…</span>
+                        : auth.session ?
+                            <>
+                                <span className='max-w-48 truncate text-xs font-bold'>
+                                    {auth.session.did}
+                                </span>
+                                <Button
+                                    variant='neutral'
+                                    className='px-3 py-1 text-xs'
+                                    onClick={() => void auth.logout()}
+                                >
+                                    Sign out
+                                </Button>
+                            </>
+                        :   <a
+                                className='mh-nav-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mh-accent'
+                                href={`/login?returnTo=${encodeURIComponent(currentRoute)}`}
+                            >
+                                Sign in
+                            </a>}
+                    </div>
                 </nav>
 
                 <div id='main-content' ref={mainContentRef} tabIndex={-1} className='outline-none'>

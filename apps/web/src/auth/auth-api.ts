@@ -1,0 +1,190 @@
+const DEFAULT_API_BASE_URL = 'http://localhost:4000';
+
+const apiBaseUrl = (): string =>
+    import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL;
+
+const sensitiveDestinationKeys = new Set([
+    'access_token',
+    'refresh_token',
+    'id_token',
+    'token',
+    'code',
+    'state',
+    'session',
+]);
+
+export const sanitizeReturnTo = (value: string): string => {
+    if (!value.startsWith('/') || value.startsWith('//')) return '/';
+    const url = new URL(value, 'https://patchwork.invalid');
+    for (const key of [...url.searchParams.keys()]) {
+        if (sensitiveDestinationKeys.has(key.toLowerCase())) {
+            url.searchParams.delete(key);
+        }
+    }
+    return `${url.pathname}${url.search}`;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null;
+
+const csrfHeaders = (): Record<string, string> => {
+    if (typeof document === 'undefined') return {};
+    for (const cookie of document.cookie.split(';')) {
+        const [name, ...parts] = cookie.trim().split('=');
+        if (name === 'patchwork_csrf') {
+            try {
+                return { 'x-csrf-token': decodeURIComponent(parts.join('=')) };
+            } catch {
+                return {};
+            }
+        }
+    }
+    return {};
+};
+
+const readSession = (payload: unknown): AuthSessionSummary | null => {
+    const session =
+        isRecord(payload) && isRecord(payload.session) ? payload.session : null;
+    return (
+        session &&
+        typeof session.did === 'string' &&
+        typeof session.expiresAt === 'string'
+    ) ?
+            { did: session.did, expiresAt: session.expiresAt }
+        :   null;
+};
+
+export class AuthApiError extends Error {
+    constructor(
+        readonly code: string,
+        message: string,
+        readonly retryable = false,
+    ) {
+        super(message);
+        this.name = 'AuthApiError';
+    }
+}
+
+const errorForResponse = (
+    payload: unknown,
+    fallback: string,
+): AuthApiError => {
+    const error = isRecord(payload) && isRecord(payload.error) ? payload.error : null;
+    return new AuthApiError(
+        error && typeof error.code === 'string' ? error.code : 'AUTH_ERROR',
+        error && typeof error.message === 'string' ? error.message : fallback,
+        error?.retryable === true,
+    );
+};
+
+export interface LoginStartResult {
+    authorizationUrl: string;
+}
+
+export interface AuthSessionSummary {
+    did: string;
+    expiresAt: string;
+}
+
+export const beginLogin = async (
+    handle: string,
+    returnTo: string,
+): Promise<LoginStartResult> => {
+    const response = await fetch(`${apiBaseUrl()}/oauth/login`, {
+        method: 'POST',
+        credentials: 'include',
+        redirect: 'error',
+        headers: {
+            accept: 'application/json',
+            'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+            handle: handle.trim(),
+            returnTo: sanitizeReturnTo(returnTo),
+        }),
+    });
+    const payload: unknown = await response.json();
+    const authorizationUrl =
+        isRecord(payload) && typeof payload.authorizationUrl === 'string' ?
+            payload.authorizationUrl
+        :   undefined;
+    if (!response.ok) {
+        throw errorForResponse(payload, 'Unable to begin AT Protocol login.');
+    }
+    if (!authorizationUrl) {
+        throw new AuthApiError(
+            'INVALID_AUTH_RESPONSE',
+            'The login response did not contain an authorization URL.',
+        );
+    }
+    return { authorizationUrl };
+};
+
+export const getCurrentSession = async (): Promise<AuthSessionSummary | null> => {
+    const response = await fetch(`${apiBaseUrl()}/auth/session`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { accept: 'application/json' },
+    });
+    const payload: unknown = await response.json();
+    if (
+        response.status === 401 &&
+        isRecord(payload) &&
+        isRecord(payload.error) &&
+        payload.error.code === 'AUTHENTICATION_REQUIRED'
+    ) {
+        return null;
+    }
+    const session = readSession(payload);
+    if (!response.ok) {
+        throw errorForResponse(payload, 'Unable to restore the AT Protocol session.');
+    }
+    if (!session) {
+        throw new AuthApiError(
+            'INVALID_AUTH_RESPONSE',
+            'The session response was invalid.',
+        );
+    }
+    return session;
+};
+
+export const refreshSession = async (): Promise<AuthSessionSummary> => {
+    const response = await fetch(`${apiBaseUrl()}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            accept: 'application/json',
+            ...csrfHeaders(),
+        },
+    });
+    const payload: unknown = await response.json();
+    const session = readSession(payload);
+    if (!response.ok) {
+        throw errorForResponse(payload, 'Unable to refresh the AT Protocol session.');
+    }
+    if (!session) {
+        throw new AuthApiError(
+            'INVALID_AUTH_RESPONSE',
+            'The refresh response was invalid.',
+        );
+    }
+    return session;
+};
+
+export const logoutSession = async (): Promise<void> => {
+    const response = await fetch(`${apiBaseUrl()}/auth/session`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+            accept: 'application/json',
+            ...csrfHeaders(),
+        },
+    });
+    if (!response.ok) {
+        const payload: unknown = await response.json().catch(() => undefined);
+        throw errorForResponse(
+            payload,
+            'Unable to log out of the AT Protocol session.',
+        );
+    }
+};

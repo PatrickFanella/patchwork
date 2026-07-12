@@ -13,7 +13,20 @@ const safeReturnTo = (state: string | null): string => {
     if (!state || !state.startsWith('/') || state.startsWith('//')) {
         return '/';
     }
-    return state;
+    const url = new URL(state, 'https://patchwork.invalid');
+    const sensitiveKeys = new Set([
+        'access_token',
+        'refresh_token',
+        'id_token',
+        'token',
+        'code',
+        'state',
+        'session',
+    ]);
+    for (const key of [...url.searchParams.keys()]) {
+        if (sensitiveKeys.has(key.toLowerCase())) url.searchParams.delete(key);
+    }
+    return `${url.pathname}${url.search}`;
 };
 
 interface LoginAppState {
@@ -115,7 +128,10 @@ export class AtAuthService {
         }
     }
 
-    async current(sessionToken: string): Promise<{ did: string }> {
+    async current(sessionToken: string): Promise<{
+        did: string;
+        expiresAt: string;
+    }> {
         const session = await this.browserSessions.get(sessionToken);
         if (!session) {
             throw new AtClientError(
@@ -124,14 +140,17 @@ export class AtAuthService {
             );
         }
         await this.browserSessions.touch(sessionToken);
-        return { did: session.did };
+        return {
+            did: session.did,
+            expiresAt: session.expiresAt.toISOString(),
+        };
     }
 
     async refresh(sessionToken: string): Promise<{ did: string }> {
         const current = await this.current(sessionToken);
         try {
             const restored = await this.oauth.restore(current.did);
-            return { did: restored.did };
+            return { ...current, did: restored.did };
         } catch (error) {
             await this.browserSessions.revoke(sessionToken);
             throw toAtClientError(error, 'Unable to refresh AT Protocol session.');

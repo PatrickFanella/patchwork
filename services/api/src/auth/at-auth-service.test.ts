@@ -76,7 +76,10 @@ describe('AtAuthService', () => {
         const oauth = oauthAdapter();
         const sessions = browserSessions();
         const service = new AtAuthService(oauth, sessions);
-        await service.beginLogin('alice.example', '/feed');
+        await service.beginLogin(
+            'alice.example',
+            '/feed?filter=food&access_token=secret&state=secret#token=secret',
+        );
         const encodedState = vi.mocked(oauth.authorize).mock.calls[0]?.[1];
         vi.mocked(oauth.callback).mockResolvedValueOnce({
             state: encodedState ?? null,
@@ -85,7 +88,7 @@ describe('AtAuthService', () => {
 
         await expect(
             service.completeLogin(new URLSearchParams('code=abc')),
-        ).resolves.toMatchObject({ returnTo: '/feed' });
+        ).resolves.toMatchObject({ returnTo: '/feed?filter=food' });
         expect(sessions.setHandle).toHaveBeenCalledWith(
             'did:plc:alice',
             'alice.example',
@@ -102,8 +105,8 @@ describe('AtAuthService', () => {
         await expect(
             service.completeLogin(new URLSearchParams('code=abc&state=bad')),
         ).rejects.toMatchObject({
-            code: 'UPSTREAM_ERROR',
-            message: 'Unable to complete AT Protocol login.',
+            code: 'OAUTH_STATE_INVALID',
+            message: 'The OAuth callback state is stale or invalid.',
         });
     });
 
@@ -116,8 +119,9 @@ describe('AtAuthService', () => {
         );
         const service = new AtAuthService(oauth, sessions);
 
-        await expect(service.refresh('browser-token')).resolves.toEqual({
+        await expect(service.refresh('browser-token')).resolves.toMatchObject({
             did: 'did:plc:alice',
+            expiresAt: expect.any(String),
         });
         expect(oauth.restore).toHaveBeenCalledWith('did:plc:alice');
         expect(sessions.touch).toHaveBeenCalledWith('browser-token');

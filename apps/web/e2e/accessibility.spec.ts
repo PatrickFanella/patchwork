@@ -31,6 +31,7 @@ const A11Y_ROUTES = [
     { path: '/resources', label: 'resources' },
     { path: '/volunteer', label: 'volunteer' },
     { path: '/chat', label: 'chat' },
+    { path: '/login', label: 'login' },
 ] as const;
 
 test.describe('Skip navigation', () => {
@@ -139,8 +140,8 @@ test.describe('Keyboard navigation', () => {
 });
 
 test.describe('Form accessibility', () => {
-    test('posting form inputs have associated labels', async ({ page }) => {
-        await page.goto('/posting');
+    test('AT login form inputs have associated labels', async ({ page }) => {
+        await page.goto('/login?returnTo=%2Fposting');
         await page.waitForLoadState('networkidle');
 
         // Check that label-input associations exist
@@ -160,6 +161,9 @@ test.describe('Form accessibility', () => {
                 expect(inputExists).toBe(true);
             }
         }
+        await expect(
+            page.getByRole('button', { name: 'Continue with AT Protocol' }),
+        ).toBeVisible();
     });
 
     test('volunteer form inputs have associated labels', async ({ page }) => {

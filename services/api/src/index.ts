@@ -358,7 +358,7 @@ const writeAtAuthError = (response: ServerResponse, error: unknown): void => {
     if (error instanceof AtClientError) {
         const statusCode =
             error.code === 'SESSION_EXPIRED' ? 401
-            : error.code === 'UNAUTHORIZED' ? 403
+            : error.code === 'UNAUTHORIZED' || error.code === 'OAUTH_DENIED' ? 403
             : error.code === 'PDS_UNAVAILABLE' ? 503
             : 400;
         writeJson(response, statusCode, {
@@ -435,6 +435,10 @@ const handleRealAuthRoute = (
                     handle,
                     returnTo,
                 );
+                if (request.headers.accept?.includes('application/json')) {
+                    writeJson(response, 200, result);
+                    return;
+                }
                 response.writeHead(302, { location: result.authorizationUrl });
                 response.end();
                 return;
@@ -449,7 +453,10 @@ const handleRealAuthRoute = (
                 );
                 const csrfToken = createCsrfToken();
                 response.writeHead(302, {
-                    location: result.returnTo,
+                    location: new URL(
+                        result.returnTo,
+                        config.API_PUBLIC_ORIGIN,
+                    ).toString(),
                     'set-cookie': [
                         serializeSessionCookie(
                             result.sessionToken,
@@ -472,7 +479,7 @@ const handleRealAuthRoute = (
                 requestUrl.pathname === '/auth/session'
             ) {
                 writeJson(response, 200, {
-                    session: { did: authenticated.principal.did },
+                    session: authenticated.session,
                 });
                 return;
             }
@@ -512,6 +519,19 @@ const handleRealAuthRoute = (
             response.writeHead(405, { allow: 'GET, POST, DELETE' });
             response.end();
         } catch (error) {
+            if (requestUrl.pathname === '/oauth/callback') {
+                const callbackUrl = new URL(
+                    '/auth/callback',
+                    config.API_PUBLIC_ORIGIN,
+                );
+                callbackUrl.searchParams.set(
+                    'error',
+                    error instanceof AtClientError ? error.code : 'AUTH_ERROR',
+                );
+                response.writeHead(302, { location: callbackUrl.toString() });
+                response.end();
+                return;
+            }
             if (error instanceof AtClientError) {
                 writeAtAuthError(response, error);
                 return;
