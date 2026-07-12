@@ -20,11 +20,11 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Core alpha unit/fixture suite | 754 passed; 9 database cases skipped in this layer |
+| Database-enabled full repository suite | 825 passed across 78 files |
 | Direct lifecycle service integration | 9 passed |
 | PostgreSQL integration, including HTTP boundary | 11 passed |
 | Browser Chromium accessibility | 33 passed |
-| Coverage after expansion-test pruning | 63.63% statements, 49.08% branches, 55.17% functions, 64.65% lines |
+| Coverage after the live-source slice | 64.74% statements, 51.15% branches, 58.37% functions, 65.88% lines |
 | External AT protocol | Two-account create/read/update/close/delete and ownership denial verified manually |
 
 Counts can change as tests are consolidated. Readiness depends on covered boundaries, not the aggregate.
@@ -38,7 +38,7 @@ Counts can change as tests are consolidated. Readiness depends on covered bounda
 | AT wire encoding | Integer coordinate adapter tests | — | — | — | — | Live staging PDS accepted records | Other custom record families |
 | Lifecycle rules | `packages/shared/src/lifecycle.test.ts` | `lifecycle-service.integration.test.ts` | Restart, retry, rollback, audit, assignment/handoff, deletion, role, and public-sync state | `lifecycle-transition-handler.postgres.test.ts` | Lifecycle UI is fixture-oriented | Author status reconciliation is command-tested; live stream reconciliation is absent | Concurrent-command proof and automatic stream reconciliation |
 | Blocks and reports | Service validation tests | Older chat safety fixtures | Repository retention/deletion tests | Authenticated route wiring lacks full HTTP test | Chat safety UX fixtures | — | Cross-request enforcement |
-| Discovery | Firehose, ranking, discovery rule tests | Phase fixture pipeline | Discovery events persist | Query service tests do not use live ingestion | Map/feed UI and accessibility | — | Live stream to projection database |
+| Discovery | Firehose, ranking, discovery rule tests | Phase fixture pipeline | Cursor persists; discovery events use the older API store | Query service tests do not use live ingestion | Map/feed UI and accessibility | Local Jetstream-compatible WebSocket integration | Durable projection application and controlled live AT exercise |
 | Moderation | Policy and queue state tests | Worker fixture services | Concurrent PostgreSQL queue claim using `SKIP LOCKED`; runtime still fixture-backed | — | Console UX fixtures | — | Lease completion/retry, audit store, runtime wiring, and crash recovery |
 | Privacy | Geo floor and redaction tests | Fixture response checks | Audit payload redaction | HTTP boundary avoids actor override | Accessibility only | Redacted lifecycle evidence | Retention enforcement jobs |
 
@@ -123,6 +123,13 @@ Coverage is diagnostic. The post-pruning drop is intentional: it exposes how muc
 - `services/api/src/http/lifecycle-transition-handler.ts` in the no-database coverage job
 - PostgreSQL block/report/audit repositories outside the database job
 - indexer checkpoint and metrics runtime paths
+
+The Phase 5 source slice adds `jetstream-source.test.ts` and `runtime.test.ts`.
+They use a real loopback WebSocket server to prove collection filters, durable
+cursor resume, reconnect/redelivery after processing failure, duplicate and
+out-of-order suppression, malformed and oversized rejection, shutdown without
+reconnect, and final checkpoint persistence. These tests deliberately do not
+claim durable projections or a public Jetstream exercise.
 
 CI uploads `coverage/coverage-summary.json`, LCOV, and the HTML-compatible data needed by coverage tools. No global threshold is enforced until fixture-heavy code and production runtime code are separated into meaningful targets.
 

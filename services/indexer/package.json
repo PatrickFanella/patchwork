@@ -12,6 +12,12 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@patchwork/shared": "0.1.0"
+        "@patchwork/shared": "0.1.0",
+        "pg": "^8.19.0",
+        "ws": "^8.21.0"
+    },
+    "devDependencies": {
+        "@types/pg": "^8.16.0",
+        "@types/ws": "^8.18.1"
     }
 }

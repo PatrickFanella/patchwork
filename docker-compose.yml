@@ -54,13 +54,17 @@ services:
             target: indexer-runtime
         container_name: patchwork-spool
         restart: unless-stopped
+        depends_on:
+            postgres:
+                condition: service_healthy
         environment:
             NODE_ENV: production
             LOG_LEVEL: ${LOG_LEVEL:-info}
             ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:-did:example:patchwork}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
             INDEXER_PORT: 4100
-            INDEXER_FIREHOSE_URL: ${INDEXER_FIREHOSE_URL:-wss://bsky.network}
+            INDEXER_FIREHOSE_URL: ${INDEXER_FIREHOSE_URL:-wss://jetstream2.us-east.bsky.network/subscribe}
+            DATABASE_URL: postgresql://patchwork:${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}@patchwork-postgres:5432/patchwork
         networks:
             internal:
             web:

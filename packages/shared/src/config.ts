@@ -82,7 +82,10 @@ const apiSchemaWithRefinements = apiSchema.superRefine((value, context) => {
 
 const indexerSchema = baseSchema.merge(atprotoSchema).extend({
     INDEXER_PORT: z.coerce.number().int().min(1).max(65535).default(4100),
-    INDEXER_FIREHOSE_URL: z.string().url().default('wss://bsky.network'),
+    INDEXER_FIREHOSE_URL: z
+        .string()
+        .url()
+        .default('wss://jetstream2.us-east.bsky.network/subscribe'),
 });
 
 const moderationWorkerSchema = baseSchema.merge(atprotoSchema).extend({

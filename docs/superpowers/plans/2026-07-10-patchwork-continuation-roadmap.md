@@ -300,12 +300,19 @@ edge, and AT creates use deterministic record keys.
 - Modify: `services/indexer/src/index.ts`
 - Modify: `services/indexer/package.json`
 
-- [ ] Connect to the configured stream URL and filter for Patchwork collection NSIDs.
-- [ ] Resume from a durable cursor and use bounded exponential backoff with jitter.
-- [ ] Validate event framing, reject oversized messages, and expose connected/disconnected/lag metrics.
-- [ ] Stop and checkpoint cleanly on `SIGTERM`.
-- [ ] Test reconnect, duplicate event, out-of-order event, malformed frame, cursor resume, and shutdown using a local fake stream server.
-- [ ] Commit as `feat(indexer): consume live AT events with cursor resume`.
+- [x] Connect to the configured stream URL and filter for Patchwork collection NSIDs.
+- [x] Resume from a durable cursor and use bounded exponential backoff with jitter.
+- [x] Validate event framing, reject oversized messages, and expose connected/disconnected/lag metrics.
+- [x] Stop and checkpoint cleanly on `SIGTERM`.
+- [x] Test reconnect, duplicate event, out-of-order event, malformed frame, cursor resume, and shutdown using a local fake stream server.
+- [x] Commit as `feat(indexer): consume live AT events with cursor resume`.
+
+Evidence: `docs/operations/evidence/phase-5/live-event-source.md`. The runtime
+now adapts Jetstream commit frames into the existing validated ingestion
+envelope, reconnects without acknowledging processing failures, requires
+PostgreSQL outside tests, reports stream readiness and Prometheus metrics, and
+drains/checkpoints before closing its pool. Task 5.2 remains required before
+live data is durable beyond the cursor.
 
 ### Task 5.2: Persist normalized projections and dead letters
 

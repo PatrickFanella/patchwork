@@ -1,9 +1,11 @@
-import { createServer, type ServerResponse } from 'node:http';
+import { createServer, type Server, type ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Pool } from 'pg';
 import {
     CONTRACT_VERSION,
     loadIndexerConfig,
+    recordNsid,
     validateProductionServiceConfig,
     checkServiceHealth,
     type ServiceHealth,
@@ -12,7 +14,10 @@ import {
 } from '@patchwork/shared';
 import { PostgresCheckpointStore } from './checkpoint.js';
 import { renderPrometheusRuntimeMetrics } from './metrics.js';
-import { createFixtureIndexerPipeline, IndexerPipeline } from './pipeline.js';
+import { IndexerPipeline } from './pipeline.js';
+import { IndexerRuntime } from './runtime.js';
+import type { AtEventSource } from './stream/event-source.js';
+import { JetstreamEventSource } from './stream/jetstream-source.js';
 
 const config = loadIndexerConfig();
 
@@ -21,16 +26,19 @@ validateProductionServiceConfig(config);
 
 const DATABASE_URL = process.env['DATABASE_URL'] ?? process.env['INDEXER_DATABASE_URL'];
 
-const createPipeline = async (): Promise<IndexerPipeline> => {
+interface PersistentPipeline {
+    pipeline: IndexerPipeline;
+    pool: Pool;
+}
+
+const createPipeline = async (): Promise<PersistentPipeline> => {
     if (!DATABASE_URL) {
-        console.log('[indexer] no DATABASE_URL — booting in fixture mode');
-        return createFixtureIndexerPipeline();
+        throw new Error(
+            'FATAL: DATABASE_URL or INDEXER_DATABASE_URL is required for the indexer runtime.',
+        );
     }
 
     console.log('[indexer] DATABASE_URL detected — booting in persistent mode');
-
-    // Dynamic import of pg to avoid hard dependency in fixture mode
-    const { Pool } = await import('pg');
     const pool = new Pool({
         connectionString: DATABASE_URL,
         max: 5,
@@ -51,7 +59,7 @@ const createPipeline = async (): Promise<IndexerPipeline> => {
         console.log('[indexer] no checkpoint found — starting from scratch');
     }
 
-    return pipeline;
+    return { pipeline, pool };
 };
 
 const sliCollector = new SliCollector();
@@ -77,6 +85,7 @@ type IndexerRouteHandler = (
 
 const createRouteHandlers = (
     pipeline: IndexerPipeline,
+    source?: AtEventSource,
 ): Readonly<Record<string, IndexerRouteHandler>> => ({
     '/health': async () => {
         const healthChecks: HealthCheck[] = [
@@ -120,6 +129,18 @@ const createRouteHandlers = (
                 },
             },
         ];
+        if (source) {
+            healthChecks.push({
+                name: 'event-source',
+                check: () =>
+                    source.getMetrics().connected ?
+                        { status: 'ok' as const }
+                    :   {
+                            status: 'not_ready' as const,
+                            message: 'AT event source is disconnected',
+                        },
+            });
+        }
         const result = await checkServiceHealth(healthChecks);
         const payload: ServiceHealth = {
             service: 'indexer',
@@ -135,7 +156,10 @@ const createRouteHandlers = (
     },
     '/metrics': async () => {
         const runtimeMetrics = await pipeline.getRuntimeMetrics();
-        const base = renderPrometheusRuntimeMetrics(runtimeMetrics);
+        const base = renderPrometheusRuntimeMetrics(
+            runtimeMetrics,
+            source?.getMetrics(),
+        );
         const sli = sliCollector.renderPrometheus('indexer');
         return {
             statusCode: 200,
@@ -151,6 +175,7 @@ const createRouteHandlers = (
                 metrics: pipeline.getMetrics(),
                 checkpointSeq: pipeline.getCheckpointSeq(),
                 runtime: runtimeMetrics,
+                source: source?.getMetrics() ?? null,
             },
         };
     },
@@ -181,8 +206,11 @@ const createRouteHandlers = (
     }),
 });
 
-export const createIndexerServer = (pipeline: IndexerPipeline) => {
-    const routeHandlers = createRouteHandlers(pipeline);
+export const createIndexerServer = (
+    pipeline: IndexerPipeline,
+    source?: AtEventSource,
+) => {
+    const routeHandlers = createRouteHandlers(pipeline, source);
 
     return createServer(async (request, response) => {
         const requestUrl = new URL(request.url ?? '/', 'http://localhost');
@@ -226,15 +254,45 @@ export const createIndexerServer = (pipeline: IndexerPipeline) => {
 };
 
 export const startIndexerServer = async () => {
-    const pipeline = await createPipeline();
-    const server = createIndexerServer(pipeline);
-    server.listen(config.INDEXER_PORT, '0.0.0.0', () => {
-        console.log(
-            `[indexer] listening on http://0.0.0.0:${config.INDEXER_PORT} (firehose=${config.INDEXER_FIREHOSE_URL}, contracts=${CONTRACT_VERSION}, mode=${DATABASE_URL ? 'persistent' : 'fixture'})`,
-        );
+    const { pipeline, pool } = await createPipeline();
+    const source = new JetstreamEventSource({
+        url: config.INDEXER_FIREHOSE_URL,
+        collections: Object.values(recordNsid),
     });
+    const runtime = new IndexerRuntime({ pipeline, source });
+    await runtime.start();
+    const server = createIndexerServer(pipeline, source);
+    await new Promise<void>((resolveListen, rejectListen) => {
+        server.once('error', rejectListen);
+        server.listen(config.INDEXER_PORT, '0.0.0.0', () => {
+            server.off('error', rejectListen);
+            resolveListen();
+        });
+    });
+    console.log(
+        `[indexer] listening on http://0.0.0.0:${config.INDEXER_PORT} (contracts=${CONTRACT_VERSION}, mode=persistent)`,
+    );
+
+    let shuttingDown = false;
+    const shutdown = async () => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        await runtime.stop();
+        await closeServer(server);
+        await pool.end();
+    };
+    process.once('SIGTERM', () => void shutdown());
+    process.once('SIGINT', () => void shutdown());
     return server;
 };
+
+const closeServer = (server: Server): Promise<void> =>
+    new Promise((resolveClose, rejectClose) => {
+        server.close(error => {
+            if (error) rejectClose(error);
+            else resolveClose();
+        });
+    });
 
 const isExecutedDirectly =
     process.argv[1] !== undefined &&

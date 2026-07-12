@@ -308,6 +308,36 @@ describe('MetricsCollector', () => {
 });
 
 describe('renderPrometheusRuntimeMetrics', () => {
+    it('exposes live event-source connection and lag metrics', () => {
+        const output = renderPrometheusRuntimeMetrics(
+            {
+                checkpointLagSeconds: 1,
+                checkpointSequence: 2,
+                checkpointCursor: 3,
+                checkpointHealthy: true,
+                ingestEventsTotal: 4,
+                ingestErrorsTotal: 0,
+                uptimeSeconds: 5,
+            },
+            {
+                connected: false,
+                connectionsTotal: 2,
+                reconnectsTotal: 1,
+                malformedFramesTotal: 3,
+                oversizedFramesTotal: 4,
+                duplicateFramesTotal: 5,
+                outOfOrderFramesTotal: 6,
+                lagMilliseconds: 750,
+                lastAcknowledgedCursor: 7,
+            },
+        );
+
+        expect(output).toContain('patchwork_event_source_connected');
+        expect(output).toContain('patchwork_event_source_connected{project="patchwork",service="indexer",component="spool",environment="development"} 0');
+        expect(output).toContain('patchwork_event_source_lag_seconds{project="patchwork",service="indexer",component="spool",environment="development"} 0.75');
+        expect(output).toContain('patchwork_event_source_reconnects_total{project="patchwork",service="indexer",component="spool",environment="development"} 1');
+    });
+
     it('renders all metrics in Prometheus exposition format', () => {
         const output = renderPrometheusRuntimeMetrics({
             checkpointLagSeconds: 2.5,

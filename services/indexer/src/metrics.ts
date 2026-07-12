@@ -1,4 +1,5 @@
 import type { CheckpointHealth } from '@patchwork/shared';
+import type { EventSourceMetrics } from './stream/event-source.js';
 
 // ---------------------------------------------------------------------------
 // Dashboard-ready label configuration
@@ -170,6 +171,7 @@ export class MetricsCollector {
  */
 export const renderPrometheusRuntimeMetrics = (
     metrics: IngestionRuntimeMetrics,
+    sourceMetrics?: EventSourceMetrics,
 ): string => {
     const lines: string[] = [];
 
@@ -220,6 +222,29 @@ export const renderPrometheusRuntimeMetrics = (
         '# TYPE patchwork_ingest_errors_total counter',
         `patchwork_ingest_errors_total${PROMETHEUS_LABELS} ${metrics.ingestErrorsTotal}`,
     );
+
+    if (sourceMetrics) {
+        lines.push(
+            '# HELP patchwork_event_source_connected Whether the AT event source is connected.',
+            '# TYPE patchwork_event_source_connected gauge',
+            `patchwork_event_source_connected${PROMETHEUS_LABELS} ${sourceMetrics.connected ? 1 : 0}`,
+            '# HELP patchwork_event_source_lag_seconds Current AT event delivery lag.',
+            '# TYPE patchwork_event_source_lag_seconds gauge',
+            `patchwork_event_source_lag_seconds${PROMETHEUS_LABELS} ${sourceMetrics.lagMilliseconds === null ? -1 : sourceMetrics.lagMilliseconds / 1_000}`,
+            '# HELP patchwork_event_source_connections_total Total successful AT event-source connections.',
+            '# TYPE patchwork_event_source_connections_total counter',
+            `patchwork_event_source_connections_total${PROMETHEUS_LABELS} ${sourceMetrics.connectionsTotal}`,
+            '# HELP patchwork_event_source_reconnects_total Total successful AT event-source reconnects.',
+            '# TYPE patchwork_event_source_reconnects_total counter',
+            `patchwork_event_source_reconnects_total${PROMETHEUS_LABELS} ${sourceMetrics.reconnectsTotal}`,
+            '# HELP patchwork_event_source_rejected_frames_total Total rejected AT event frames by reason.',
+            '# TYPE patchwork_event_source_rejected_frames_total counter',
+            `patchwork_event_source_rejected_frames_total${buildLabels({ reason: 'malformed' })} ${sourceMetrics.malformedFramesTotal}`,
+            `patchwork_event_source_rejected_frames_total${buildLabels({ reason: 'oversized' })} ${sourceMetrics.oversizedFramesTotal}`,
+            `patchwork_event_source_rejected_frames_total${buildLabels({ reason: 'duplicate' })} ${sourceMetrics.duplicateFramesTotal}`,
+            `patchwork_event_source_rejected_frames_total${buildLabels({ reason: 'out_of_order' })} ${sourceMetrics.outOfOrderFramesTotal}`,
+        );
+    }
 
     // SLI-aligned metrics for cross-service consistency
     lines.push(

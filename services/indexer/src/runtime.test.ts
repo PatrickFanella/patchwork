@@ -1,0 +1,70 @@
+import { describe, expect, it } from 'vitest';
+import { buildPhase3FixtureFirehoseEvents } from '@patchwork/shared';
+import { InMemoryCheckpointStore } from './checkpoint.js';
+import { IndexerPipeline } from './pipeline.js';
+import { IndexerRuntime } from './runtime.js';
+import type {
+    AtEventHandler,
+    AtEventSource,
+    EventSourceMetrics,
+} from './stream/event-source.js';
+
+class FakeEventSource implements AtEventSource {
+    startedAt: number | null | undefined;
+    stopped = false;
+    handler: AtEventHandler | null = null;
+
+    async start(cursor: number | null, onEvent: AtEventHandler): Promise<void> {
+        this.startedAt = cursor;
+        this.handler = onEvent;
+    }
+
+    async emit(event: unknown): Promise<void> {
+        if (!this.handler) throw new Error('Source has not started.');
+        await this.handler(event);
+    }
+
+    async stop(): Promise<void> {
+        this.stopped = true;
+    }
+
+    getMetrics(): EventSourceMetrics {
+        return {
+            connected: !this.stopped,
+            connectionsTotal: 1,
+            reconnectsTotal: 0,
+            malformedFramesTotal: 0,
+            oversizedFramesTotal: 0,
+            duplicateFramesTotal: 0,
+            outOfOrderFramesTotal: 0,
+            lagMilliseconds: null,
+            lastAcknowledgedCursor: this.startedAt ?? null,
+        };
+    }
+}
+
+describe('IndexerRuntime', () => {
+    it('resumes the source and checkpoints accepted events during shutdown', async () => {
+        const checkpointStore = new InMemoryCheckpointStore();
+        await checkpointStore.save(41);
+        const pipeline = new IndexerPipeline({
+            checkpointStore,
+            checkpointInterval: 100,
+        });
+        const source = new FakeEventSource();
+        const runtime = new IndexerRuntime({ pipeline, source });
+
+        await runtime.start();
+        expect(source.startedAt).toBe(41);
+
+        const event = {
+            ...(buildPhase3FixtureFirehoseEvents()[0] as Record<string, unknown>),
+            seq: 42,
+        };
+        await source.emit(event);
+        await runtime.stop();
+
+        expect(source.stopped).toBe(true);
+        expect((await checkpointStore.load())?.cursor).toBe(42);
+    });
+});
