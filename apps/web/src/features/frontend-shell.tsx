@@ -2976,13 +2976,12 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
 
     const handleDeactivate = async () => {
         setAccountActionResult(undefined);
-        const result = await deactivateAccountViaApi(
-            currentUserDid,
-            'User-initiated deactivation',
-        );
+        const result = await deactivateAccountViaApi();
 
         if (result.ok) {
-            setAccountActionResult(result.data.message);
+            setAccountActionResult(
+                'Account deactivated. Patchwork sessions are revoked and public projections are removed.',
+            );
         } else {
             setAccountActionResult(`Error: ${result.error}`);
         }
@@ -3297,9 +3296,11 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
 
                         <Card title='Account deactivation'>
                             <p className='text-sm text-mh-textMuted'>
-                                Deactivating your account will hide your profile
-                                and all posts. This can be reversed within 30
-                                days.
+                                Deactivation immediately revokes Patchwork
+                                sessions and removes your posts from Patchwork
+                                discovery. Records in your independent AT
+                                Protocol repository are not deleted. Reactivation
+                                requires a controlled support review.
                             </p>
                             <div className='mt-3'>
                                 <Button

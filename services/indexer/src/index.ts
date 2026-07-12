@@ -54,22 +54,25 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
         state: string | null;
         workflows: string | null;
         audit: string | null;
+        deactivations: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projections,
             to_regclass('indexer_projection_state')::TEXT AS state,
             to_regclass('request_workflows')::TEXT AS workflows,
-            to_regclass('operational_audit_events')::TEXT AS audit`,
+            to_regclass('operational_audit_events')::TEXT AS audit,
+            to_regclass('account_deactivations')::TEXT AS deactivations`,
     );
     if (
         !schema.rows[0]?.projections ||
         !schema.rows[0]?.state ||
         !schema.rows[0]?.workflows ||
-        !schema.rows[0]?.audit
+        !schema.rows[0]?.audit ||
+        !schema.rows[0]?.deactivations
     ) {
         await pool.end();
         throw new Error(
-            'FATAL: indexer projection or lifecycle reconciliation schema is missing; run API and indexer migrations before startup.',
+            'FATAL: indexer projection, lifecycle reconciliation, or account suppression schema is missing; run API and indexer migrations before startup.',
         );
     }
 

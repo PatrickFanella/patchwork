@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { PublicHttpError } from './error-response.js';
 
 export interface IdempotentCommand {
     actorDid: string;
@@ -66,6 +67,26 @@ export class PostgresIdempotencyExecutor {
     ): Promise<IdempotentResponse> {
         const hash = requestHash(command.body);
         return withTransaction(this.pool, async client => {
+            if (command.pathname !== '/account/deactivate') {
+                const actorDidHash = createHash('sha256')
+                    .update(command.actorDid)
+                    .digest('hex');
+                await client.query(
+                    `SELECT pg_advisory_xact_lock(hashtext('account:' || $1))`,
+                    [actorDidHash],
+                );
+                const deactivated = await client.query(
+                    `SELECT 1 FROM account_deactivations WHERE did_hash = $1`,
+                    [actorDidHash],
+                );
+                if (deactivated.rowCount) {
+                    throw new PublicHttpError(
+                        403,
+                        'ACCOUNT_DEACTIVATED',
+                        'This Patchwork account is deactivated.',
+                    );
+                }
+            }
             await client.query(
                 `INSERT INTO http_idempotency_commands (
                     actor_did, method, pathname, idempotency_key, request_hash

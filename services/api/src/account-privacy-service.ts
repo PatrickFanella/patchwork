@@ -24,6 +24,169 @@ export class AccountPrivacyService {
         }
     }
 
+    async deactivate(
+        did: string,
+        commandId: string,
+        requestedAt = new Date(),
+    ): Promise<Record<string, unknown>> {
+        const client = await this.pool.connect();
+        const didHash = hash(did);
+        const now = requestedAt.toISOString();
+        const safetyRetentionUntil = new Date(
+            requestedAt.getTime() + 7 * 24 * 60 * 60 * 1_000,
+        ).toISOString();
+        const auditRetentionUntil = new Date(
+            requestedAt.getTime() + 30 * 24 * 60 * 60 * 1_000,
+        ).toISOString();
+        try {
+            await client.query('BEGIN');
+            await client.query(
+                `SELECT pg_advisory_xact_lock(hashtext('account:' || $1))`,
+                [didHash],
+            );
+            const duplicate = await client.query<{ result: Record<string, unknown> }>(
+                `SELECT result FROM account_deactivations WHERE did_hash = $1`,
+                [didHash],
+            );
+            if (duplicate.rows[0]) {
+                await client.query('COMMIT');
+                return duplicate.rows[0].result;
+            }
+            await client.query(
+                `INSERT INTO account_deactivations (
+                    did_hash, command_id, result, requested_at, retention_until
+                 ) VALUES ($1, $2, '{}'::jsonb, $3, $4)`,
+                [didHash, commandId, now, 'infinity'],
+            );
+
+            const publicAidPosts = await client.query(
+                `DELETE FROM indexer_aid_post_projections
+                 WHERE author_did_hash = $1`,
+                [didHash],
+            );
+            const legacyDiscoveryEvents = await client.query(
+                `DELETE FROM discovery_events WHERE author_did = $1`,
+                [did],
+            );
+            const workflows = await client.query(
+                `DELETE FROM request_workflows WHERE requester_did = $1`,
+                [did],
+            );
+            const platformRoles = await client.query(
+                `DELETE FROM platform_roles WHERE did = $1`,
+                [did],
+            );
+            const ownedBlocks = await client.query(
+                `DELETE FROM user_blocks WHERE blocker_did = $1`,
+                [did],
+            );
+            const retainedBlocks = await client.query(
+                `UPDATE user_blocks
+                 SET deleted_at = COALESCE(deleted_at, $2), reason = NULL,
+                     retention_until = LEAST(
+                         COALESCE(retention_until, $3::timestamptz),
+                         $3::timestamptz
+                     )
+                 WHERE subject_did = $1`,
+                [did, now, safetyRetentionUntil],
+            );
+            const retainedReports = await client.query(
+                `UPDATE abuse_reports
+                 SET deleted_at = COALESCE(deleted_at, $2), details = NULL,
+                     retention_until = LEAST(retention_until, $3::timestamptz)
+                 WHERE reporter_did = $1 OR subject_did = $1
+                    OR subject_uri LIKE ('at://' || $1 || '/%')`,
+                [did, now, safetyRetentionUntil],
+            );
+            const retainedAudit = await client.query(
+                `UPDATE operational_audit_events
+                 SET actor_did = CASE
+                         WHEN actor_did = $1 THEN 'deactivated:' || $2
+                         ELSE actor_did
+                     END,
+                     subject_uri = CASE
+                         WHEN subject_uri LIKE ('at://' || $1 || '/%')
+                             THEN 'deactivated:' || $2
+                         ELSE subject_uri
+                     END,
+                     retention_until = LEAST(
+                         retention_until, $3::timestamptz
+                     )
+                 WHERE actor_did = $1
+                    OR subject_uri LIKE ('at://' || $1 || '/%')`,
+                [did, didHash, auditRetentionUntil],
+            );
+            const commandMetadata = await client.query(
+                `DELETE FROM http_idempotency_commands
+                 WHERE actor_did = $1 AND pathname <> '/account/deactivate'`,
+                [did],
+            );
+            const browserSessions = await client.query(
+                `DELETE FROM patchwork_browser_sessions WHERE did = $1`,
+                [did],
+            );
+            const oauthSessions = await client.query(
+                `DELETE FROM at_oauth_sessions WHERE did = $1`,
+                [did],
+            );
+            const moderationCasework = await client.query(
+                `SELECT COUNT(*)::int AS count
+                 FROM moderation_queue_items
+                 WHERE subject_uri LIKE ('at://' || $1 || '/%')`,
+                [did],
+            );
+            const moderationActorAudit = await client.query(
+                `UPDATE moderation_audit_records
+                 SET actor_did = 'deactivated:' || $2,
+                     retention_until = LEAST(
+                         retention_until, $3::timestamptz
+                     )
+                 WHERE actor_did = $1`,
+                [did, didHash, safetyRetentionUntil],
+            );
+
+            const result = {
+                status: 'deactivated',
+                effectiveAt: now,
+                removed: {
+                    publicAidPosts: publicAidPosts.rowCount ?? 0,
+                    legacyDiscoveryEvents: legacyDiscoveryEvents.rowCount ?? 0,
+                    workflows: workflows.rowCount ?? 0,
+                    platformRoles: platformRoles.rowCount ?? 0,
+                    ownedBlocks: ownedBlocks.rowCount ?? 0,
+                    commandMetadata: commandMetadata.rowCount ?? 0,
+                },
+                revoked: {
+                    browserSessions: browserSessions.rowCount ?? 0,
+                    oauthSessions: oauthSessions.rowCount ?? 0,
+                },
+                retained: {
+                    deactivationReceipt: 1,
+                    commandReceipt: 1,
+                    safetyBlocks: retainedBlocks.rowCount ?? 0,
+                    safetyReports: retainedReports.rowCount ?? 0,
+                    operationalAudit: retainedAudit.rowCount ?? 0,
+                    moderationCasework:
+                        moderationCasework.rows[0]?.count ?? 0,
+                    moderationActorAudit:
+                        moderationActorAudit.rowCount ?? 0,
+                },
+            };
+            await client.query(
+                `UPDATE account_deactivations SET result = $2::jsonb
+                 WHERE did_hash = $1`,
+                [didHash, JSON.stringify(result)],
+            );
+            await client.query('COMMIT');
+            return result;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
     private async collect(
         client: PoolClient,
         did: string,

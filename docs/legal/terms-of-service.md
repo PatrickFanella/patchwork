@@ -145,9 +145,12 @@ violation of these Terms, or your violation of any third-party rights.
 ### 10.1 By You
 
 You may deactivate your account at any time through the Settings page. Upon
-deactivation, your profile and content will be removed from public discovery.
-You may request full data deletion in accordance with our
-[Privacy Policy](./privacy-policy.md).
+deactivation, Patchwork sessions are revoked and Patchwork-held discovery
+projections and workflow state are removed. Deactivation does not delete
+records hosted in your independent AT Protocol repository. Limited
+pseudonymized safety, audit, and suppression records remain for the bounded
+periods described in our [Privacy Policy](./privacy-policy.md). Reactivation is
+not automatic and requires controlled review.
 
 ### 10.2 By Patchwork
 

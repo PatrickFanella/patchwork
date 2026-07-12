@@ -228,6 +228,21 @@ const accountPrivacyHandler =
         createAccountPrivacyHandler({
             service: new AccountPrivacyService(postgresPool),
             authenticate: authenticateApiRequest,
+            executeIdempotent: executeIdempotentMutation,
+            clearSessionCookies: response => {
+                response.setHeader('set-cookie', [
+                    serializeSessionCookie(
+                        '',
+                        config.NODE_ENV === 'production',
+                        0,
+                    ),
+                    serializeCsrfCookie(
+                        '',
+                        config.NODE_ENV === 'production',
+                        0,
+                    ),
+                ]);
+            },
         })
     :   undefined;
 
@@ -390,7 +405,9 @@ const writeAtAuthError = (response: ServerResponse, error: unknown): void => {
     if (error instanceof AtClientError) {
         const statusCode =
             error.code === 'SESSION_EXPIRED' ? 401
-            : error.code === 'UNAUTHORIZED' || error.code === 'OAUTH_DENIED' ? 403
+            : error.code === 'UNAUTHORIZED' ||
+              error.code === 'OAUTH_DENIED' ||
+              error.code === 'ACCOUNT_DEACTIVATED' ? 403
             : error.code === 'PDS_UNAVAILABLE' ? 503
             : 400;
         writeJson(response, statusCode, {
@@ -886,6 +903,7 @@ const contractRoutes = [
     '/moderation/state',
     '/moderation/audit',
     '/account/export',
+    '/account/deactivate',
     '/health',
     '/health/ready',
     '/metrics',
@@ -914,6 +932,15 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
         },
     }),
     '/account/export': () => ({
+        statusCode: 503,
+        body: {
+            error: {
+                code: 'ACCOUNT_PRIVACY_UNAVAILABLE',
+                message: 'Account privacy services are unavailable.',
+            },
+        },
+    }),
+    '/account/deactivate': () => ({
         statusCode: 503,
         body: {
             error: {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,7 +21,9 @@ describeWithPostgres('PostgreSQL HTTP idempotency executor', () => {
     });
 
     beforeEach(async () => {
-        await pool.query('TRUNCATE http_idempotency_commands');
+        await pool.query(
+            'TRUNCATE http_idempotency_commands, account_deactivations',
+        );
     });
 
     afterAll(async () => pool.end());
@@ -51,5 +54,36 @@ describeWithPostgres('PostgreSQL HTTP idempotency executor', () => {
         await expect(
             restarted.execute({ ...command, body: { reason: 'fraud' } }, effect),
         ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+    });
+
+    it('rejects new mutations for a deactivated actor', async () => {
+        const actorDid = 'did:example:deactivated';
+        const didHash = createHash('sha256').update(actorDid).digest('hex');
+        await pool.query(
+            `INSERT INTO account_deactivations (
+                did_hash, command_id, result, requested_at, retention_until
+             ) VALUES ($1, 'deactivated-command-test',
+                       '{"status":"deactivated"}', NOW(),
+                       NOW() + INTERVAL '1 year')`,
+            [didHash],
+        );
+        const effect = vi.fn(async () => ({ statusCode: 200, body: {} }));
+
+        await expect(
+            executor.execute(
+                {
+                    actorDid,
+                    method: 'POST',
+                    pathname: '/reports',
+                    idempotencyKey: 'post-deactivation-command',
+                    body: {},
+                },
+                effect,
+            ),
+        ).rejects.toMatchObject({
+            statusCode: 403,
+            code: 'ACCOUNT_DEACTIVATED',
+        });
+        expect(effect).not.toHaveBeenCalled();
     });
 });

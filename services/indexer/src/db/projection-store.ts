@@ -73,8 +73,13 @@ export class PostgresProjectionStore {
             throw new Error('Projection store only accepts aid-post events.');
         }
         const client = await this.pool.connect();
+        const authorDidHash = hash(event.authorDid);
         try {
             await client.query('BEGIN');
+            await client.query(
+                `SELECT pg_advisory_xact_lock(hashtext('account:' || $1))`,
+                [authorDidHash],
+            );
             await client.query(
                 `SELECT pg_advisory_xact_lock_shared(hashtext('patchwork-indexer-rebuild'))`,
             );
@@ -107,6 +112,18 @@ export class PostgresProjectionStore {
                     `DELETE FROM indexer_aid_post_projections
                      WHERE uri = $1 AND source_cursor <= $2`,
                     [event.uri, event.seq],
+                );
+                await client.query('COMMIT');
+                return;
+            }
+            const deactivated = await client.query(
+                'SELECT 1 FROM account_deactivations WHERE did_hash = $1',
+                [authorDidHash],
+            );
+            if (deactivated.rowCount) {
+                await client.query(
+                    `DELETE FROM indexer_aid_post_projections WHERE uri = $1`,
+                    [event.uri],
                 );
                 await client.query('COMMIT');
                 return;
@@ -165,7 +182,7 @@ export class PostgresProjectionStore {
                     event.collection,
                     event.cid ?? null,
                     event.revision ?? null,
-                    hash(event.authorDid),
+                    authorDidHash,
                     payload.title,
                     payload.description,
                     payload.category,

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -51,7 +52,7 @@ describePostgres('PostgresProjectionStore', () => {
 
     beforeEach(async () => {
         await pool.query(
-            'TRUNCATE indexer_projection_events, indexer_projection_tombstones, indexer_aid_post_projections, indexer_dead_letters',
+            'TRUNCATE indexer_projection_events, indexer_projection_tombstones, indexer_aid_post_projections, indexer_dead_letters, account_deactivations',
         );
     });
 
@@ -81,6 +82,29 @@ describePostgres('PostgresProjectionStore', () => {
         expect(projection?.authorDidHash).toMatch(/^[a-f0-9]{64}$/);
         expect(projection?.authorDidHash).not.toBe('did:plc:alice');
         expect(projection).not.toHaveProperty('authorDid');
+    });
+
+    it('suppresses future projections and rebuild replay for a deactivated account', async () => {
+        const store = new PostgresProjectionStore(pool);
+        const event = createEvent();
+        const didHash = createHash('sha256')
+            .update(event.authorDid)
+            .digest('hex');
+        await pool.query(
+            `INSERT INTO account_deactivations (
+                did_hash, command_id, result, requested_at, retention_until
+             ) VALUES ($1, 'projection-suppression-test',
+                       '{"status":"deactivated"}', NOW(),
+                       NOW() + INTERVAL '1 year')`,
+            [didHash],
+        );
+
+        await store.apply(event);
+        expect(await store.get(event.uri)).toBeNull();
+
+        await store.resetForRebuild();
+        await store.apply({ ...event, eventId: '101:aid-post:rebuild', seq: 101 });
+        expect(await store.get(event.uri)).toBeNull();
     });
 
     it('applies a newer update once and ignores stale revisions', async () => {

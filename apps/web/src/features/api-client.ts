@@ -613,11 +613,11 @@ export interface SettingsApiAuditResponse {
 }
 
 export interface AccountActionApiResponse {
-    did: string;
-    action: string;
-    status: string;
-    requestedAt: string;
-    message: string;
+    status: 'deactivated';
+    effectiveAt: string;
+    removed: Record<string, number>;
+    revoked: Record<string, number>;
+    retained: Record<string, number>;
 }
 
 export interface AccountExportApiResponse {
@@ -698,13 +698,11 @@ export const fetchSettingsAuditFromApi = async (
 };
 
 export const deactivateAccountViaApi = async (
-    did: string,
-    reason?: string,
     signal?: AbortSignal,
 ): Promise<ApiClientResult<AccountActionApiResponse>> => {
     const result = await requestJsonPost(
         '/account/deactivate',
-        { did, reason },
+        {},
         signal,
     );
 

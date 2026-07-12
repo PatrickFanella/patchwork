@@ -10,7 +10,7 @@ import type {
     NodeSavedState,
     NodeSavedStateStore,
 } from '@atproto/oauth-client-node';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 const STATE_TTL_MILLISECONDS = 60 * 60 * 1000;
 
@@ -69,6 +69,44 @@ export class AesGcmJsonCipher {
 const hashLookupKey = (value: string): string =>
     createHash('sha256').update(value, 'utf8').digest('hex');
 
+export class AccountDeactivatedError extends Error {
+    readonly code = 'ACCOUNT_DEACTIVATED';
+
+    constructor() {
+        super('Account is deactivated.');
+        this.name = 'AccountDeactivatedError';
+    }
+}
+
+const withAccountLock = async <T>(
+    pool: Pool,
+    did: string,
+    operation: (client: PoolClient, didHash: string) => Promise<T>,
+): Promise<T> => {
+    const client = await pool.connect();
+    const didHash = hashLookupKey(did);
+    try {
+        await client.query('BEGIN');
+        await client.query(
+            `SELECT pg_advisory_xact_lock(hashtext('account:' || $1))`,
+            [didHash],
+        );
+        const deactivated = await client.query(
+            'SELECT 1 FROM account_deactivations WHERE did_hash = $1',
+            [didHash],
+        );
+        if (deactivated.rowCount) throw new AccountDeactivatedError();
+        const result = await operation(client, didHash);
+        await client.query('COMMIT');
+        return result;
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
 export interface BrowserSession {
     did: string;
     expiresAt: Date;
@@ -94,30 +132,60 @@ export class PostgresBrowserSessionRepository
 
     async create(did: string, expiresAt: Date): Promise<string> {
         const token = randomBytes(32).toString('base64url');
-        await this.pool.query(
-            `
-            INSERT INTO patchwork_browser_sessions (
-                session_id_hash, did, expires_at
-            ) VALUES ($1, $2, $3)
-            `,
-            [hashLookupKey(token), did, expiresAt],
+        await withAccountLock(this.pool, did, client =>
+            client.query(
+                `INSERT INTO patchwork_browser_sessions (
+                    session_id_hash, did, expires_at
+                 ) VALUES ($1, $2, $3)`,
+                [hashLookupKey(token), did, expiresAt],
+            ),
         );
         return token;
     }
 
     async get(sessionToken: string): Promise<BrowserSession | undefined> {
-        const result = await this.pool.query<BrowserSessionRow>(
-            `
-            SELECT did, expires_at
-            FROM patchwork_browser_sessions
-            WHERE session_id_hash = $1
-              AND revoked_at IS NULL
-              AND expires_at > NOW()
-            `,
-            [hashLookupKey(sessionToken)],
-        );
-        const row = result.rows[0];
-        return row ? { did: row.did, expiresAt: new Date(row.expires_at) } : undefined;
+        const client = await this.pool.connect();
+        try {
+            await client.query('BEGIN');
+            const lookupKey = hashLookupKey(sessionToken);
+            const candidate = await client.query<BrowserSessionRow>(
+                `SELECT did, expires_at FROM patchwork_browser_sessions
+                 WHERE session_id_hash = $1`,
+                [lookupKey],
+            );
+            const candidateRow = candidate.rows[0];
+            if (!candidateRow) {
+                await client.query('COMMIT');
+                return undefined;
+            }
+            const didHash = hashLookupKey(candidateRow.did);
+            await client.query(
+                `SELECT pg_advisory_xact_lock_shared(hashtext('account:' || $1))`,
+                [didHash],
+            );
+            const result = await client.query<BrowserSessionRow>(
+                `SELECT did, expires_at
+                 FROM patchwork_browser_sessions
+                 WHERE session_id_hash = $1
+                   AND revoked_at IS NULL
+                   AND expires_at > NOW()
+                   AND NOT EXISTS (
+                       SELECT 1 FROM account_deactivations
+                       WHERE did_hash = $2
+                   )`,
+                [lookupKey, didHash],
+            );
+            await client.query('COMMIT');
+            const row = result.rows[0];
+            return row ?
+                    { did: row.did, expiresAt: new Date(row.expires_at) }
+                :   undefined;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     async touch(sessionToken: string): Promise<void> {
@@ -150,8 +218,12 @@ export class PostgresBrowserSessionRepository
             UPDATE at_oauth_sessions
             SET handle = $2, updated_at = NOW()
             WHERE did = $1 AND revoked_at IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM account_deactivations
+                  WHERE did_hash = $3
+              )
             `,
-            [did, handle],
+            [did, handle, hashLookupKey(did)],
         );
     }
 }
@@ -222,18 +294,18 @@ export class PostgresOAuthSessionStore implements NodeSavedSessionStore {
     ) {}
 
     async set(did: string, value: NodeSavedSession): Promise<void> {
-        await this.pool.query(
-            `
-            INSERT INTO at_oauth_sessions (
-                did, encrypted_payload, token_expires_at, revoked_at
-            ) VALUES ($1, $2, $3, NULL)
-            ON CONFLICT (did) DO UPDATE SET
-                encrypted_payload = EXCLUDED.encrypted_payload,
-                token_expires_at = EXCLUDED.token_expires_at,
-                revoked_at = NULL,
-                updated_at = NOW()
-            `,
-            [did, this.cipher.encrypt(value), tokenExpiry(value)],
+        await withAccountLock(this.pool, did, client =>
+            client.query(
+                `INSERT INTO at_oauth_sessions (
+                    did, encrypted_payload, token_expires_at, revoked_at
+                 ) VALUES ($1, $2, $3, NULL)
+                 ON CONFLICT (did) DO UPDATE SET
+                    encrypted_payload = EXCLUDED.encrypted_payload,
+                    token_expires_at = EXCLUDED.token_expires_at,
+                    revoked_at = NULL,
+                    updated_at = NOW()`,
+                [did, this.cipher.encrypt(value), tokenExpiry(value)],
+            ),
         );
     }
 
@@ -243,8 +315,12 @@ export class PostgresOAuthSessionStore implements NodeSavedSessionStore {
             SELECT encrypted_payload
             FROM at_oauth_sessions
             WHERE did = $1 AND revoked_at IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM account_deactivations
+                  WHERE did_hash = $2
+              )
             `,
-            [did],
+            [did, hashLookupKey(did)],
         );
         const row = result.rows[0];
         return row ? this.cipher.decrypt<NodeSavedSession>(row.encrypted_payload) : undefined;

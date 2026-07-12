@@ -7,6 +7,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AccountPrivacyService } from '../account-privacy-service.js';
 import { authenticateRequest } from './authenticated-request.js';
 import { createAccountPrivacyHandler } from './account-privacy-handler.js';
+import {
+    idempotencyKeyFromRequest,
+    withIdempotencyKey,
+} from './idempotent-request.js';
+import { PostgresIdempotencyExecutor } from './idempotency-store.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
@@ -16,16 +21,42 @@ const hash = (value: string) =>
     createHash('sha256').update(value).digest('hex');
 
 const startServer = async (pool: Pool) => {
+    const idempotency = new PostgresIdempotencyExecutor(pool);
     const handler = createAccountPrivacyHandler({
         service: new AccountPrivacyService(pool),
         authenticate: request =>
             authenticateRequest(request, {
                 resolveSession: async token => {
-                    if (token !== 'privacy-session') throw new Error('bad session');
-                    return { did: viewerDid };
+                    if (token === 'privacy-session') return { did: viewerDid };
+                    if (token === 'other-session') return { did: otherDid };
+                    throw new Error('bad session');
                 },
                 resolveRole: async () => 'user',
             }),
+        clearSessionCookies: response => {
+            response.setHeader('set-cookie', [
+                'patchwork_session=; Path=/; HttpOnly; Max-Age=0',
+                'patchwork_csrf=; Path=/; Max-Age=0',
+            ]);
+        },
+        executeIdempotent: (request, actorDid, body, effect) => {
+            const key = idempotencyKeyFromRequest(request);
+            const commandBody = withIdempotencyKey(body, key);
+            const pathname = new URL(
+                request.url ?? '/',
+                'http://localhost',
+            ).pathname;
+            return idempotency.execute(
+                {
+                    actorDid,
+                    method: request.method ?? 'POST',
+                    pathname,
+                    idempotencyKey: key,
+                    body: commandBody,
+                },
+                () => effect(commandBody),
+            );
+        },
     });
     const server = createServer((request, response) => {
         const url = new URL(request.url ?? '/', 'http://localhost');
@@ -58,6 +89,8 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             '0009_public_status_sync.sql',
             '0010_public_sync_state.sql',
             '0011_http_idempotency.sql',
+            '0012_retention_enforcement.sql',
+            '0013_account_deactivation.sql',
         ]) {
             await pool.query(
                 await readFile(
@@ -72,12 +105,29 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 'utf8',
             ),
         );
+        for (const migration of [
+            '001_create_moderation_tables.sql',
+            '002_durable_moderation.sql',
+            '003_retention_enforcement.sql',
+        ]) {
+            await pool.query(
+                await readFile(
+                    new URL(
+                        `../../../moderation-worker/src/migrations/${migration}`,
+                        import.meta.url,
+                    ),
+                    'utf8',
+                ),
+            );
+        }
         await pool.query(
             `TRUNCATE patchwork_browser_sessions, at_oauth_sessions,
                       platform_roles, operational_audit_events, abuse_reports,
                       user_blocks, request_handoff_events,
                       request_assignment_events, request_transition_events,
                       request_workflows, http_idempotency_commands,
+                      account_deactivations, moderation_audit_records,
+                      moderation_queue_items,
                       indexer_projection_events,
                       indexer_projection_tombstones,
                       indexer_aid_post_projections RESTART IDENTITY CASCADE`,
@@ -123,6 +173,40 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                  'food', 'low', 'open', 'other aid post do not export', 0, 0, 5,
                  NOW(), NOW(), 2, 'other-event')`,
             [hash(viewerDid), hash(otherDid)],
+        );
+        await pool.query(
+            `INSERT INTO user_blocks (
+                command_id, blocker_did, subject_did, reason,
+                retention_until, created_at
+             ) VALUES
+                ('viewer-owned-block', $1, $2, 'owned detail',
+                 NOW() + INTERVAL '30 days', NOW()),
+                ('viewer-subject-block', $2, $1, 'safety detail',
+                 NOW() + INTERVAL '30 days', NOW())`,
+            [viewerDid, otherDid],
+        );
+        await pool.query(
+            `INSERT INTO abuse_reports (
+                command_id, reporter_did, subject_uri, subject_did, reason,
+                details, retention_until, created_at
+             ) VALUES (
+                'viewer-report', $1,
+                'at://did:plc:privacyother/app.patchwork.aid.post/two', $2,
+                'safety', 'private report detail',
+                NOW() + INTERVAL '30 days', NOW()
+             )`,
+            [viewerDid, otherDid],
+        );
+        await pool.query(
+            `INSERT INTO operational_audit_events (
+                command_id, actor_did, action, subject_uri, payload,
+                retention_until, occurred_at
+             ) VALUES (
+                'viewer-audit', $1, 'privacy-test',
+                'at://did:plc:privacyviewer/app.patchwork.aid.post/one',
+                '{"safe":true}', NOW() + INTERVAL '90 days', NOW()
+             )`,
+            [viewerDid],
         );
     });
 
@@ -175,5 +259,86 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         await expect(response.json()).resolves.toMatchObject({
             error: { code: 'AUTHENTICATION_REQUIRED' },
         });
+    });
+
+    it('deactivates only the authenticated subject and reports retained exceptions', async () => {
+        const running = await startServer(pool);
+        const response = await fetch(`${running.origin}/account/deactivate`, {
+            method: 'POST',
+            headers: {
+                cookie: 'patchwork_session=privacy-session',
+                'content-type': 'application/json',
+                'idempotency-key': 'privacy-deactivate-1',
+            },
+            body: JSON.stringify({ did: otherDid }),
+        });
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('set-cookie')).toContain(
+            'patchwork_session=; Path=/; HttpOnly; Max-Age=0',
+        );
+        expect(body).toMatchObject({
+            status: 'deactivated',
+            removed: { publicAidPosts: 1, workflows: 1 },
+            revoked: { browserSessions: 1, oauthSessions: 1 },
+            retained: expect.objectContaining({
+                deactivationReceipt: 1,
+                safetyBlocks: 1,
+                safetyReports: 1,
+                operationalAudit: 1,
+            }),
+        });
+        expect(JSON.stringify(body)).not.toContain(viewerDid);
+        expect(JSON.stringify(body)).not.toContain(otherDid);
+
+        const reused = await fetch(`${running.origin}/account/deactivate`, {
+            method: 'POST',
+            headers: {
+                cookie: 'patchwork_session=privacy-session',
+                'content-type': 'application/json',
+                'idempotency-key': 'privacy-deactivate-1',
+            },
+            body: JSON.stringify({ changed: true }),
+        });
+        expect(reused.status).toBe(409);
+        await expect(reused.json()).resolves.toMatchObject({
+            error: { code: 'IDEMPOTENCY_KEY_REUSED' },
+        });
+
+        const retained = await pool.query<{
+            reason: string | null;
+            details: string | null;
+            actor_did: string;
+        }>(
+            `SELECT b.reason, r.details, a.actor_did
+             FROM user_blocks b, abuse_reports r, operational_audit_events a
+             WHERE b.subject_did = $1
+               AND r.command_id = 'viewer-report'
+               AND a.command_id = 'viewer-audit'`,
+            [viewerDid],
+        );
+        expect(retained.rows[0]).toMatchObject({
+            reason: null,
+            details: null,
+            actor_did: `deactivated:${hash(viewerDid)}`,
+        });
+
+        const viewerExport = (await fetch(`${running.origin}/account/export`, {
+            headers: { cookie: 'patchwork_session=privacy-session' },
+        }).then(result => result.json())) as {
+            data: { publicAidPosts: unknown[]; workflows: unknown[] };
+        };
+        expect(viewerExport.data.publicAidPosts).toEqual([]);
+        expect(viewerExport.data.workflows).toEqual([]);
+
+        const otherExport = (await fetch(`${running.origin}/account/export`, {
+            headers: { cookie: 'patchwork_session=other-session' },
+        }).then(result => result.json())) as {
+            data: { publicAidPosts: unknown[]; workflows: unknown[] };
+        };
+        expect(otherExport.data.publicAidPosts).toHaveLength(1);
+        expect(otherExport.data.workflows).toHaveLength(1);
+        await stopServer(running.server);
     });
 });

@@ -10,6 +10,7 @@ export type AtClientErrorCode =
     | 'PDS_UNAVAILABLE'
     | 'OAUTH_DENIED'
     | 'OAUTH_STATE_INVALID'
+    | 'ACCOUNT_DEACTIVATED'
     | 'UPSTREAM_ERROR';
 
 export class AtClientError extends Error {
@@ -64,6 +65,19 @@ export const toAtClientError = (
 
     const status = readStatus(error);
     const message = readMessage(error);
+
+    if (
+        (typeof error === 'object' &&
+            error !== null &&
+            (error as { code?: unknown }).code === 'ACCOUNT_DEACTIVATED') ||
+        /account is deactivated/i.test(message)
+    ) {
+        return new AtClientError(
+            'ACCOUNT_DEACTIVATED',
+            'This Patchwork account is deactivated.',
+            { cause: error },
+        );
+    }
 
     if (/state.?mismatch|invalid.?state|csrf|nonce/i.test(message)) {
         return new AtClientError(

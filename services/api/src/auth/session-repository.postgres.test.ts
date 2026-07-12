@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type {
     NodeSavedSession,
     NodeSavedState,
@@ -21,7 +22,7 @@ describeWithPostgres('PostgreSQL OAuth persistence', () => {
 
     beforeAll(async () => {
         await pool.query(
-            'TRUNCATE patchwork_browser_sessions, at_oauth_state, at_oauth_sessions',
+            'TRUNCATE patchwork_browser_sessions, at_oauth_state, at_oauth_sessions, account_deactivations',
         );
     });
 
@@ -94,5 +95,48 @@ describeWithPostgres('PostgreSQL OAuth persistence', () => {
 
         await repository.revoke(token);
         await expect(repository.get(token)).resolves.toBeUndefined();
+    });
+
+    it('prevents a deactivated account from restoring OAuth or browser sessions', async () => {
+        const did = 'did:plc:deactivated-user';
+        const didHash = createHash('sha256').update(did).digest('hex');
+        await pool.query(
+            `INSERT INTO account_deactivations (
+                did_hash, command_id, result, requested_at, retention_until
+             ) VALUES ($1, 'deactivated-session-test', '{"status":"deactivated"}',
+                       NOW(), NOW() + INTERVAL '1 year')`,
+            [didHash],
+        );
+        const browserSessions = new PostgresBrowserSessionRepository(pool);
+        const oauthSessions = new PostgresOAuthSessionStore(
+            pool,
+            new AesGcmJsonCipher(key),
+        );
+        const session = {
+            dpopJwk: { kty: 'EC', crv: 'P-256', x: 'x', y: 'y', d: 'd' },
+            authMethod: { method: 'none' as const },
+            tokenSet: {
+                sub: did,
+                iss: 'https://pds.example',
+                aud: 'did:web:pds.example',
+                scope: 'atproto',
+                token_type: 'DPoP' as const,
+                access_token: 'must-not-persist',
+            },
+        } as unknown as NodeSavedSession;
+
+        await expect(
+            browserSessions.create(did, new Date(Date.now() + 60_000)),
+        ).rejects.toThrow('Account is deactivated');
+        await expect(oauthSessions.set(did, session)).rejects.toThrow(
+            'Account is deactivated',
+        );
+        await expect(oauthSessions.get(did)).resolves.toBeUndefined();
+        await expect(
+            pool.query(
+                'SELECT COUNT(*)::int AS count FROM at_oauth_sessions WHERE did = $1',
+                [did],
+            ),
+        ).resolves.toMatchObject({ rows: [{ count: 0 }] });
     });
 });

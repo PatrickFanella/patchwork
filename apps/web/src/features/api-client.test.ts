@@ -5,6 +5,7 @@ import {
     blockUserViaApi,
     createAidPostViaApi,
     createAtAidPostViaApi,
+    deactivateAccountViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     exportDataViaApi,
@@ -65,6 +66,37 @@ describe('api client', () => {
         expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(
             'did:plc:viewer',
         );
+    });
+
+    it('deactivates the authenticated account without sending browser identity', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({
+                status: 'deactivated',
+                effectiveAt: '2026-07-11T12:00:00.000Z',
+                removed: {},
+                revoked: {},
+                retained: { deactivationReceipt: 1 },
+            }),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const result = await deactivateAccountViaApi();
+
+        expect(result.ok).toBe(true);
+        const [url, init] = fetchMock.mock.calls[0] as unknown as [
+            string,
+            RequestInit,
+        ];
+        expect(url).toMatch(/\/account\/deactivate$/);
+        expect(init).toMatchObject({
+            method: 'POST',
+            credentials: 'include',
+            headers: expect.objectContaining({
+                'idempotency-key': expect.any(String),
+            }),
+        });
+        expect(JSON.parse(String(init.body))).toEqual({});
+        expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('did:');
     });
 
     it('fetches and maps aid records for map scope', async () => {

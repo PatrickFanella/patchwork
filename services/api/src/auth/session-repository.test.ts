@@ -34,7 +34,12 @@ const makePool = () => {
         }
         return { rows: [] };
     });
-    return { pool: { query } as unknown as Pool, query, rows };
+    const client = { query, release: vi.fn() };
+    return {
+        pool: { query, connect: vi.fn(async () => client) } as unknown as Pool,
+        query,
+        rows,
+    };
 };
 
 describe('AesGcmJsonCipher', () => {

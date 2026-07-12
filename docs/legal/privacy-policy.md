@@ -108,9 +108,9 @@ this policy:
 
 | Data Type             | Retention Period                             |
 | --------------------- | -------------------------------------------- |
-| Account and profile   | Until you deactivate your account            |
-| Aid requests/offers   | Until you delete them, or account deactivation|
-| Messages              | Until you delete them, or account deactivation|
+| Patchwork account/session data | Until deactivation; a hash-only suppression marker remains while the account is deactivated |
+| Patchwork aid-post projections and workflows | Until deletion or account deactivation |
+| Independently hosted AT records | Controlled by the user's PDS and AT repository, not Patchwork deactivation |
 | Moderation audit logs and resolved casework | 7 days from the policy decision |
 | Server/technical logs | 30 days                                      |
 | Verification records  | Duration of verification tier validity        |
@@ -137,14 +137,29 @@ portable AT repository.
 
 ### 6.2 Deletion
 
-You may request deletion of your account and associated data. Deletion
-requests are processed through the Settings page (account deactivation) or by
-contacting us directly.
+You may deactivate your Patchwork account through the Settings page. The
+authenticated command immediately revokes Patchwork browser and OAuth sessions,
+removes Patchwork discovery projections and owned workflow state, and prevents
+future event replay or login from recreating them. It does not delete records
+from an independently hosted AT Protocol repository; those remain under the
+user's PDS controls.
 
 Some data may be retained after deletion where required for:
 
 - Moderation audit trail integrity (within the retention window).
 - Legal compliance obligations.
+- Pseudonymized operational audit data for no more than 30 days.
+- A hash-only suppression marker while the account remains deactivated, used to
+  prevent silent account or projection resurrection. Controlled reactivation
+  removes this marker after identity and safety review.
+- The final deactivation command receipt for up to seven days so retries return
+  a stable result; it contains a request hash and response counts, not the
+  submitted body or credential material.
+
+Safety blocks, reports, and related moderator attribution involving a
+deactivated account are stripped of free-text details or pseudonymized and
+retained for no more than seven days. Reactivation is not automatic and requires
+a controlled support and safety review.
 
 ### 6.3 Correction
 

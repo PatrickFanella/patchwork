@@ -537,8 +537,11 @@ the staging `CAPACITY` condition.
 
 Local data-access evidence:
 `docs/operations/evidence/phase-8/account-data-export.md`. The authenticated
-export closes the self-service access gap without claiming deactivation,
-erasure, full-repository portability, or privacy approval.
+export and durable deactivation close the locally feasible self-service privacy
+path. Deactivation is session-derived and idempotent, removes Patchwork-held
+state, revokes login, and durably suppresses future projections and OAuth
+restoration. It does not claim independent AT-repository deletion,
+full-repository portability, or formal privacy approval.
 
 ### Task 8.2: Re-evaluate expansion features
 
