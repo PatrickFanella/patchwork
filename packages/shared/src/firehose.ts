@@ -32,6 +32,8 @@ const envelopeSchema = z.object({
     uri: atUriRecordSchema,
     collection: z.enum(recordNsidEnumValues),
     authorDid: didSchema.optional(),
+    cid: z.string().min(1).max(200).optional(),
+    revision: z.string().min(1).max(200).optional(),
     record: z.unknown().optional(),
     deleteReason: z.string().min(1).max(200).optional(),
     trustScore: z.number().min(0).max(1).optional(),
@@ -97,6 +99,8 @@ export interface NormalizedFirehoseEvent {
     uri: string;
     collection: RecordNsid;
     authorDid: string;
+    cid?: string;
+    revision?: string;
     receivedAt: string;
     payload?: NormalizedRecordPayload;
     deleteReason?: string;
@@ -366,6 +370,8 @@ export const normalizeFirehoseEvent = (
             uri: envelope.uri,
             collection: envelope.collection,
             authorDid,
+            cid: envelope.cid,
+            revision: envelope.revision,
             receivedAt: resolveReceivedAt(envelope),
             deleteReason:
                 envelope.action === 'delete' ?

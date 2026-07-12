@@ -21,6 +21,8 @@ interface JetstreamCommitFrame {
     time_us: number;
     kind: 'commit';
     commit: {
+        rev?: string;
+        cid?: string;
         operation: 'create' | 'update' | 'delete';
         collection: string;
         rkey: string;
@@ -228,6 +230,8 @@ export class JetstreamEventSource implements AtEventSource {
             uri: `at://${value.did}/${value.commit.collection}/${value.commit.rkey}`,
             collection: value.commit.collection,
             authorDid: value.did,
+            cid: value.commit.cid,
+            revision: value.commit.rev,
             record: value.commit.record,
             deleteReason:
                 value.commit.operation === 'delete' ? 'deleted-upstream' : undefined,

@@ -18,7 +18,10 @@ export class IndexerRuntime {
         const cursor = await this.options.pipeline.loadCheckpoint();
         await this.options.source.start(cursor, async event => {
             const result = await this.options.pipeline.ingestAndCheckpoint([event]);
-            if (result.normalizedCount !== 1 || result.failureCount !== 0) {
+            if (
+                result.normalizedCount + result.quarantinedCount !== 1 ||
+                result.failureCount !== result.quarantinedCount
+            ) {
                 throw new Error('Live AT event was rejected by the ingestion pipeline.');
             }
         });

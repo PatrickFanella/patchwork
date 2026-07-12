@@ -66,6 +66,8 @@ services:
         depends_on:
             postgres:
                 condition: service_healthy
+            patchwork-indexer-migrations:
+                condition: service_completed_successfully
         environment:
             NODE_ENV: production
             PATCHWORK_ENV: staging
@@ -80,6 +82,21 @@ services:
             staging-web:
                 aliases:
                     - patchwork-staging-spool
+
+    patchwork-indexer-migrations:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: indexer-runtime
+        restart: "no"
+        command: ['npm', 'run', 'db:migrate', '-w', '@patchwork/indexer']
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            DATABASE_URL: postgresql://patchwork:${PATCHWORK_STAGING_POSTGRES_PASSWORD:?Set PATCHWORK_STAGING_POSTGRES_PASSWORD in .env}@patchwork-staging-postgres:5432/patchwork
+        networks:
+            staging-internal:
 
     patchwork-thimble:
         build:

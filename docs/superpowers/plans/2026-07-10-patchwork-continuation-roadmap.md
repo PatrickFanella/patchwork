@@ -323,12 +323,18 @@ live data is durable beyond the cursor.
 - Modify: `services/indexer/src/pipeline.ts`
 - Test: `services/indexer/src/db/projection-store.test.ts`
 
-- [ ] Persist record URI, CID/revision, author DID hash where appropriate, approximate location, searchable fields, lifecycle status, and source cursor.
-- [ ] Make create/update/delete application transactional and idempotent.
-- [ ] Ignore older revisions and quarantine invalid records with bounded redacted diagnostics.
-- [ ] Remove public projections promptly on delete while retaining only policy-approved private audit metadata.
-- [ ] Test replay equivalence, stale revision, duplicate event, delete, invalid schema, and database outage recovery.
-- [ ] Commit as `feat(indexer): add durable aid-post projections`.
+- [x] Persist record URI, CID/revision, author DID hash where appropriate, approximate location, searchable fields, lifecycle status, and source cursor.
+- [x] Make create/update/delete application transactional and idempotent.
+- [x] Ignore older revisions and quarantine invalid records with bounded redacted diagnostics.
+- [x] Remove public projections promptly on delete while retaining only policy-approved private audit metadata.
+- [x] Test replay equivalence, stale revision, duplicate event, delete, invalid schema, and database outage recovery.
+- [x] Commit as `feat(indexer): add durable aid-post projections`.
+
+Evidence: `docs/operations/evidence/phase-5/durable-projections.md`. The
+production pipeline now persists each normalized event before checkpointing,
+quarantines invalid records without raw payloads, retries database failures
+from the unadvanced cursor, and uses hashed tombstones to prevent stale replay
+from resurrecting deleted records. Task 5.3 remains the discovery read path.
 
 ### Task 5.3: Serve discovery from the projection database
 

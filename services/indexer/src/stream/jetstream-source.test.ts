@@ -114,6 +114,8 @@ describe('JetstreamEventSource', () => {
                 action: 'create',
                 uri: `at://did:plc:alice/${aidPostCollection}/first`,
                 collection: aidPostCollection,
+                cid: 'cid-100',
+                revision: 'rev-100',
             }),
             expect.objectContaining({
                 seq: 101,

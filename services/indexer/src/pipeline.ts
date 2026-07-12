@@ -5,13 +5,17 @@ import {
     type AidQueryInput,
     type CheckpointStore,
     type DirectoryQueryInput,
+    type IngestionFailure,
+    type NormalizedFirehoseEvent,
 } from '@patchwork/shared';
 import { InMemoryCheckpointStore } from './checkpoint.js';
 import { MetricsCollector, type IngestionRuntimeMetrics } from './metrics.js';
 
 export interface IndexerPipelineIngestResult {
     normalizedCount: number;
+    normalizedEvents: NormalizedFirehoseEvent[];
     failureCount: number;
+    quarantinedCount: number;
     checkpointSeq: number;
     metrics: ReturnType<FirehoseConsumer['getMetrics']>;
     failures: ReturnType<FirehoseConsumer['ingest']>['failures'];
@@ -29,6 +33,14 @@ export interface IndexerPipelineOptions {
      * Defaults to 100. Set to 1 for tests to checkpoint after every batch.
      */
     checkpointInterval?: number;
+
+    projectionStore?: {
+        apply(event: NormalizedFirehoseEvent): Promise<void>;
+    };
+
+    deadLetterStore?: {
+        append(failure: IngestionFailure): Promise<void>;
+    };
 }
 
 export class IndexerPipeline {
@@ -37,12 +49,17 @@ export class IndexerPipeline {
     private readonly checkpointStore: CheckpointStore;
     private readonly checkpointInterval: number;
     private readonly metricsCollector = new MetricsCollector();
+    private readonly projectionStore?: IndexerPipelineOptions['projectionStore'];
+    private readonly deadLetterStore?: IndexerPipelineOptions['deadLetterStore'];
     private eventsSinceCheckpoint = 0;
+    private lastProcessedSeq = -1;
 
     constructor(options?: IndexerPipelineOptions) {
         this.checkpointStore =
             options?.checkpointStore ?? new InMemoryCheckpointStore();
         this.checkpointInterval = options?.checkpointInterval ?? 100;
+        this.projectionStore = options?.projectionStore;
+        this.deadLetterStore = options?.deadLetterStore;
     }
 
     /**
@@ -60,11 +77,11 @@ export class IndexerPipeline {
 
         this.metricsCollector.recordEvents(ingested.normalizedEvents.length);
         this.metricsCollector.recordErrors(ingested.failures.length);
-        this.eventsSinceCheckpoint += ingested.normalizedEvents.length;
-
         return {
             normalizedCount: ingested.normalizedEvents.length,
+            normalizedEvents: ingested.normalizedEvents,
             failureCount: ingested.failures.length,
+            quarantinedCount: 0,
             checkpointSeq: ingested.checkpointSeq,
             metrics: ingested.metrics,
             failures: ingested.failures,
@@ -79,6 +96,47 @@ export class IndexerPipeline {
         rawEvents: readonly unknown[],
     ): Promise<IndexerPipelineIngestResult> {
         const result = this.ingest(rawEvents);
+
+        if (this.projectionStore) {
+            for (const event of result.normalizedEvents) {
+                await this.projectionStore.apply(event);
+            }
+        }
+        if (this.deadLetterStore) {
+            for (const failure of result.failures) {
+                await this.deadLetterStore.append(failure);
+            }
+            result.quarantinedCount = result.failures.length;
+        }
+
+        const persistedCount =
+            result.normalizedCount + result.quarantinedCount;
+        if (persistedCount === rawEvents.length) {
+            const cursors = rawEvents.flatMap(event => {
+                if (
+                    typeof event === 'object' &&
+                    event !== null &&
+                    'seq' in event &&
+                    Number.isSafeInteger(
+                        (event as Record<string, unknown>).seq,
+                    )
+                ) {
+                    return [(event as Record<string, number>).seq];
+                }
+                return [];
+            });
+            if (cursors.length > 0) {
+                this.lastProcessedSeq = Math.max(
+                    this.lastProcessedSeq,
+                    ...cursors,
+                );
+                result.checkpointSeq = Math.max(
+                    result.checkpointSeq,
+                    this.lastProcessedSeq,
+                );
+            }
+        }
+        this.eventsSinceCheckpoint += persistedCount;
 
         if (
             result.checkpointSeq >= 0 &&
@@ -95,7 +153,10 @@ export class IndexerPipeline {
      * Force a checkpoint save regardless of the interval.
      */
     async saveCheckpoint(): Promise<void> {
-        const seq = this.consumer.getCheckpointSeq();
+        const seq = Math.max(
+            this.consumer.getCheckpointSeq(),
+            this.lastProcessedSeq,
+        );
         if (seq >= 0) {
             await this.checkpointStore.save(seq);
             this.eventsSinceCheckpoint = 0;
@@ -106,6 +167,7 @@ export class IndexerPipeline {
         this.consumer = new FirehoseConsumer();
         this.store = new DiscoveryIndexStore();
         this.eventsSinceCheckpoint = 0;
+        this.lastProcessedSeq = -1;
 
         return this.ingest(rawEvents);
     }
@@ -154,7 +216,10 @@ export class IndexerPipeline {
     }
 
     getCheckpointSeq() {
-        return this.consumer.getCheckpointSeq();
+        return Math.max(
+            this.consumer.getCheckpointSeq(),
+            this.lastProcessedSeq,
+        );
     }
 
     getLogs() {

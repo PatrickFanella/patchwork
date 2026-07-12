@@ -13,6 +13,8 @@ import {
     SliCollector,
 } from '@patchwork/shared';
 import { PostgresCheckpointStore } from './checkpoint.js';
+import { PostgresDeadLetterStore } from './db/dead-letter-store.js';
+import { PostgresProjectionStore } from './db/projection-store.js';
 import { renderPrometheusRuntimeMetrics } from './metrics.js';
 import { IndexerPipeline } from './pipeline.js';
 import { IndexerRuntime } from './runtime.js';
@@ -45,11 +47,22 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
         idleTimeoutMillis: 30_000,
         connectionTimeoutMillis: 5_000,
     });
+    const schema = await pool.query<{ projections: string | null }>(
+        `SELECT to_regclass('indexer_aid_post_projections')::TEXT AS projections`,
+    );
+    if (!schema.rows[0]?.projections) {
+        await pool.end();
+        throw new Error(
+            'FATAL: indexer projection schema is missing; run indexer migrations before startup.',
+        );
+    }
 
     const checkpointStore = new PostgresCheckpointStore(pool);
     const pipeline = new IndexerPipeline({
         checkpointStore,
         checkpointInterval: 100,
+        projectionStore: new PostgresProjectionStore(pool),
+        deadLetterStore: new PostgresDeadLetterStore(pool),
     });
 
     const cursor = await pipeline.loadCheckpoint();
