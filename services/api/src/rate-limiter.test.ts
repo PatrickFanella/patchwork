@@ -6,6 +6,8 @@ import {
     generalLimiter,
     authLimiter,
     mutationLimiter,
+    reportLimiter,
+    moderationLimiter,
 } from './rate-limiter.js';
 
 describe('RateLimiter', () => {
@@ -100,37 +102,65 @@ describe('RateLimiter', () => {
 
 describe('selectLimiter', () => {
     it('returns authLimiter for /auth/ paths', () => {
-        expect(selectLimiter('/auth/session')).toBe(authLimiter);
-        expect(selectLimiter('/auth/refresh')).toBe(authLimiter);
+        expect(selectLimiter('POST', '/oauth/login')).toBe(authLimiter);
+        expect(selectLimiter('POST', '/auth/refresh')).toBe(authLimiter);
     });
 
     it('returns mutationLimiter for account mutation paths', () => {
-        expect(selectLimiter('/account/deactivate')).toBe(mutationLimiter);
-        expect(selectLimiter('/account/export')).toBe(mutationLimiter);
-        expect(selectLimiter('/account/settings')).toBe(mutationLimiter);
+        expect(selectLimiter('POST', '/account/deactivate')).toBe(mutationLimiter);
+        expect(selectLimiter('POST', '/account/export')).toBe(mutationLimiter);
+        expect(selectLimiter('PUT', '/account/settings')).toBe(mutationLimiter);
+        expect(selectLimiter('POST', '/reports')).toBe(reportLimiter);
+        expect(selectLimiter('POST', '/moderation/policy/apply')).toBe(
+            moderationLimiter,
+        );
     });
 
     it('returns generalLimiter for all other paths', () => {
-        expect(selectLimiter('/health')).toBe(generalLimiter);
-        expect(selectLimiter('/query/map')).toBe(generalLimiter);
-        expect(selectLimiter('/chat/initiate')).toBe(generalLimiter);
+        expect(selectLimiter('GET', '/health')).toBe(generalLimiter);
+        expect(selectLimiter('GET', '/query/map')).toBe(generalLimiter);
+    });
+
+    it('gives reports a stricter budget than ordinary writes', () => {
+        reportLimiter.resetAll();
+        mutationLimiter.resetAll();
+        for (let index = 0; index < 5; index += 1) {
+            expect(reportLimiter.check('client', index).allowed).toBe(true);
+            expect(mutationLimiter.check('client', index).allowed).toBe(true);
+        }
+        expect(reportLimiter.check('client', 6).allowed).toBe(false);
+        expect(mutationLimiter.check('client', 6).allowed).toBe(true);
     });
 });
 
 describe('extractClientIp', () => {
-    it('prefers X-Forwarded-For first entry', () => {
+    it('ignores forwarded headers from an untrusted socket peer', () => {
         expect(
             extractClientIp(
                 { 'x-forwarded-for': '1.2.3.4, 5.6.7.8' },
                 '10.0.0.1',
             ),
-        ).toBe('1.2.3.4');
+        ).toBe('10.0.0.1');
     });
 
-    it('uses single X-Forwarded-For value', () => {
+    it('uses one valid forwarded address from an explicitly trusted peer', () => {
         expect(
-            extractClientIp({ 'x-forwarded-for': '9.8.7.6' }, '10.0.0.1'),
+            extractClientIp(
+                { 'x-forwarded-for': '9.8.7.6' },
+                '10.0.0.1',
+                ['10.0.0.1'],
+            ),
         ).toBe('9.8.7.6');
+    });
+
+    it('rejects a spoofable forwarded chain even from a trusted peer', () => {
+        expect(
+            extractClientIp(
+                { 'x-forwarded-for': '1.2.3.4, 5.6.7.8' },
+                '10.0.0.1',
+                ['10.0.0.0/24'],
+            ),
+        ).toBe('10.0.0.1');
     });
 
     it('falls back to remoteAddress when no forwarded header', () => {

@@ -67,5 +67,21 @@ alongside the HttpOnly session cookie, production marks both Secure, logout
 clears both, CORS admits the CSRF header, and the web client supplies it.
 
 Pure perimeter tests and a real HTTP server test prove header emission and CSRF
-rejection. Trusted-proxy and rate-limit policy work remains, so Task 4.2 is not
-yet complete.
+rejection. The following checkpoint adds proxy and rate-limit policy evidence.
+
+## Trusted proxy and rate-limit checkpoint
+
+`API_TRUSTED_PROXIES` is an explicit comma-separated exact-IP/IPv4-CIDR allow
+list. Without a matching socket peer, `X-Forwarded-For` is ignored. Even a
+trusted peer may supply only one syntactically valid address; multi-hop chains
+fall back to the socket peer, preventing client-controlled prefix spoofing.
+Production and staging Compose expose separate trust configuration.
+
+The API now selects separate one-minute budgets for login/auth, reads, ordinary
+writes, reports, and moderation. Tests prove route selection, report exhaustion
+before ordinary writes, window reset, untrusted forwarding rejection, trusted
+single-hop acceptance, and forwarded-chain rejection. Credentialed CORS is
+emitted only for an exactly allowed origin and never uses a wildcard.
+
+Task 4.2 remains open only for complete capability enforcement across routes
+that survive the compatibility-route removal pass.

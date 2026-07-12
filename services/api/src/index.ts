@@ -907,8 +907,9 @@ export const createApiServer = () => {
         const clientIp = extractClientIp(
             request.headers as Record<string, string | string[] | undefined>,
             request.socket.remoteAddress,
+            config.API_TRUSTED_PROXIES,
         );
-        const limiter = selectLimiter(requestUrl.pathname);
+        const limiter = selectLimiter(request.method, requestUrl.pathname);
         const rateResult = limiter.check(clientIp);
         if (!rateResult.allowed) {
             const retryAfterSec = Math.ceil(rateResult.retryAfterMs / 1000);

@@ -12,6 +12,7 @@ export interface CorsHeaders {
     'access-control-allow-headers': string;
     'access-control-max-age': string;
     'vary': string;
+    'access-control-allow-credentials'?: 'true';
 }
 
 const ALLOWED_METHODS = 'GET, POST, PUT, DELETE, OPTIONS';
@@ -64,5 +65,6 @@ export const getCorsHeaders = (
         'access-control-allow-headers': ALLOWED_HEADERS,
         'access-control-max-age': MAX_AGE,
         'vary': 'Origin',
+        ...(allowedOrigin ? { 'access-control-allow-credentials': 'true' as const } : {}),
     };
 };

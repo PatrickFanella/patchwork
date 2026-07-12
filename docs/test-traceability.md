@@ -87,6 +87,10 @@ of new connections, active-request drain, pool-close ordering, and idempotency.
 double-submit CSRF validation, constant-origin policy, and Secure/Strict CSRF
 cookie attributes. The live server suite proves middleware rejection and header
 emission on an actual HTTP response.
+`rate-limiter.test.ts` proves policy selection and exhaustion/reset behavior,
+plus exact-IP/subnet proxy trust and spoofed forwarded-header rejection.
+`cors.test.ts` proves rejected origins receive neither wildcard nor credential
+permission and accepted origins receive explicit credential permission.
 
 ### Browser E2E
 

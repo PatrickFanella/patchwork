@@ -125,6 +125,18 @@ describe('getCorsHeaders', () => {
             );
             expect(headers['access-control-max-age']).toBe('86400');
             expect(headers['vary']).toBe('Origin');
+            expect(headers['access-control-allow-origin']).not.toBe('*');
+            expect(headers['access-control-allow-credentials']).toBe('true');
+        });
+
+        it('does not grant credentials when the origin is rejected', () => {
+            const headers = getCorsHeaders(
+                'https://attacker.example',
+                'production',
+                PUBLIC_ORIGIN,
+            );
+            expect(headers['access-control-allow-origin']).toBe('');
+            expect(headers['access-control-allow-credentials']).toBeUndefined();
         });
     });
 });

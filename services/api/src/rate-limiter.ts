@@ -81,10 +81,10 @@ export class RateLimiter {
 /*  Default rate-limiter instances for the API server                  */
 /* ------------------------------------------------------------------ */
 
-/** General API traffic: 100 req / 60 s */
+/** Read traffic: 120 req / 60 s */
 export const generalLimiter = new RateLimiter({
     windowMs: 60_000,
-    maxRequests: 100,
+    maxRequests: 120,
 });
 
 /** Auth endpoints: 10 req / 60 s */
@@ -93,35 +93,47 @@ export const authLimiter = new RateLimiter({
     maxRequests: 10,
 });
 
-/** Account-mutation endpoints: 5 req / 60 s */
+/** General writes: 30 req / 60 s */
 export const mutationLimiter = new RateLimiter({
     windowMs: 60_000,
+    maxRequests: 30,
+});
+
+/** Abuse reports: 5 req / 60 s */
+export const reportLimiter = new RateLimiter({
+    windowMs: 60_000,
     maxRequests: 5,
+});
+
+/** Moderation operations: 10 req / 60 s */
+export const moderationLimiter = new RateLimiter({
+    windowMs: 60_000,
+    maxRequests: 10,
 });
 
 /* ------------------------------------------------------------------ */
 /*  Route classification                                              */
 /* ------------------------------------------------------------------ */
 
-const AUTH_PREFIXES = ['/auth/'];
-
-const MUTATION_PREFIXES = [
-    '/account/deactivate',
-    '/account/export',
-    '/account/settings',
-];
+const AUTH_PREFIXES = ['/auth/', '/oauth/login', '/oauth/callback'];
+const REPORT_PREFIXES = ['/reports', '/chat/safety/report'];
+const MODERATION_PREFIXES = ['/moderation/'];
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
  * Select the appropriate rate limiter for a given route pathname.
  */
-export const selectLimiter = (pathname: string): RateLimiter => {
+export const selectLimiter = (method: string | undefined, pathname: string): RateLimiter => {
     if (AUTH_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
         return authLimiter;
     }
-    if (MUTATION_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
-        return mutationLimiter;
+    if (REPORT_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
+        return reportLimiter;
     }
-    return generalLimiter;
+    if (MODERATION_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
+        return moderationLimiter;
+    }
+    return SAFE_METHODS.has(method ?? 'GET') ? generalLimiter : mutationLimiter;
 };
 
 /* ------------------------------------------------------------------ */
@@ -136,10 +148,44 @@ export const selectLimiter = (pathname: string): RateLimiter => {
 export const extractClientIp = (
     headers: Record<string, string | string[] | undefined>,
     remoteAddress: string | undefined,
+    trustedProxies: readonly string[] = [],
 ): string => {
+    const peer = remoteAddress?.startsWith('::ffff:') ? remoteAddress.slice(7) : remoteAddress;
     const forwarded = headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.length > 0) {
-        return forwarded.split(',')[0]!.trim();
+    if (
+        peer &&
+        isTrustedProxy(peer, trustedProxies) &&
+        typeof forwarded === 'string' &&
+        !forwarded.includes(',')
+    ) {
+        const candidate = forwarded.trim();
+        if (isIP(candidate) !== 0) return candidate;
     }
-    return remoteAddress ?? 'unknown';
+    return peer ?? 'unknown';
 };
+
+const ipv4Number = (address: string): number | undefined => {
+    if (isIP(address) !== 4) return undefined;
+    return address
+        .split('.')
+        .reduce((value, part) => (value << 8) + Number(part), 0) >>> 0;
+};
+
+const matchesIpv4Cidr = (address: string, cidr: string): boolean => {
+    const [network, prefixText] = cidr.split('/');
+    const value = ipv4Number(address);
+    const networkValue = network ? ipv4Number(network) : undefined;
+    const prefix = Number(prefixText);
+    if (value === undefined || networkValue === undefined || !Number.isInteger(prefix)) {
+        return false;
+    }
+    if (prefix < 0 || prefix > 32) return false;
+    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+    return (value & mask) === (networkValue & mask);
+};
+
+const isTrustedProxy = (peer: string, entries: readonly string[]): boolean =>
+    entries.some(entry =>
+        entry.includes('/') ? matchesIpv4Cidr(peer, entry) : peer === entry,
+    );
+import { isIP } from 'node:net';

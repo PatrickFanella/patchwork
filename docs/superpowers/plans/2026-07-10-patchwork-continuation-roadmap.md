@@ -261,11 +261,11 @@ Compose. Development and tests may still opt into the explicit fixture runtime.
 - Create: `services/api/src/http/security-headers.ts`
 - Test: `services/api/src/http/perimeter.test.ts`
 
-- [ ] Allow only configured origins and reject credentialed wildcard CORS.
-- [ ] Add security headers, secure-cookie requirements, CSRF protection for cookie-authenticated commands, and trusted-proxy configuration.
-- [ ] Apply separate rate-limit policies to login, reads, writes, reports, and moderation operations.
+- [x] Allow only configured origins and reject credentialed wildcard CORS.
+- [x] Add security headers, secure-cookie requirements, CSRF protection for cookie-authenticated commands, and trusted-proxy configuration.
+- [x] Apply separate rate-limit policies to login, reads, writes, reports, and moderation operations.
 - [ ] Enforce owner, moderator, and service capabilities at every command boundary.
-- [ ] Test origin rejection, CSRF rejection, forwarded-IP spoofing, rate-limit reset, and privilege escalation attempts.
+- [x] Test origin rejection, CSRF rejection, forwarded-IP spoofing, rate-limit reset, and privilege escalation attempts.
 - [ ] Commit as `feat(security): enforce API perimeter and capabilities`.
 
 ### Task 4.3: Remove unsafe compatibility routes
