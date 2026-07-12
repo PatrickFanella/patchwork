@@ -14,7 +14,8 @@ import {
 import { createPostgresPool } from './db/discovery-events.js';
 import {
     createFixtureQueryService,
-    createPostgresQueryService,
+    PostgresProjectionQueryService,
+    assessProjectionReadiness,
 } from './query-service.js';
 import { AtClientError } from '@patchwork/at-client';
 import { createAtAuthRuntime } from './auth/runtime.js';
@@ -68,24 +69,49 @@ const config = loadApiConfig();
 validateProductionConfig(config);
 validateAtAuthRuntimeConfig(config);
 
-const resolveQueryService = async () => {
-    if (config.API_DATA_SOURCE !== 'postgres') {
-        return createFixtureQueryService();
-    }
-
-    return createPostgresQueryService(
-        // Config validation guarantees this is set when API_DATA_SOURCE=postgres
-        (config.API_DATABASE_URL ?? config.DATABASE_URL)!,
-    );
-};
-
-const queryService = await resolveQueryService();
-
 const databaseUrl = config.API_DATABASE_URL ?? config.DATABASE_URL;
 const postgresPool =
     config.API_DATA_SOURCE === 'postgres' && databaseUrl
         ? createPostgresPool(databaseUrl)
         : undefined;
+
+if (postgresPool) {
+    const projectionSchema = await postgresPool.query<{
+        projection_table: string | null;
+        state_table: string | null;
+    }>(
+        `SELECT
+            to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
+            to_regclass('indexer_projection_state')::TEXT AS state_table`,
+    );
+    if (
+        !projectionSchema.rows[0]?.projection_table ||
+        !projectionSchema.rows[0]?.state_table
+    ) {
+        await postgresPool.end();
+        throw new Error(
+            'FATAL: indexer projection schema is missing; run indexer migrations before API startup.',
+        );
+    }
+}
+
+const projectionQueryService =
+    postgresPool ? new PostgresProjectionQueryService(postgresPool) : undefined;
+const queryService = projectionQueryService ?? createFixtureQueryService();
+
+if (projectionQueryService && postgresPool) {
+    const startupFreshness = await projectionQueryService.getFreshness();
+    const startupReadiness = assessProjectionReadiness(
+        startupFreshness,
+        config.API_MAX_PROJECTION_LAG_SECONDS,
+    );
+    if (!startupReadiness.ready) {
+        await postgresPool.end();
+        throw new Error(
+            `FATAL: ${startupReadiness.reason}; start a healthy indexer before the API.`,
+        );
+    }
+}
 
 const blockService =
     postgresPool ? new BlockService(new PostgresBlockRepository(postgresPool)) : undefined;
@@ -198,6 +224,30 @@ if (postgresPool) {
                         error instanceof Error ?
                             error.message
                         :   'Database unreachable',
+                };
+            }
+        },
+    });
+    healthChecks.push({
+        name: 'projections',
+        check: async () => {
+            try {
+                const freshness = await projectionQueryService!.getFreshness();
+                const readiness = assessProjectionReadiness(
+                    freshness,
+                    config.API_MAX_PROJECTION_LAG_SECONDS,
+                );
+                if (!readiness.ready) {
+                    return {
+                        status: 'not_ready' as const,
+                        message: readiness.reason,
+                    };
+                }
+                return { status: 'ok' as const };
+            } catch {
+                return {
+                    status: 'not_ready' as const,
+                    message: 'Projection schema is unavailable',
                 };
             }
         },
@@ -788,9 +838,9 @@ interface ApiRouteResult {
     contentType?: string;
 }
 
-type ApiRouteHandler =
-    | ((requestUrl: URL) => ApiRouteResult)
-    | ((requestUrl: URL) => Promise<ApiRouteResult>);
+type ApiRouteHandler = (
+    requestUrl: URL,
+) => ApiRouteResult | Promise<ApiRouteResult>;
 
 const contractRoutes = [
     '/oauth/client-metadata.json',

@@ -31,6 +31,7 @@ const DATABASE_URL = process.env['DATABASE_URL'] ?? process.env['INDEXER_DATABAS
 interface PersistentPipeline {
     pipeline: IndexerPipeline;
     pool: Pool;
+    projectionStore: PostgresProjectionStore;
 }
 
 const createPipeline = async (): Promise<PersistentPipeline> => {
@@ -47,10 +48,15 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
         idleTimeoutMillis: 30_000,
         connectionTimeoutMillis: 5_000,
     });
-    const schema = await pool.query<{ projections: string | null }>(
-        `SELECT to_regclass('indexer_aid_post_projections')::TEXT AS projections`,
+    const schema = await pool.query<{
+        projections: string | null;
+        state: string | null;
+    }>(
+        `SELECT
+            to_regclass('indexer_aid_post_projections')::TEXT AS projections,
+            to_regclass('indexer_projection_state')::TEXT AS state`,
     );
-    if (!schema.rows[0]?.projections) {
+    if (!schema.rows[0]?.projections || !schema.rows[0]?.state) {
         await pool.end();
         throw new Error(
             'FATAL: indexer projection schema is missing; run indexer migrations before startup.',
@@ -58,10 +64,11 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
     }
 
     const checkpointStore = new PostgresCheckpointStore(pool);
+    const projectionStore = new PostgresProjectionStore(pool);
     const pipeline = new IndexerPipeline({
         checkpointStore,
         checkpointInterval: 100,
-        projectionStore: new PostgresProjectionStore(pool),
+        projectionStore,
         deadLetterStore: new PostgresDeadLetterStore(pool),
     });
 
@@ -72,7 +79,7 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
         console.log('[indexer] no checkpoint found — starting from scratch');
     }
 
-    return { pipeline, pool };
+    return { pipeline, pool, projectionStore };
 };
 
 const sliCollector = new SliCollector();
@@ -267,12 +274,16 @@ export const createIndexerServer = (
 };
 
 export const startIndexerServer = async () => {
-    const { pipeline, pool } = await createPipeline();
+    const { pipeline, pool, projectionStore } = await createPipeline();
     const source = new JetstreamEventSource({
         url: config.INDEXER_FIREHOSE_URL,
         collections: Object.values(recordNsid),
     });
-    const runtime = new IndexerRuntime({ pipeline, source });
+    const runtime = new IndexerRuntime({
+        pipeline,
+        source,
+        heartbeat: cursor => projectionStore.recordHeartbeat(cursor),
+    });
     await runtime.start();
     const server = createIndexerServer(pipeline, source);
     await new Promise<void>((resolveListen, rejectListen) => {

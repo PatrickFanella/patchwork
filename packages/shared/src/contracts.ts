@@ -75,6 +75,14 @@ export interface ApiQueryAidResponse {
     pageSize: number;
     hasNextPage: boolean;
     results: AidRecordSummary[];
+    projectionFreshness?: ProjectionFreshness;
+}
+
+export interface ProjectionFreshness {
+    latestCursor: number | null;
+    projectedAt: string | null;
+    observedAt?: string | null;
+    lagSeconds: number | null;
 }
 
 export interface ApiQueryDirectoryRequest {
@@ -148,6 +156,7 @@ export interface ApiQueryDirectoryResponse {
     pageSize: number;
     hasNextPage: boolean;
     results: DirectoryRecordSummary[];
+    projectionFreshness?: ProjectionFreshness;
 }
 
 export interface ApiQueryErrorResponse {

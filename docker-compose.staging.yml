@@ -36,6 +36,10 @@ services:
         depends_on:
             postgres:
                 condition: service_healthy
+            patchwork-indexer-migrations:
+                condition: service_completed_successfully
+            patchwork-spool:
+                condition: service_healthy
         environment:
             NODE_ENV: production
             PATCHWORK_ENV: staging
@@ -46,6 +50,7 @@ services:
             API_PORT: 4000
             API_PUBLIC_ORIGIN: ${STAGING_PUBLIC_ORIGIN:-https://staging.patchwork.subcult.tv}
             API_TRUSTED_PROXIES: ${STAGING_API_TRUSTED_PROXIES:-}
+            API_MAX_PROJECTION_LAG_SECONDS: ${STAGING_API_MAX_PROJECTION_LAG_SECONDS:-300}
             API_DATA_SOURCE: ${API_DATA_SOURCE:-postgres}
             API_DATABASE_URL: postgresql://patchwork:${PATCHWORK_STAGING_POSTGRES_PASSWORD:?Set PATCHWORK_STAGING_POSTGRES_PASSWORD in .env}@patchwork-staging-postgres:5432/patchwork
             API_MODERATION_SERVICE_URL: http://patchwork-staging-thimble:4200
@@ -63,6 +68,11 @@ services:
             target: indexer-runtime
         container_name: patchwork-staging-spool
         restart: unless-stopped
+        healthcheck:
+            test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:4100/health/ready >/dev/null']
+            interval: 10s
+            timeout: 3s
+            retries: 12
         depends_on:
             postgres:
                 condition: service_healthy

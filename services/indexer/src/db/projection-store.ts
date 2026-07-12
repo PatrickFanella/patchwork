@@ -190,6 +190,27 @@ export class PostgresProjectionStore {
         }
     }
 
+    async recordHeartbeat(cursor: number | null): Promise<void> {
+        await this.pool.query(
+            `INSERT INTO indexer_projection_state (
+                singleton, latest_cursor, heartbeat_at
+             ) VALUES (TRUE, $1, NOW())
+             ON CONFLICT (singleton) DO UPDATE SET
+                latest_cursor = CASE
+                    WHEN EXCLUDED.latest_cursor IS NULL
+                        THEN indexer_projection_state.latest_cursor
+                    WHEN indexer_projection_state.latest_cursor IS NULL
+                        THEN EXCLUDED.latest_cursor
+                    ELSE GREATEST(
+                        indexer_projection_state.latest_cursor,
+                        EXCLUDED.latest_cursor
+                    )
+                END,
+                heartbeat_at = NOW()`,
+            [cursor],
+        );
+    }
+
     async get(uri: string): Promise<AidPostProjection | null> {
         const result = await this.pool.query<ProjectionRow>(
             `SELECT uri, collection, cid, revision, author_did_hash, title, description,

@@ -311,8 +311,8 @@ Evidence: `docs/operations/evidence/phase-5/live-event-source.md`. The runtime
 now adapts Jetstream commit frames into the existing validated ingestion
 envelope, reconnects without acknowledging processing failures, requires
 PostgreSQL outside tests, reports stream readiness and Prometheus metrics, and
-drains/checkpoints before closing its pool. Task 5.2 remains required before
-live data is durable beyond the cursor.
+drains/checkpoints before closing its pool. Durable event application is
+completed separately under Task 5.2 below.
 
 ### Task 5.2: Persist normalized projections and dead letters
 
@@ -344,13 +344,25 @@ from resurrecting deleted records. Task 5.3 remains the discovery read path.
 - Modify: `services/api/src/index.ts`
 - Test: `services/api/src/query-service.postgres.test.ts`
 
-- [ ] Make PostgreSQL projections the only production source for map and feed queries.
-- [ ] Enforce approximate geography, category, urgency, status, freshness, stable pagination, and deterministic ranking.
-- [ ] Add projection freshness to responses and health/readiness checks.
-- [ ] Reject production startup when the projection schema is absent or the indexer lag exceeds the configured readiness threshold.
-- [ ] Commit as `feat(discovery): query durable live projections`.
+- [x] Make PostgreSQL projections the only production source for map and feed queries.
+- [x] Enforce approximate geography, category, urgency, status, freshness, stable pagination, and deterministic ranking.
+- [x] Add projection freshness to responses and health/readiness checks.
+- [x] Reject production startup when the projection schema is absent or the indexer lag exceeds the configured readiness threshold.
+- [x] Commit as `feat(discovery): query durable live projections`.
+
+Evidence: `docs/operations/evidence/phase-5/projection-discovery.md`. The API
+queries the durable aid-post projection table on every production map/feed
+request; fixture discovery remains test-only. A durable indexer heartbeat keeps
+quiet streams healthy without pretending old records are new. Compose waits
+for the indexer readiness check before starting the API, and startup rejects a
+missing schema, missing heartbeat, or excessive configured lag.
 
 **Phase 5 exit gate:** A record written by one disposable AT account appears in map/feed through live ingestion, updates correctly, disappears on delete, and produces stable results after a complete projection rebuild.
+
+Local runtime implementation for Tasks 5.1–5.3 is complete. The exit gate
+remains open until the controlled disposable-account lifecycle is demonstrated
+through the actual public/staging Jetstream path and recorded without tokens or
+private location data.
 
 ## Phase 6 — Integrate the real web alpha journey
 

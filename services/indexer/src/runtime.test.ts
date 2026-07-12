@@ -67,4 +67,32 @@ describe('IndexerRuntime', () => {
         expect(source.stopped).toBe(true);
         expect((await checkpointStore.load())?.cursor).toBe(42);
     });
+
+    it('records durable heartbeats at startup and after accepted events', async () => {
+        const checkpointStore = new InMemoryCheckpointStore();
+        await checkpointStore.save(50);
+        const pipeline = new IndexerPipeline({
+            checkpointStore,
+            checkpointInterval: 100,
+        });
+        const source = new FakeEventSource();
+        const heartbeats: Array<number | null> = [];
+        const runtime = new IndexerRuntime({
+            pipeline,
+            source,
+            heartbeat: async cursor => {
+                heartbeats.push(cursor);
+            },
+            heartbeatIntervalMs: 60_000,
+        });
+
+        await runtime.start();
+        await source.emit({
+            ...(buildPhase3FixtureFirehoseEvents()[0] as Record<string, unknown>),
+            seq: 51,
+        });
+        await runtime.stop();
+
+        expect(heartbeats).toEqual([50, 51]);
+    });
 });
