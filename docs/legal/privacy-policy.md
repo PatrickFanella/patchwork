@@ -129,8 +129,11 @@ You have the following rights regarding your data:
 
 ### 6.1 Access
 
-You may request a copy of the personal data we hold about you. The Settings
-page provides a data export function.
+You may request a copy of the personal data Patchwork holds about you. The
+Settings page provides a machine-readable export derived from your
+authenticated session. It excludes credentials, internal security payloads,
+third-party moderation casework, and a complete copy of your independently
+portable AT repository.
 
 ### 6.2 Deletion
 
@@ -150,9 +153,11 @@ platform.
 
 ### 6.4 Data Portability
 
-You may export your data in a machine-readable format using the data export
-function in Settings. Exported data includes your profile, aid requests,
-offers, and messages.
+You may export Patchwork-held data in a machine-readable format using the data
+export function in Settings. The current narrow-alpha export includes account
+metadata, public aid-post projections, workflows, and your own operational
+actions. Deferred profile, offer, and messaging systems are not represented as
+durable alpha data and are not claimed as export contents.
 
 ### 6.5 Withdraw Consent
 

@@ -24,19 +24,20 @@ The roadmap's narrow core paths are implemented locally: authentication
 adapters, AT CRUD, lifecycle, moderation, HTTP security, ingestion,
 projections, discovery, browser commands, deployment mechanisms,
 backup/restore, metrics, alerts, and private-data retention have production
-paths without fixture fallback. Account deactivation/export policy and runtime
-remain unresolved launch blockers rather than completed alpha behavior.
+paths without fixture fallback. Authenticated account export is now durable;
+account deactivation/erasure policy and runtime remain unresolved launch
+blockers rather than completed alpha behavior.
 
 ## Verification baseline
 
-- database-enabled repository suite: 857 tests;
-- PostgreSQL/HTTP integration: 24 tests;
+- database-enabled repository suite: 860 tests;
+- PostgreSQL/HTTP integration: 26 tests;
 - indexer PostgreSQL projection/reconciliation: 13 tests;
 - direct service integration: 9 tests;
 - Chromium: 48 passed, 1 authorized-external test skipped;
 - migrations: API 12, indexer 3, moderation 3; clean application and replay;
-- database-enabled coverage: 65.02% statements, 51.77% branches, 59.04%
-  functions, 66.20% lines;
+- database-enabled coverage: 65.12% statements, 51.91% branches, 59.11%
+  functions, 66.29% lines;
 - build, lint, typecheck, artifact redaction, and high-severity audit pass;
 - eleven Prometheus alert rules validate with `promtool`.
 

@@ -15,15 +15,16 @@ This document describes what each test layer actually executes. Test counts are 
 | Browser E2E | Rendered web application, focus, keyboard, landmarks, ARIA | `npm run test:e2e -w @patchwork/web` | Playwright Chromium | `quality-gates` |
 | Diagnostic coverage | Finds unexecuted production code; no arbitrary global threshold | `npm run test:coverage` | None | `quality-gates`, uploaded artifact |
 | Local HTTP capacity probe | Paces completed GET requests; records status, throughput, p50/p95/p99; optionally enforces budgets | `npm run capacity:probe` | Configured running API; PostgreSQL used for current evidence | Manual isolated/staging evidence |
+| Account data export | Session-derived subject, repeatable PostgreSQL snapshot, cross-subject and credential exclusion | Included in API suite | PostgreSQL 16 and `TEST_DATABASE_URL` | Local HTTP evidence; policy review still required |
 | External AT protocol | Disposable accounts against the staging PDS | Manual controlled exercise | Home-network staging PDS | Redacted evidence only |
 
 ## Current verified baseline
 
 | Layer | Result |
 | --- | --- |
-| Database-enabled full repository suite | 857 passed |
+| Database-enabled full repository suite | 860 passed |
 | Direct lifecycle service integration | 9 passed |
-| PostgreSQL integration, including HTTP boundary | 24 passed |
+| PostgreSQL integration, including HTTP boundary | 26 passed |
 | Indexer PostgreSQL projection/reconciliation | 13 passed |
 | Browser Chromium suite | 48 passed, 1 externally gated case skipped |
 | Diagnostic coverage without database suites | 58.22% statements, 45.95% branches, 51.44% functions, 59.44% lines |
@@ -44,6 +45,7 @@ Counts can change as tests are consolidated. Readiness depends on covered bounda
 | Discovery | Firehose, ranking, discovery rule, data-mode, and typed API failure tests | Local demo fixtures require explicit fixture mode | Cursor, heartbeat, normalized aid-post projections, tombstones, and dead letters persist | Real PostgreSQL projection filters, pagination, freshness, and startup lag rejection | Map/feed UI, accessibility, API-unavailable visibility, and idempotent retry with no fixture substitution | Local Jetstream-compatible WebSocket integration | Controlled live AT lifecycle exercise |
 | Moderation | Policy and queue state tests | Worker fixture services are test-only | Concurrent PostgreSQL queue, lease, audit, policy, and retention stores back production | Authenticated API-to-worker commands derive the actor from the session | Console UX remains deferred | No public external dependency | Staging alert/game-day execution and operator workflow |
 | Privacy | Geo floor and redaction tests | Fixture response checks | Audit payload redaction and scheduled retention | HTTP boundary avoids actor override | Accessibility and artifact redaction | Redacted lifecycle evidence | Formal policy approval and staging observation |
+| Account access/export | Response schema and browser client | Deferred settings preferences remain fixtures | Subject-owned durable categories only | Cookie-derived DID; GET has no body identity | JSON file download | Full AT repository remains portable outside Patchwork | Deactivation/erasure and controlled casework review |
 
 ## Suite ownership and classification
 

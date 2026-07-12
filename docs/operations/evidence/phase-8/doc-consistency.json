@@ -31,7 +31,7 @@
     { "id": 26, "severity": "P3", "status": "accepted", "topic": "component aliases" },
     { "id": 27, "severity": "P3", "status": "historical", "topic": "dated counts" },
     { "id": 28, "severity": "Pending Evidence", "status": "launch-blocking", "topic": "account deletion promise" },
-    { "id": 29, "severity": "Pending Evidence", "status": "launch-blocking", "topic": "data export promise" },
+    { "id": 29, "severity": "Pending Evidence", "status": "partially-fixed-launch-blocking", "topic": "data export and deactivation promise" },
     { "id": 30, "severity": "Pending Evidence", "status": "external", "topic": "external resource inventory" },
     { "id": 31, "severity": "P1", "status": "fixed", "topic": "browser server ownership" },
     { "id": 32, "severity": "P1", "status": "fixed", "topic": "nonexistent capacity tests" },

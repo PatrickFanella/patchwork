@@ -7,6 +7,7 @@ import {
     createAtAidPostViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
+    exportDataViaApi,
     initiateChatViaApi,
     reportAidPostViaApi,
     transitionAidPostViaApi,
@@ -40,6 +41,30 @@ describe('api client', () => {
 
     afterAll(() => {
         globalThis.fetch = originalFetch;
+    });
+
+    it('exports the authenticated account without putting identity in the request', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({
+                formatVersion: '1.0',
+                generatedAt: '2026-07-11T12:00:00.000Z',
+                subject: { did: 'did:plc:viewer' },
+                data: {},
+                exclusions: [],
+            }),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const result = await exportDataViaApi();
+
+        expect(result.ok).toBe(true);
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringMatching(/\/account\/export$/),
+            expect.objectContaining({ method: 'GET', credentials: 'include' }),
+        );
+        expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(
+            'did:plc:viewer',
+        );
     });
 
     it('fetches and maps aid records for map scope', async () => {

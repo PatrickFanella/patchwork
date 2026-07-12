@@ -2,7 +2,7 @@
 
 Review date: 2026-07-11
 
-Scope: `README.md`, 71 Markdown files under `docs/`, runtime configuration,
+Scope: `README.md`, 72 Markdown files under `docs/`, runtime configuration,
 package scripts, HTTP routes, migrations, Compose, and CI workflows.
 
 ## Issue list
@@ -24,7 +24,7 @@ package scripts, HTTP routes, migrations, Compose, and CI workflows.
 | 12 | P2 | Production issue plan defines future production-ready conditions | Current authority is continuation roadmap and matrix | Historical plan; superseded |
 | 13 | P2 | ADR 0003 introduction says runtime is fixture-heavy | ADR records decision-time context, not current status | Historical context retained |
 | 14 | P2 | Phase 6 evidence records API 11/moderation 2 migrations | Current counts are 12/3/3 | Dated evidence retained; current report corrected |
-| 15 | P2 | Phase 7 immutable-delivery evidence records 836 tests | Current database suite has 857 tests | Dated evidence retained |
+| 15 | P2 | Phase 7 immutable-delivery evidence records 836 tests | Current database suite has 860 tests | Dated evidence retained |
 | 16 | P2 | Phase 7 staging-readiness records seven alert rules | Current rule file has eleven | Dated drill evidence retained |
 | 17 | P2 | Legal changelog references `MODERATION_LOG_RETENTION_DAYS` | Runtime uses explicit seven-day migration and scheduler policy | Historical changelog retained; current policy corrected |
 | 18 | P2 | README “Fallback dataset” label can imply runtime fallback | Production code forbids fixture mode and never silently falls back | Wording already says test/demo only |
@@ -38,7 +38,7 @@ package scripts, HTTP routes, migrations, Compose, and CI workflows.
 | 26 | P3 | Some docs use “Spool/Quilt/Thimble,” others service directory names | Compose aliases deliberately preserve both names | Accepted terminology mapping |
 | 27 | P3 | Dated evidence test counts differ from current report | Evidence is immutable by date | Current authority links added elsewhere |
 | 28 | Pending evidence | Terms promise account deletion through Settings | Settings remains fixture-runtime in matrix | Must be reviewed by product/legal before any launch |
-| 29 | Pending evidence | Privacy policy describes data access/export rights in UI | Durable export/deactivation runtime is not implemented | Must be corrected or implemented before launch |
+| 29 | Pending evidence | Privacy policy describes data access/export rights in UI | Authenticated durable export is implemented; deactivation is not | Export fixed; deactivation and policy approval remain launch-blocking |
 | 30 | Pending evidence | Staging host, DNS, registry, and OAuth docs describe intended resources | No authorized external inventory is available | Verify during staging or closure approval |
 | 32 | P1 | Capacity documentation names three repeatable test files | None of the named test files exists | Fixed with tested `capacity:probe` and corrected runbook |
 | 33 | P1 | Current docs said ingestion/tombstone integration was absent and production subscribed to every planned NSID | Durable projection/tombstone paths exist; alpha scope is aid-post only | Fixed with current reconciliation evidence and narrowed runtime subscription |

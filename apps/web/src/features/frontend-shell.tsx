@@ -2990,13 +2990,19 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
 
     const handleExport = async () => {
         setAccountActionResult(undefined);
-        const result = await exportDataViaApi(
-            currentUserDid,
-            'User-initiated export',
-        );
+        const result = await exportDataViaApi();
 
         if (result.ok) {
-            setAccountActionResult(result.data.message);
+            const blob = new Blob([JSON.stringify(result.data, null, 2)], {
+                type: 'application/json',
+            });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = 'patchwork-account-export.json';
+            anchor.click();
+            URL.revokeObjectURL(url);
+            setAccountActionResult('Your Patchwork data export is ready.');
         } else {
             setAccountActionResult(`Error: ${result.error}`);
         }
@@ -3273,9 +3279,10 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                     <div className='space-y-4'>
                         <Card title='Data export'>
                             <p className='text-sm text-mh-textMuted'>
-                                Request a full export of your account data
-                                including aid posts, conversations, and profile
-                                information.
+                                Download the data Patchwork currently holds
+                                about your authenticated account. Credentials,
+                                third-party casework, and a complete AT
+                                repository archive are excluded.
                             </p>
                             <div className='mt-3'>
                                 <Button
@@ -3283,7 +3290,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                     className='px-3 py-1 text-xs'
                                     onClick={handleExport}
                                 >
-                                    Request data export
+                                    Download data export
                                 </Button>
                             </div>
                         </Card>

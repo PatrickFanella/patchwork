@@ -535,6 +535,11 @@ Local capacity evidence:
 PostgreSQL read probe passes its bounded modeled targets, but does not satisfy
 the staging `CAPACITY` condition.
 
+Local data-access evidence:
+`docs/operations/evidence/phase-8/account-data-export.md`. The authenticated
+export closes the self-service access gap without claiming deactivation,
+erasure, full-repository portability, or privacy approval.
+
 ### Task 8.2: Re-evaluate expansion features
 
 **Files:**

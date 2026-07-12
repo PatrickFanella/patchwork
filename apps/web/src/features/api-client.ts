@@ -620,6 +620,14 @@ export interface AccountActionApiResponse {
     message: string;
 }
 
+export interface AccountExportApiResponse {
+    formatVersion: '1.0';
+    generatedAt: string;
+    subject: { did: string; handle?: string };
+    data: Record<string, unknown>;
+    exclusions: Array<{ category: string; reason: string }>;
+}
+
 export const fetchSettingsFromApi = async (
     _did: string,
     signal?: AbortSignal,
@@ -715,13 +723,11 @@ export const deactivateAccountViaApi = async (
 };
 
 export const exportDataViaApi = async (
-    did: string,
-    reason?: string,
     signal?: AbortSignal,
-): Promise<ApiClientResult<AccountActionApiResponse>> => {
-    const result = await requestJsonPost(
+): Promise<ApiClientResult<AccountExportApiResponse>> => {
+    const result = await requestJson(
         '/account/export',
-        { did, reason },
+        new URLSearchParams(),
         signal,
     );
 
@@ -733,9 +739,24 @@ export const exportDataViaApi = async (
         return invalidResponseFailure('Export response was malformed.');
     }
 
+    const formatVersion = result.data['formatVersion'];
+    const generatedAt = result.data['generatedAt'];
+    const subject = result.data['subject'];
+    const data = result.data['data'];
+    const exclusions = result.data['exclusions'];
+    if (
+        formatVersion !== '1.0' ||
+        typeof generatedAt !== 'string' ||
+        !isRecord(subject) ||
+        typeof subject['did'] !== 'string' ||
+        !isRecord(data) ||
+        !Array.isArray(exclusions)
+    ) {
+        return invalidResponseFailure('Export response was malformed.');
+    }
     return {
         ok: true,
-        data: result.data as unknown as AccountActionApiResponse,
+        data: result.data as unknown as AccountExportApiResponse,
     };
 };
 

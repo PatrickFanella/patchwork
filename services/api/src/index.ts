@@ -30,12 +30,17 @@ import { PostgresReportRepository } from './db/report-repository.js';
 import { PostgresLifecycleRepository } from './db/lifecycle-repository.js';
 import { PostgresRoleRepository } from './db/role-repository.js';
 import { BlockService } from './block-service.js';
+import { AccountPrivacyService } from './account-privacy-service.js';
 import { ReportService } from './report-service.js';
 import {
     AuthorizationError,
     requireCapability,
 } from './authorization-guard.js';
 import { createLifecycleTransitionHandler } from './http/lifecycle-transition-handler.js';
+import {
+    createAccountPrivacyHandler,
+    isAccountPrivacyRoute,
+} from './http/account-privacy-handler.js';
 import {
     createDurableSafetyHandler,
     isDurableSafetyRoute,
@@ -216,6 +221,13 @@ const durableSafetyHandler =
             reportService,
             authenticate: authenticateApiRequest,
             executeIdempotent: executeIdempotentMutation,
+        })
+    :   undefined;
+const accountPrivacyHandler =
+    authenticateApiRequest && postgresPool ?
+        createAccountPrivacyHandler({
+            service: new AccountPrivacyService(postgresPool),
+            authenticate: authenticateApiRequest,
         })
     :   undefined;
 
@@ -873,6 +885,7 @@ const contractRoutes = [
     '/moderation/policy/apply',
     '/moderation/state',
     '/moderation/audit',
+    '/account/export',
     '/health',
     '/health/ready',
     '/metrics',
@@ -900,6 +913,15 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
             routes: contractRoutes,
         },
     }),
+    '/account/export': () => ({
+        statusCode: 503,
+        body: {
+            error: {
+                code: 'ACCOUNT_PRIVACY_UNAVAILABLE',
+                message: 'Account privacy services are unavailable.',
+            },
+        },
+    }),
     '/query/map': requestUrl => queryService.queryMap(requestUrl.searchParams),
     '/query/feed': requestUrl =>
         queryService.queryFeed(requestUrl.searchParams),
@@ -915,6 +937,7 @@ const readPaths = new Set([
     '/query/map',
     '/query/feed',
     '/query/directory',
+    '/account/export',
 ]);
 
 const routeRouter = createMethodRouter(
@@ -1012,6 +1035,19 @@ export const createApiServer = () => {
         }
 
         if (handleDurableSafetyRoute(request, response, requestUrl)) {
+            return;
+        }
+
+        if (accountPrivacyHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isAccountPrivacyRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'ACCOUNT_PRIVACY_UNAVAILABLE',
+                    message: 'Account privacy services are unavailable.',
+                },
+            });
             return;
         }
 
