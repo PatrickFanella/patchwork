@@ -32,13 +32,13 @@ exceptions to the launch criteria in this decision.
 
 Current verification baseline:
 
-- database-enabled repository suite: 872 tests;
+- database-enabled repository suite: 873 tests;
 - PostgreSQL/HTTP integration: 32 tests;
 - indexer PostgreSQL projection/reconciliation: 14 tests;
 - direct service integration: 9 tests;
 - Chromium: 49 passed, 1 externally gated case skipped;
-- database-enabled coverage: 65.28% statements, 51.82% branches, 59.11%
-  functions, 66.44% lines;
+- database-enabled coverage: 65.38% statements, 51.91% branches, 59.29%
+  functions, 66.54% lines;
 - API/indexer/moderation migrations replay cleanly at 13/3/3;
 - build, typecheck, lint, artifact redaction, and high-severity dependency audit
   pass.

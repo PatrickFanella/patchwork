@@ -56,13 +56,13 @@ compressed trace content.
 
 ## Verification
 
-- Database-enabled full repository gate: 872 passed.
+- Database-enabled full repository gate: 873 passed.
 - PostgreSQL/HTTP integration: 32 passed.
 - Direct lifecycle service integration: 9 passed.
 - Chromium: 49 passed; the single real-environment journey skipped because its
   required external inputs were absent.
-- Diagnostic coverage: 65.28% statements, 51.82% branches, 59.11% functions,
-  66.44% lines.
+- Diagnostic coverage: 65.38% statements, 51.91% branches, 59.29% functions,
+  66.54% lines.
 - Full workspace build and high-severity dependency audit: passed. One known
   low-severity Windows development-server advisory remains.
 - Clean migration application and replay: API 13, indexer 3, moderation 3.

@@ -40,6 +40,14 @@ describe('API server method routing', () => {
         });
     });
 
+    it('advertises each production contract route exactly once', async () => {
+        const response = await fetch(`${origin}/contracts`);
+        const body = (await response.json()) as { routes: string[] };
+
+        expect(response.status).toBe(200);
+        expect(new Set(body.routes).size).toBe(body.routes.length);
+    });
+
     it('rejects malformed JSON with a stable request-ID error', async () => {
         const response = await fetch(`${origin}/aid/post/transition`, {
             method: 'POST',

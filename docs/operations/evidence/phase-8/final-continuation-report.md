@@ -31,14 +31,14 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 
 ## Verification baseline
 
-- database-enabled repository suite: 872 tests;
+- database-enabled repository suite: 873 tests;
 - PostgreSQL/HTTP integration: 32 tests;
 - indexer PostgreSQL projection/reconciliation: 14 tests;
 - direct service integration: 9 tests;
 - Chromium: 49 passed, 1 authorized-external test skipped;
 - migrations: API 13, indexer 3, moderation 3; clean application and replay;
-- database-enabled coverage: 65.28% statements, 51.82% branches, 59.11%
-  functions, 66.44% lines;
+- database-enabled coverage: 65.38% statements, 51.91% branches, 59.29%
+  functions, 66.54% lines;
 - build, lint, typecheck, artifact redaction, and high-severity audit pass;
 - eleven Prometheus alert rules validate with `promtool`.
 

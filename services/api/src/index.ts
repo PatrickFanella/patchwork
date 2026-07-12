@@ -920,7 +920,6 @@ const contractRoutes = [
     '/moderation/state',
     '/moderation/audit',
     '/account/export',
-    '/aid/post/lifecycle',
     '/account/deactivate',
     '/health',
     '/health/ready',
