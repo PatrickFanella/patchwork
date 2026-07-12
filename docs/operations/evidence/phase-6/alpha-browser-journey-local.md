@@ -18,6 +18,11 @@ run against an authorized staging URL and disposable OAuth/PDS accounts.
   replacement, proving compare-and-swap sequencing.
 - Report and block controls collect bounded private input, send CSRF-protected
   idempotent commands, and never serialize reporter/blocker/actor identity.
+- Map/feed discovery remains public for anonymous visitors. When the request
+  carries a browser session, the API derives the viewer DID and bilaterally
+  excludes authors connected by an active durable block. Browser-supplied
+  viewer parameters are ignored, and an expired supplied session returns `401`
+  rather than silently receiving the anonymous result set.
 - The extracted safety HTTP handler authenticates once, derives the durable
   actor, and persists reports and blocks in PostgreSQL. A real HTTP/PostgreSQL
   test proves hostile identity fields cannot override the session DID.
@@ -51,13 +56,13 @@ compressed trace content.
 
 ## Verification
 
-- Database-enabled full repository gate: 870 passed.
-- PostgreSQL/HTTP integration: 30 passed.
+- Database-enabled full repository gate: 872 passed.
+- PostgreSQL/HTTP integration: 32 passed.
 - Direct lifecycle service integration: 9 passed.
 - Chromium: 49 passed; the single real-environment journey skipped because its
   required external inputs were absent.
-- Diagnostic coverage: 65.22% statements, 51.74% branches, 59.10% functions,
-  66.39% lines.
+- Diagnostic coverage: 65.28% statements, 51.82% branches, 59.11% functions,
+  66.44% lines.
 - Full workspace build and high-severity dependency audit: passed. One known
   low-severity Windows development-server advisory remains.
 - Clean migration application and replay: API 13, indexer 3, moderation 3.

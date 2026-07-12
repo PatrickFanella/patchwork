@@ -58,10 +58,10 @@ const cookieToken = (headers: IncomingHttpHeaders): string | undefined => {
     return undefined;
 };
 
-export const authenticateRequest = async (
+export const authenticateOptionalRequest = async (
     request: { headers: IncomingHttpHeaders },
     dependencies: AuthenticationDependencies,
-): Promise<AuthenticatedRequest> => {
+): Promise<AuthenticatedRequest | undefined> => {
     const bearer = bearerToken(request.headers);
     const cookie = cookieToken(request.headers);
     if (bearer && cookie && bearer !== cookie) {
@@ -72,13 +72,7 @@ export const authenticateRequest = async (
         );
     }
     const sessionToken = bearer ?? cookie;
-    if (!sessionToken) {
-        throw new PublicHttpError(
-            401,
-            'AUTHENTICATION_REQUIRED',
-            'An authenticated session is required.',
-        );
-    }
+    if (!sessionToken) return undefined;
     const session = await dependencies.resolveSession(sessionToken);
     const role = await dependencies.resolveRole(session.did);
     const authorization = createAuthorizationContext(session.did, role);
@@ -94,4 +88,22 @@ export const authenticateRequest = async (
             authorization,
         }),
     });
+};
+
+export const authenticateRequest = async (
+    request: { headers: IncomingHttpHeaders },
+    dependencies: AuthenticationDependencies,
+): Promise<AuthenticatedRequest> => {
+    const authenticated = await authenticateOptionalRequest(
+        request,
+        dependencies,
+    );
+    if (!authenticated) {
+        throw new PublicHttpError(
+            401,
+            'AUTHENTICATION_REQUIRED',
+            'An authenticated session is required.',
+        );
+    }
+    return authenticated;
 };

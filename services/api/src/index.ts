@@ -47,7 +47,11 @@ import {
 } from './http/durable-safety-handler.js';
 import { createMethodRouter } from './http/router.js';
 import { readJsonBody } from './http/json-body.js';
-import { authenticateRequest } from './http/authenticated-request.js';
+import {
+    authenticateOptionalRequest,
+    authenticateRequest,
+} from './http/authenticated-request.js';
+import { createDiscoveryHandler } from './http/discovery-handler.js';
 import { createGracefulShutdown } from './http/graceful-shutdown.js';
 import { createModerationGateway } from './http/moderation-gateway.js';
 import {
@@ -152,6 +156,14 @@ const authenticateApiRequest =
                 resolveRole: did => roleRepository.resolve(did),
             })
     :   undefined;
+const authenticateOptionalApiRequest =
+    atAuthRuntime && roleRepository ?
+        (request: IncomingMessage) =>
+            authenticateOptionalRequest(request, {
+                resolveSession: token => atAuthRuntime.service.current(token),
+                resolveRole: did => roleRepository.resolve(did),
+            })
+    :   async () => undefined;
 
 const moderationGateway =
     config.API_MODERATION_SERVICE_URL && config.MODERATION_SERVICE_TOKEN ?
@@ -245,6 +257,10 @@ const accountPrivacyHandler =
             },
         })
     :   undefined;
+const discoveryHandler = createDiscoveryHandler({
+    service: queryService,
+    authenticateOptional: authenticateOptionalApiRequest,
+});
 
 const sliCollector = new SliCollector();
 const retentionMetrics = new RetentionMetrics();
@@ -1094,6 +1110,10 @@ export const createApiServer = () => {
         }
 
         if (lifecycleTransitionHandler?.(request, response, requestUrl)) {
+            return;
+        }
+
+        if (discoveryHandler(request, response, requestUrl)) {
             return;
         }
 

@@ -67,7 +67,7 @@ export class ApiDiscoveryQueryService {
         this.store.applyEvents(events);
     }
 
-    queryMap(params: URLSearchParams): ApiRouteResult {
+    queryMap(params: URLSearchParams, _viewerDid?: string): ApiRouteResult {
         try {
             const input = validateAidQueryInput({
                 latitude: readNumber(params, 'latitude'),
@@ -105,7 +105,7 @@ export class ApiDiscoveryQueryService {
         }
     }
 
-    queryFeed(params: URLSearchParams): ApiRouteResult {
+    queryFeed(params: URLSearchParams, _viewerDid?: string): ApiRouteResult {
         try {
             const input = validateAidQueryInput({
                 latitude: readNumber(params, 'latitude'),
@@ -266,12 +266,18 @@ export const assessProjectionReadiness = (
 export class PostgresProjectionQueryService {
     constructor(private readonly pool: Pool) {}
 
-    async queryMap(params: URLSearchParams): Promise<ApiRouteResult> {
-        return this.queryAid(params, 'map');
+    async queryMap(
+        params: URLSearchParams,
+        viewerDid?: string,
+    ): Promise<ApiRouteResult> {
+        return this.queryAid(params, 'map', viewerDid);
     }
 
-    async queryFeed(params: URLSearchParams): Promise<ApiRouteResult> {
-        return this.queryAid(params, 'feed');
+    async queryFeed(
+        params: URLSearchParams,
+        viewerDid?: string,
+    ): Promise<ApiRouteResult> {
+        return this.queryAid(params, 'feed', viewerDid);
     }
 
     async queryDirectory(params: URLSearchParams): Promise<ApiRouteResult> {
@@ -295,8 +301,9 @@ export class PostgresProjectionQueryService {
     private async queryAid(
         params: URLSearchParams,
         scope: 'map' | 'feed',
+        viewerDid?: string,
     ): Promise<ApiRouteResult> {
-        const snapshot = await this.loadSnapshot();
+        const snapshot = await this.loadSnapshot(viewerDid);
         const service = createQueryServiceFromNormalizedEvents(snapshot.events);
         const result =
             scope === 'map' ? service.queryMap(params) : service.queryFeed(params);
@@ -310,11 +317,11 @@ export class PostgresProjectionQueryService {
         };
     }
 
-    private async loadSnapshot(): Promise<{
+    private async loadSnapshot(viewerDid?: string): Promise<{
         events: NormalizedFirehoseEvent[];
         freshness: ProjectionFreshness;
     }> {
-        const [result, stateResult] = await Promise.all([
+        const [result, stateResult, blockResult] = await Promise.all([
             this.pool.query<ProjectionRow>(
             `SELECT uri, cid, title, description, category, urgency, status,
                     searchable_text, latitude, longitude, precision_km,
@@ -328,34 +335,52 @@ export class PostgresProjectionQueryService {
                  FROM indexer_projection_state
                  WHERE singleton = TRUE`,
             ),
+            viewerDid ?
+                this.pool.query<{ excluded_did: string }>(
+                    `SELECT CASE
+                         WHEN blocker_did = $1 THEN subject_did
+                         ELSE blocker_did
+                     END AS excluded_did
+                     FROM user_blocks
+                     WHERE (blocker_did = $1 OR subject_did = $1)
+                       AND deleted_at IS NULL
+                       AND (retention_until IS NULL OR retention_until > NOW())`,
+                    [viewerDid],
+                )
+            :   Promise.resolve({ rows: [] as { excluded_did: string }[] }),
         ]);
-        const events: NormalizedFirehoseEvent[] = result.rows.map(row => ({
-            eventId: `projection:${row.source_cursor}:${row.uri}`,
-            seq: Number(row.source_cursor),
-            action: 'create',
-            uri: row.uri,
-            collection: 'app.patchwork.aid.post',
-            authorDid: authorDidFromUri(row.uri),
-            ...(row.cid ? { cid: row.cid } : {}),
-            receivedAt: new Date(row.record_updated_at).toISOString(),
-            payload: {
-                kind: 'aid-post',
-                title: row.title,
-                description: row.description,
-                category: row.category as 'food',
-                urgency: row.urgency as 'high',
-                status: row.status as 'open',
-                searchableText: row.searchable_text,
-                approximateGeo: {
-                    latitude: Number(row.latitude),
-                    longitude: Number(row.longitude),
-                    precisionKm: Number(row.precision_km),
+        const excludedDids = new Set(
+            blockResult.rows.map(row => row.excluded_did),
+        );
+        const events: NormalizedFirehoseEvent[] = result.rows
+            .filter(row => !excludedDids.has(authorDidFromUri(row.uri)))
+            .map(row => ({
+                eventId: `projection:${row.source_cursor}:${row.uri}`,
+                seq: Number(row.source_cursor),
+                action: 'create',
+                uri: row.uri,
+                collection: 'app.patchwork.aid.post',
+                authorDid: authorDidFromUri(row.uri),
+                ...(row.cid ? { cid: row.cid } : {}),
+                receivedAt: new Date(row.record_updated_at).toISOString(),
+                payload: {
+                    kind: 'aid-post',
+                    title: row.title,
+                    description: row.description,
+                    category: row.category as 'food',
+                    urgency: row.urgency as 'high',
+                    status: row.status as 'open',
+                    searchableText: row.searchable_text,
+                    approximateGeo: {
+                        latitude: Number(row.latitude),
+                        longitude: Number(row.longitude),
+                        precisionKm: Number(row.precision_km),
+                    },
+                    createdAt: new Date(row.record_created_at).toISOString(),
+                    updatedAt: new Date(row.record_updated_at).toISOString(),
+                    trustScore: 0.5,
                 },
-                createdAt: new Date(row.record_created_at).toISOString(),
-                updatedAt: new Date(row.record_updated_at).toISOString(),
-                trustScore: 0.5,
-            },
-        }));
+            }));
         return {
             events,
             freshness: freshnessForRows(result.rows, stateResult.rows[0]),

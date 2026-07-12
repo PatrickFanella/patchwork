@@ -431,7 +431,9 @@ retains projection CIDs, reports/blocks through durable authenticated HTTP, and
 closes/deletes owner records with compare-and-swap. Owners now load private
 lifecycle state through an authenticated boundary, transition using only
 server-derived roles, reconcile the result to the AT record, and receive a
-retry control when public sync fails after private state commits. The real
+retry control when public sync fails after private state commits. Authenticated
+discovery also enforces durable blocks without accepting browser identity or
+removing anonymous public access. The real
 two-account spec includes that workflow step but remains skipped until an
 authorized staging URL and two OAuth storage states are supplied; therefore
 the first three checklist items and the Phase 6 exit gate remain open.
