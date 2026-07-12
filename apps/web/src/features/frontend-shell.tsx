@@ -182,6 +182,23 @@ const routeLabels: Readonly<Record<AppRoute, string>> = {
     '/legal/community-guidelines': 'Community Guidelines',
 };
 
+const primaryRoutes: readonly AppRoute[] = [
+    '/',
+    '/map',
+    '/feed',
+    '/resources',
+    '/posting',
+];
+
+const accountRoutes: readonly AppRoute[] = ['/volunteer', '/chat', '/settings'];
+
+const secondaryRoutes = appRoutes.filter(
+    route =>
+        !primaryRoutes.includes(route) &&
+        !accountRoutes.includes(route) &&
+        !route.startsWith('/legal/'),
+);
+
 const resourceCategoryOptions: readonly DirectoryResourceCategory[] = [
     'food-bank',
     'shelter',
@@ -583,23 +600,21 @@ const DashboardRoute = ({
 }: DashboardRouteProps) => {
     return (
         <>
-            <header className='mb-8 border-b-2 border-mh-border pb-6 sm:pb-8'>
+            <header className='mh-hero mb-8 pb-6 sm:pb-8'>
                 <div className='mb-5 flex flex-wrap items-center justify-between gap-3'>
-                    <p className='text-xs font-bold uppercase tracking-[0.14em] text-mh-textMuted'>
-                        Mutual aid shell · phase 8
-                    </p>
+                    <p className='mh-kicker'>Your neighborhood response desk</p>
                     <Badge tone='danger'>Safety guardrails active</Badge>
                 </div>
 
                 <div className='grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]'>
                     <div>
-                        <h1 className='font-heading text-4xl font-black uppercase leading-none tracking-tight sm:text-5xl md:text-6xl lg:text-7xl'>
+                        <h1 className='font-heading text-5xl font-black leading-[0.88] tracking-[-0.055em] sm:text-6xl md:text-7xl lg:text-8xl'>
                             {appTitle}
                         </h1>
                         <p className='mt-4 max-w-xl text-base text-mh-textMuted sm:text-lg'>
-                            Coordinate urgent neighborhood support with map,
-                            feed, posting, resource, chat, and volunteer
-                            workflows in one privacy-first interface.
+                            Find help. Offer what you can. Keep urgent work
+                            moving without exposing more than neighbors need to
+                            know.
                         </p>
                         <div className='mt-5 flex flex-wrap gap-2'>
                             <Button
@@ -626,9 +641,7 @@ const DashboardRoute = ({
                     </div>
 
                     <aside className='mh-card p-4 sm:p-5'>
-                        <p className='text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
-                            Live response posture
-                        </p>
+                        <p className='mh-kicker'>Today in the network</p>
                         <ul className='mt-3 grid gap-2'>
                             <li className='mh-stat-tile'>
                                 <p className='text-xs uppercase tracking-widest text-mh-textSoft'>
@@ -733,35 +746,44 @@ const DashboardRoute = ({
 
                     <Card title='Quick route handoffs'>
                         <ul className='space-y-3'>
-                            {shellSections.map(section => (
-                                <li
-                                    key={section.route}
-                                    className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'
-                                >
-                                    <p className='text-sm font-bold text-mh-text'>
-                                        {section.title}
-                                    </p>
-                                    <p className='mt-1 text-xs text-mh-textSoft'>
-                                        {section.description}
-                                    </p>
-                                    <p className='mt-2'>
-                                        <button
-                                            type='button'
-                                            className='mh-link text-sm'
-                                            onClick={() =>
-                                                onNavigate(section.route)
-                                            }
-                                        >
-                                            Open {section.title}
-                                        </button>
-                                    </p>
-                                </li>
-                            ))}
+                            {shellSections
+                                .filter(
+                                    section =>
+                                        primaryRoutes.includes(
+                                            section.route as AppRoute,
+                                        ) ||
+                                        accountRoutes.includes(
+                                            section.route as AppRoute,
+                                        ),
+                                )
+                                .map(section => (
+                                    <li
+                                        key={section.route}
+                                        className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'
+                                    >
+                                        <p className='text-sm font-bold text-mh-text'>
+                                            {section.title}
+                                        </p>
+                                        <p className='mt-1 text-xs text-mh-textSoft'>
+                                            {section.description}
+                                        </p>
+                                        <p className='mt-2'>
+                                            <button
+                                                type='button'
+                                                className='mh-link text-sm'
+                                                onClick={() =>
+                                                    onNavigate(section.route)
+                                                }
+                                            >
+                                                Open {section.title}
+                                            </button>
+                                        </p>
+                                    </li>
+                                ))}
                         </ul>
                     </Card>
                 </section>
             </div>
-
         </>
     );
 };
@@ -844,9 +866,17 @@ const MapRoute = ({
                     </Badge>
                 </div>
                 {errorMessage ?
-                    <div role='alert' className='mh-alert mt-3 text-xs font-bold'>
+                    <div
+                        role='alert'
+                        className='mh-alert mt-3 text-xs font-bold'
+                    >
                         <p>API sync issue: {errorMessage}</p>
-                        <Button type='button' variant='neutral' className='mt-2 px-3 py-1 text-xs' onClick={onRetry}>
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            className='mt-2 px-3 py-1 text-xs'
+                            onClick={onRetry}
+                        >
                             Retry discovery
                         </Button>
                     </div>
@@ -976,7 +1006,10 @@ const MapRoute = ({
             </div>
 
             {drawer.open && selectedRecord ?
-                <Panel title='Map detail drawer' aria-label={`Details for ${drawer.title ?? 'selected request'}`}>
+                <Panel
+                    title='Map detail drawer'
+                    aria-label={`Details for ${drawer.title ?? 'selected request'}`}
+                >
                     <p className='text-lg font-bold text-mh-text'>
                         {drawer.title}
                     </p>
@@ -1044,14 +1077,16 @@ const lifecycleStatusFromValue = (
     value: string,
 ): LifecycleStatus | undefined => {
     const normalized = value === 'in-progress' ? 'in_progress' : value;
-    return [
-        'open',
-        'triaged',
-        'assigned',
-        'in_progress',
-        'resolved',
-        'archived',
-    ].includes(normalized) ?
+    return (
+            [
+                'open',
+                'triaged',
+                'assigned',
+                'in_progress',
+                'resolved',
+                'archived',
+            ].includes(normalized)
+        ) ?
             (normalized as LifecycleStatus)
         :   undefined;
 };
@@ -1200,7 +1235,11 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
             setError(`${result.code}: ${result.error}`);
             return;
         }
-        setNotice(result.data.created ? 'Report submitted.' : 'Report already submitted.');
+        setNotice(
+            result.data.created ?
+                'Report submitted.'
+            :   'Report already submitted.',
+        );
         setMode(undefined);
         setDetails('');
     };
@@ -1218,7 +1257,9 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
             setError(`${result.code}: ${result.error}`);
             return;
         }
-        setNotice(result.data.created ? 'Author blocked.' : 'Author already blocked.');
+        setNotice(
+            result.data.created ? 'Author blocked.' : 'Author already blocked.',
+        );
         setMode(undefined);
     };
 
@@ -1253,7 +1294,9 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
                             className='mt-1 block w-full border-2 border-mh-border bg-mh-surface p-2'
                             value={reason}
                             onChange={event =>
-                                setReason(event.target.value as AidPostReportReason)
+                                setReason(
+                                    event.target.value as AidPostReportReason,
+                                )
                             }
                         >
                             <option value='spam'>Spam</option>
@@ -1286,22 +1329,51 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
                     </div>
                 </form>
             : mode === 'block' ?
-                <div role='alertdialog' aria-label='Confirm block author' className='mh-alert mt-3'>
-                    <p className='text-sm font-bold'>Block this request author?</p>
-                    <p className='mt-1 text-xs'>This private safety action is stored by Patchwork and is not published to AT Protocol.</p>
+                <div
+                    role='alertdialog'
+                    aria-label='Confirm block author'
+                    className='mh-alert mt-3'
+                >
+                    <p className='text-sm font-bold'>
+                        Block this request author?
+                    </p>
+                    <p className='mt-1 text-xs'>
+                        This private safety action is stored by Patchwork and is
+                        not published to AT Protocol.
+                    </p>
                     <div className='mt-2 flex flex-wrap gap-2'>
-                        <Button type='button' onClick={() => void confirmBlock()} disabled={pending}>
+                        <Button
+                            type='button'
+                            onClick={() => void confirmBlock()}
+                            disabled={pending}
+                        >
                             {pending ? 'Blocking...' : 'Confirm block author'}
                         </Button>
-                        <Button type='button' variant='neutral' onClick={() => setMode(undefined)} disabled={pending}>
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            onClick={() => setMode(undefined)}
+                            disabled={pending}
+                        >
                             Cancel
                         </Button>
                     </div>
                 </div>
-            : null}
+            :   null}
 
-            {notice ? <p role='status' className='mt-2 text-xs font-bold text-mh-success'>{notice}</p> : null}
-            {error ? <p role='alert' className='mh-alert mt-2 text-xs font-bold'>{error}</p> : null}
+            {notice ?
+                <p
+                    role='status'
+                    className='mt-2 text-xs font-bold text-mh-success'
+                >
+                    {notice}
+                </p>
+            :   null}
+            {error ?
+                <p role='alert' className='mh-alert mt-2 text-xs font-bold'>
+                    {error}
+                </p>
+            :   null}
         </div>
     );
 };
@@ -1371,7 +1443,11 @@ const OwnerRecordActions = ({
                     type='button'
                     variant='neutral'
                     aria-label={`Close ${record.card.title.toLowerCase()}`}
-                    disabled={!record.cid || record.card.status === 'closed' || pending !== undefined}
+                    disabled={
+                        !record.cid ||
+                        record.card.status === 'closed' ||
+                        pending !== undefined
+                    }
                     onClick={() => void closeRecord()}
                 >
                     {pending === 'close' ? 'Closing...' : 'Close request'}
@@ -1387,22 +1463,58 @@ const OwnerRecordActions = ({
                 </Button>
             </div>
             {!record.cid ?
-                <p className='mt-2 text-xs text-mh-textMuted'>Waiting for the indexed record revision before owner mutations are available.</p>
-            : null}
+                <p className='mt-2 text-xs text-mh-textMuted'>
+                    Waiting for the indexed record revision before owner
+                    mutations are available.
+                </p>
+            :   null}
             {confirmDelete ?
-                <div role='alertdialog' aria-label='Confirm delete request' className='mh-alert mt-3'>
-                    <p className='text-sm font-bold'>Permanently delete this AT record?</p>
-                    <p className='mt-1 text-xs'>Deletion also removes its durable private workflow after the PDS confirms it.</p>
+                <div
+                    role='alertdialog'
+                    aria-label='Confirm delete request'
+                    className='mh-alert mt-3'
+                >
+                    <p className='text-sm font-bold'>
+                        Permanently delete this AT record?
+                    </p>
+                    <p className='mt-1 text-xs'>
+                        Deletion also removes its durable private workflow after
+                        the PDS confirms it.
+                    </p>
                     <div className='mt-2 flex flex-wrap gap-2'>
-                        <Button type='button' onClick={() => void deleteRecord()} disabled={pending !== undefined}>
-                            {pending === 'delete' ? 'Deleting...' : 'Confirm delete request'}
+                        <Button
+                            type='button'
+                            onClick={() => void deleteRecord()}
+                            disabled={pending !== undefined}
+                        >
+                            {pending === 'delete' ?
+                                'Deleting...'
+                            :   'Confirm delete request'}
                         </Button>
-                        <Button type='button' variant='neutral' onClick={() => setConfirmDelete(false)} disabled={pending !== undefined}>Cancel</Button>
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            onClick={() => setConfirmDelete(false)}
+                            disabled={pending !== undefined}
+                        >
+                            Cancel
+                        </Button>
                     </div>
                 </div>
-            : null}
-            {notice ? <p role='status' className='mt-2 text-xs font-bold text-mh-success'>{notice}</p> : null}
-            {error ? <p role='alert' className='mh-alert mt-2 text-xs font-bold'>{error}</p> : null}
+            :   null}
+            {notice ?
+                <p
+                    role='status'
+                    className='mt-2 text-xs font-bold text-mh-success'
+                >
+                    {notice}
+                </p>
+            :   null}
+            {error ?
+                <p role='alert' className='mh-alert mt-2 text-xs font-bold'>
+                    {error}
+                </p>
+            :   null}
         </div>
     );
 };
@@ -1465,15 +1577,26 @@ const FeedRoute = ({
                     </Badge>
                 </div>
                 {errorMessage ?
-                    <div role='alert' className='mh-alert mt-3 text-xs font-bold'>
+                    <div
+                        role='alert'
+                        className='mh-alert mt-3 text-xs font-bold'
+                    >
                         <p>API sync issue: {errorMessage}</p>
-                        <Button type='button' variant='neutral' className='mt-2 px-3 py-1 text-xs' onClick={onRetry}>
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            className='mt-2 px-3 py-1 text-xs'
+                            onClick={onRetry}
+                        >
                             Retry discovery
                         </Button>
                     </div>
                 :   null}
                 {publicSyncFailure ?
-                    <div role='alert' className='mh-alert mt-3 text-xs font-bold'>
+                    <div
+                        role='alert'
+                        className='mh-alert mt-3 text-xs font-bold'
+                    >
                         <p>
                             Private workflow saved, but its public AT status is
                             not synchronized: {publicSyncFailure.message}
@@ -1595,7 +1718,9 @@ const FeedRoute = ({
                                                                 .label
                                                         }
                                                     </Badge>
-                                                    {presentation.lifecycleBadge ?
+                                                    {(
+                                                        presentation.lifecycleBadge
+                                                    ) ?
                                                         <Badge
                                                             tone={
                                                                 presentation
@@ -1626,12 +1751,14 @@ const FeedRoute = ({
                                     </p>
 
                                     {/* Lifecycle transition actions */}
-                                    {presentation &&
-                                    presentation.transitionActions
-                                        .length > 0 &&
-                                    onTransition &&
-                                    record &&
-                                    currentUserDid === record.recipientDid ?
+                                    {(
+                                        presentation &&
+                                        presentation.transitionActions.length >
+                                            0 &&
+                                        onTransition &&
+                                        record &&
+                                        currentUserDid === record.recipientDid
+                                    ) ?
                                         <div className='mt-3 flex flex-wrap gap-2'>
                                             <span className='text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
                                                 Lifecycle:
@@ -1678,45 +1805,75 @@ const FeedRoute = ({
                                             <Button
                                                 variant='secondary'
                                                 className='px-3 py-1 text-xs'
-                                                onClick={() => onUpdateCard(card.id, { urgency: Math.min(5, card.urgency + 1) as 1 | 2 | 3 | 4 | 5, updatedAt: nowIso() })}
+                                                onClick={() =>
+                                                    onUpdateCard(card.id, {
+                                                        urgency: Math.min(
+                                                            5,
+                                                            card.urgency + 1,
+                                                        ) as 1 | 2 | 3 | 4 | 5,
+                                                        updatedAt: nowIso(),
+                                                    })
+                                                }
                                                 disabled={card.urgency >= 5}
                                             >
                                                 Escalate urgency
                                             </Button>
-                                        : null}
+                                        :   null}
 
                                         {/* Timeline toggle */}
-                                        {card.timeline &&
-                                        card.timeline.length > 0 ?
+                                        {(
+                                            card.timeline &&
+                                            card.timeline.length > 0
+                                        ) ?
                                             <Button
                                                 variant='neutral'
                                                 className='px-3 py-1 text-xs'
                                                 onClick={() =>
                                                     setExpandedTimelineId(
                                                         current =>
-                                                            current === card.id ?
+                                                            (
+                                                                current ===
+                                                                card.id
+                                                            ) ?
                                                                 undefined
                                                             :   card.id,
                                                     )
                                                 }
                                             >
-                                                {expandedTimelineId === card.id ?
+                                                {(
+                                                    expandedTimelineId ===
+                                                    card.id
+                                                ) ?
                                                     'Hide timeline'
-                                                :   `Timeline (${card.timeline.length})`}
+                                                :   `Timeline (${card.timeline.length})`
+                                                }
                                             </Button>
                                         :   null}
                                     </div>
 
-                                    {record && currentUserDid && currentUserDid !== record.recipientDid ?
+                                    {(
+                                        record &&
+                                        currentUserDid &&
+                                        currentUserDid !== record.recipientDid
+                                    ) ?
                                         <SafetyActions record={record} />
                                     :   null}
-                                    {record && currentUserDid === record.recipientDid ?
-                                        <OwnerRecordActions record={record} onReplaceRecord={onReplaceRecord} onDeleteRecord={onDeleteRecord} />
-                                    : null}
+                                    {(
+                                        record &&
+                                        currentUserDid === record.recipientDid
+                                    ) ?
+                                        <OwnerRecordActions
+                                            record={record}
+                                            onReplaceRecord={onReplaceRecord}
+                                            onDeleteRecord={onDeleteRecord}
+                                        />
+                                    :   null}
 
                                     {/* Expanded timeline panel */}
-                                    {expandedTimelineId === card.id &&
-                                    card.timeline ?
+                                    {(
+                                        expandedTimelineId === card.id &&
+                                        card.timeline
+                                    ) ?
                                         <div className='mt-4 border-t-2 border-mh-borderSoft pt-4'>
                                             <p className='mb-3 text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
                                                 Audit timeline
@@ -2130,7 +2287,12 @@ const ResourceRoute = ({
                 resources: viewModel.cards,
                 activeCategoryFilter: viewModel.activeCategoryFilter,
             }),
-        [errorMessage, isLoading, viewModel.cards, viewModel.activeCategoryFilter],
+        [
+            errorMessage,
+            isLoading,
+            viewModel.cards,
+            viewModel.activeCategoryFilter,
+        ],
     );
 
     const detailPanel =
@@ -2154,9 +2316,17 @@ const ResourceRoute = ({
                     </Badge>
                 </div>
                 {errorMessage ?
-                    <div role='alert' className='mh-alert mt-3 text-xs font-bold'>
+                    <div
+                        role='alert'
+                        className='mh-alert mt-3 text-xs font-bold'
+                    >
                         <p>API sync issue: {errorMessage}</p>
-                        <Button type='button' variant='neutral' className='mt-2 px-3 py-1 text-xs' onClick={onRetry}>
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            className='mt-2 px-3 py-1 text-xs'
+                            onClick={onRetry}
+                        >
                             Retry directory
                         </Button>
                     </div>
@@ -2962,7 +3132,13 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
     const [saveSuccess, setSaveSuccess] = useState<string>();
     const [isLoadingSettings, setIsLoadingSettings] = useState(true);
     const [auditEntries, setAuditEntries] = useState<
-        readonly { field: string; oldValue: unknown; newValue: unknown; timestamp: string; actor: string }[]
+        readonly {
+            field: string;
+            oldValue: unknown;
+            newValue: unknown;
+            timestamp: string;
+            actor: string;
+        }[]
     >([]);
     const [isLoadingAudit, setIsLoadingAudit] = useState(false);
     const [accountActionResult, setAccountActionResult] = useState<string>();
@@ -3184,8 +3360,10 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                     <Button
                                         key={precision}
                                         variant={
-                                            settings.geoSharingPrecision ===
-                                            precision ?
+                                            (
+                                                settings.geoSharingPrecision ===
+                                                precision
+                                            ) ?
                                                 'secondary'
                                             :   'neutral'
                                         }
@@ -3370,8 +3548,9 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                 Deactivation immediately revokes Patchwork
                                 sessions and removes your posts from Patchwork
                                 discovery. Records in your independent AT
-                                Protocol repository are not deleted. Reactivation
-                                requires a controlled support review.
+                                Protocol repository are not deleted.
+                                Reactivation requires a controlled support
+                                review.
                             </p>
                             <div className='mt-3'>
                                 <Button
@@ -3439,10 +3618,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
             {/* Save / Cancel bar */}
             {!isLoadingSettings && activeSection !== 'account' ?
                 <div className='flex flex-wrap items-center gap-3'>
-                    <Button
-                        onClick={handleSave}
-                        disabled={!dirty || isSaving}
-                    >
+                    <Button onClick={handleSave} disabled={!dirty || isSaving}>
                         {isSaving ? 'Saving...' : 'Save settings'}
                     </Button>
                     <Button
@@ -3480,9 +3656,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     );
 
     const [feedRecords, setFeedRecords] = useState<FeedRecordEnvelope[]>([]);
-    const [resourceCards, setResourceCards] = useState<
-        ResourceDirectoryCard[]
-    >([]);
+    const [resourceCards, setResourceCards] = useState<ResourceDirectoryCard[]>(
+        [],
+    );
     const [isAidLoading, setIsAidLoading] = useState(false);
     const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     const [aidErrorMessage, setAidErrorMessage] = useState<string>();
@@ -3596,11 +3772,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                             ) {
                                 return record;
                             }
-                            const lifecycle =
-                                await queryAidPostLifecycleViaApi(
-                                    record.aidPostUri,
-                                    controller.signal,
-                                );
+                            const lifecycle = await queryAidPostLifecycleViaApi(
+                                record.aidPostUri,
+                                controller.signal,
+                            );
                             const lifecycleStatus =
                                 lifecycle.ok ?
                                     lifecycleStatusFromValue(
@@ -3619,7 +3794,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                         },
                                     )
                                 : lifecycle.code === 'NOT_FOUND' ?
-                                    (['open', 'resolved'] satisfies LifecycleStatus[])
+                                    ([
+                                        'open',
+                                        'resolved',
+                                    ] satisfies LifecycleStatus[])
                                 :   undefined;
                             return lifecycleStatus ?
                                     {
@@ -3643,7 +3821,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                                                     lifecycleStatusFromValue(
                                                                         entry.to,
                                                                     );
-                                                                return from && to ?
+                                                                return (
+                                                                        from &&
+                                                                            to
+                                                                    ) ?
                                                                         [
                                                                             {
                                                                                 ...entry,
@@ -3899,9 +4080,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             </Panel>
         : requiresAuthentication && !auth.session ?
             <Panel title='Sign in required'>
-                <p>
-                    This action uses your authenticated AT Protocol identity.
-                </p>
+                <p>This action uses your authenticated AT Protocol identity.</p>
                 <a
                     className='mt-3 inline-block font-bold underline'
                     href={`/login?returnTo=${encodeURIComponent(currentRoute)}`}
@@ -3963,13 +4142,17 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 onReplaceRecord={replacement =>
                     setFeedRecords(current =>
                         current.map(record =>
-                            record.aidPostUri === replacement.aidPostUri ? replacement : record,
+                            record.aidPostUri === replacement.aidPostUri ?
+                                replacement
+                            :   record,
                         ),
                     )
                 }
                 onDeleteRecord={aidPostUri =>
                     setFeedRecords(current =>
-                        current.filter(record => record.aidPostUri !== aidPostUri),
+                        current.filter(
+                            record => record.aidPostUri !== aidPostUri,
+                        ),
                     )
                 }
                 onTransition={(id, postUri, targetStatus) => {
@@ -4080,52 +4263,154 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             >
                 Skip to main content
             </a>
-            <div className='mh-grid-pattern mx-auto min-h-screen max-w-6xl border-x border-mh-border px-3 pb-12 pt-6 sm:border-x-2 sm:px-6 lg:px-8'>
-                <nav
-                    aria-label='Primary flows'
-                    className='mb-8 flex flex-wrap gap-2 border-b border-mh-border pb-4 sm:border-b-2 sm:pb-6'
-                >
-                    {appRoutes.map(route => (
-                        <a
-                            key={route}
-                            href={route}
-                            className='mh-nav-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mh-accent'
-                            aria-current={
-                                currentRoute === route ? 'page' : undefined
-                            }
-                            onClick={event => handleRouteClick(event, route)}
-                        >
-                            {routeLabels[route]}
-                        </a>
-                    ))}
-                    <div className='ml-auto flex items-center gap-2' aria-live='polite'>
-                        {auth.status === 'booting' ?
-                            <span>Checking session…</span>
-                        : auth.session ?
-                            <>
-                                <span className='max-w-48 truncate text-xs font-bold'>
-                                    {auth.session.did}
-                                </span>
-                                <Button
-                                    variant='neutral'
-                                    className='px-3 py-1 text-xs'
-                                    onClick={() => void auth.logout()}
-                                >
-                                    Sign out
-                                </Button>
-                            </>
-                        :   <a
+            <div className='mh-grid-pattern mx-auto min-h-screen max-w-7xl px-3 pb-16 sm:px-6 lg:px-10'>
+                <header className='mh-masthead'>
+                    <a
+                        href='/'
+                        className='mh-brand'
+                        onClick={event => handleRouteClick(event, '/')}
+                    >
+                        <span className='mh-brand-mark' aria-hidden='true'>
+                            P
+                        </span>
+                        <span>
+                            <strong>{appTitle}</strong>
+                            <small>Mutual aid, block by block</small>
+                        </span>
+                    </a>
+                    <div className='mh-network-status' role='status'>
+                        <span aria-hidden='true' /> Community network online
+                    </div>
+                </header>
+
+                <nav aria-label='Primary flows' className='mh-primary-nav'>
+                    <div className='mh-nav-main'>
+                        {primaryRoutes.map(route => (
+                            <a
+                                key={route}
+                                href={route}
                                 className='mh-nav-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mh-accent'
-                                href={`/login?returnTo=${encodeURIComponent(currentRoute)}`}
+                                aria-current={
+                                    currentRoute === route ? 'page' : undefined
+                                }
+                                onClick={event =>
+                                    handleRouteClick(event, route)
+                                }
                             >
-                                Sign in
-                            </a>}
+                                {routeLabels[route]}
+                            </a>
+                        ))}
+                    </div>
+                    <div className='mh-nav-tools'>
+                        {accountRoutes.map(route => (
+                            <a
+                                key={route}
+                                href={route}
+                                className='mh-nav-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mh-accent'
+                                aria-current={
+                                    currentRoute === route ? 'page' : undefined
+                                }
+                                onClick={event =>
+                                    handleRouteClick(event, route)
+                                }
+                            >
+                                {routeLabels[route]}
+                            </a>
+                        ))}
+                        <details className='mh-more-menu'>
+                            <summary className='mh-nav-chip'>
+                                More <span aria-hidden='true'>+</span>
+                            </summary>
+                            <div className='mh-more-menu-panel'>
+                                {secondaryRoutes.map(route => (
+                                    <a
+                                        key={route}
+                                        href={route}
+                                        aria-current={
+                                            currentRoute === route ? 'page' : (
+                                                undefined
+                                            )
+                                        }
+                                        onClick={event =>
+                                            handleRouteClick(event, route)
+                                        }
+                                    >
+                                        {routeLabels[route]}
+                                    </a>
+                                ))}
+                            </div>
+                        </details>
+                        <div className='mh-auth-control' aria-live='polite'>
+                            {auth.status === 'booting' ?
+                                <span>Checking session…</span>
+                            : auth.session ?
+                                <>
+                                    <span className='max-w-48 truncate text-xs font-bold'>
+                                        {auth.session.did}
+                                    </span>
+                                    <Button
+                                        variant='neutral'
+                                        className='px-3 py-1 text-xs'
+                                        onClick={() => void auth.logout()}
+                                    >
+                                        Sign out
+                                    </Button>
+                                </>
+                            :   <a
+                                    className='mh-nav-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mh-accent'
+                                    href={`/login?returnTo=${encodeURIComponent(currentRoute)}`}
+                                >
+                                    Sign in
+                                </a>
+                            }
+                        </div>
                     </div>
                 </nav>
 
-                <div id='main-content' ref={mainContentRef} tabIndex={-1} className='outline-none'>
+                <div
+                    id='main-content'
+                    ref={mainContentRef}
+                    tabIndex={-1}
+                    className='outline-none'
+                >
                     {content}
                 </div>
+
+                <footer className='mh-footer'>
+                    <p>
+                        <strong>Patchwork</strong> is community infrastructure,
+                        not an emergency service.
+                    </p>
+                    <div role='navigation' aria-label='Legal'>
+                        <a
+                            href='/legal/terms'
+                            onClick={event =>
+                                handleRouteClick(event, '/legal/terms')
+                            }
+                        >
+                            Terms
+                        </a>
+                        <a
+                            href='/legal/privacy'
+                            onClick={event =>
+                                handleRouteClick(event, '/legal/privacy')
+                            }
+                        >
+                            Privacy
+                        </a>
+                        <a
+                            href='/legal/community-guidelines'
+                            onClick={event =>
+                                handleRouteClick(
+                                    event,
+                                    '/legal/community-guidelines',
+                                )
+                            }
+                        >
+                            Community guidelines
+                        </a>
+                    </div>
+                </footer>
             </div>
         </main>
     );

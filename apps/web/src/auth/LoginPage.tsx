@@ -4,7 +4,9 @@ import { sanitizeReturnTo } from './auth-api.js';
 
 const safeReturnTo = (): string => {
     if (typeof window === 'undefined') return '/';
-    const candidate = new URLSearchParams(window.location.search).get('returnTo');
+    const candidate = new URLSearchParams(window.location.search).get(
+        'returnTo',
+    );
     return sanitizeReturnTo(candidate ?? '/');
 };
 
@@ -34,15 +36,38 @@ export const LoginPage = () => {
     };
 
     return (
-        <main id='main-content' tabIndex={-1} aria-labelledby='login-heading' className='mx-auto max-w-lg p-6'>
-            <h1 id='login-heading' className='text-2xl font-black'>
-                Sign in to Patchwork
-            </h1>
-            <p className='mt-2'>
-                Continue through your AT Protocol server. Patchwork never asks
-                for or stores your password.
-            </p>
-            <form className='mt-6 space-y-4' onSubmit={submit}>
+        <main
+            id='main-content'
+            tabIndex={-1}
+            aria-labelledby='login-heading'
+            className='mh-login-shell'
+        >
+            <section className='mh-login-intro'>
+                <a href='/' className='mh-brand'>
+                    <span className='mh-brand-mark' aria-hidden='true'>
+                        P
+                    </span>
+                    <span>
+                        <strong>Patchwork</strong>
+                        <small>Mutual aid, block by block</small>
+                    </span>
+                </a>
+                <p className='mh-kicker mt-12'>A safer way into the network</p>
+                <h1
+                    id='login-heading'
+                    className='font-heading mt-3 text-5xl font-black leading-none tracking-[-0.045em] sm:text-6xl'
+                >
+                    Come on in.
+                    <br />
+                    Your neighbors are here.
+                </h1>
+                <p className='mt-5 max-w-md text-mh-textMuted'>
+                    Sign in through your AT Protocol server. Patchwork never
+                    sees, asks for, or stores your password.
+                </p>
+            </section>
+            <form className='mh-card space-y-4 p-6 sm:p-8' onSubmit={submit}>
+                <p className='mh-kicker'>Connect your account</p>
                 <label htmlFor='at-handle' className='block font-bold'>
                     AT Protocol handle
                 </label>
@@ -53,7 +78,7 @@ export const LoginPage = () => {
                     required
                     value={handle}
                     onChange={event => setHandle(event.target.value)}
-                    className='w-full border-2 border-mh-border p-2'
+                    className='mh-input w-full px-3 py-2'
                 />
                 <button
                     type='submit'
@@ -64,16 +89,22 @@ export const LoginPage = () => {
                         'Opening your provider…'
                     :   'Continue with AT Protocol'}
                 </button>
+                <p className='text-xs leading-relaxed text-mh-textSoft'>
+                    You will continue on your own provider’s secure sign-in
+                    page, then return here.
+                </p>
             </form>
-            <div aria-live='polite' className='mt-4'>
+            <div aria-live='polite' className='mh-login-status'>
                 {auth.status === 'booting' ? 'Checking your session…' : null}
-                {auth.status === 'refreshing' ? 'Refreshing your session…' : null}
+                {auth.status === 'refreshing' ?
+                    'Refreshing your session…'
+                :   null}
                 {auth.status === 'authenticated' && auth.session ?
                     <p>Signed in as {auth.session.did}</p>
                 :   null}
             </div>
             {auth.error ?
-                <div role='alert' className='mt-4 border-2 border-mh-danger p-3'>
+                <div role='alert' className='mh-alert mh-login-error p-4'>
                     <p>{auth.error.message}</p>
                     <p>{recoveryMessage(auth.error.code)}</p>
                     <button type='button' onClick={() => void auth.restore()}>
