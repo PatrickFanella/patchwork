@@ -25,21 +25,21 @@ exceptions to the launch criteria in this decision.
 | Recovery and alerting | Phase 7 isolated PostgreSQL 16 restore and eleven validated alert rules | No staging restore, notification delivery, or incident exercise |
 | Security | `npm audit --omit=dev --audit-level=high`: zero vulnerabilities on 2026-07-11; delivery workflow is configured to reject high/critical Trivy findings | Dependency gate green; deployed-image scan has not run |
 | Data retention | API migration 0012 and moderation migration 003 drive hourly non-overlapping cleanup for all alpha-private state. Active moderation cases and sessions are preserved; failure/staleness metrics alert for both runtimes. | Formal privacy/backup-deletion approval and deployed scheduler observations remain incomplete |
-| Data subject access | Authenticated versioned export covers Patchwork-held alpha data without credentials or cross-subject projections | Deactivation/erasure, full AT repository, casework review, and formal privacy approval remain incomplete |
+| Data subject access and deactivation | Authenticated versioned export covers Patchwork-held alpha data without credentials or cross-subject projections. Durable deactivation removes Patchwork state, revokes login, sanitizes bounded retained exceptions, and suppresses future commands/projections. | Independent AT-repository deletion, controlled casework review, real staging exercise, and formal privacy approval remain incomplete |
 | Accessibility | 48 Chromium cases pass, including eight zero-violation axe route scans and cross-route 320px reflow | No independent WCAG 2.2 or assistive-technology review |
 | Performance | Executable local HTTP probe passed modeled alpha read targets over 1,000 PostgreSQL projections with zero errors | No sustained staging workload, write/ingestion/moderation load, or resource saturation measurement |
 | Operations | Role-based RACI and incident procedures exist | No named humans have accepted staging on-call, product, engineering, or trust-and-safety ownership |
 
 Current verification baseline:
 
-- database-enabled repository suite: 860 tests;
-- PostgreSQL/HTTP integration: 26 tests;
-- indexer PostgreSQL projection/reconciliation: 13 tests;
+- database-enabled repository suite: 866 tests;
+- PostgreSQL/HTTP integration: 28 tests;
+- indexer PostgreSQL projection/reconciliation: 14 tests;
 - direct service integration: 9 tests;
 - Chromium: 48 passed, 1 externally gated case skipped;
-- database-enabled coverage: 65.12% statements, 51.91% branches, 59.11%
-  functions, 66.29% lines;
-- API/indexer/moderation migrations replay cleanly at 12/3/3;
+- database-enabled coverage: 65.55% statements, 52.24% branches, 59.51%
+  functions, 66.72% lines;
+- API/indexer/moderation migrations replay cleanly at 13/3/3;
 - build, typecheck, lint, artifact redaction, and high-severity dependency audit
   pass.
 
@@ -54,7 +54,7 @@ These local results are necessary but do not substitute for external proof.
 | `ROLLBACK` | Deployed staging returns to the prior four-digest manifest without incompatible down migration | Infrastructure | 2026-07-25 |
 | `RECOVERY` | A staging backup restores into an empty database, invalidates sessions, preserves required state, and meets measured RTO/RPO | Infrastructure + Engineering | 2026-07-25 |
 | `ALERT-GAMEDAY` | Indexer disconnect and database-loss drills deliver, acknowledge, and resolve actionable alerts | Infrastructure + Incident Commander | 2026-07-25 |
-| `RETENTION` | Scheduled private-data expiry is implemented, tested, and backup/deletion policy approved | Privacy + Engineering | 2026-07-25 |
+| `RETENTION` | Scheduled private-data expiry and deactivation are implemented and tested; backup, retained-exception, suppression-marker, and AT-repository-boundary policy is formally approved | Privacy + Engineering | 2026-07-25 |
 | `ACCESSIBILITY` | Independent WCAG/assistive-technology review has no unresolved launch-blocking finding | Accessibility + Product | 2026-07-25 |
 | `CAPACITY` | Staging load test records safe request, ingestion, queue, and database headroom | Engineering + Infrastructure | 2026-07-25 |
 | `OWNERSHIP` | Named people accept product, engineering, infrastructure, privacy, trust-and-safety, and on-call responsibilities | Product | 2026-07-25 |

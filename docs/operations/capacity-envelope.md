@@ -59,7 +59,7 @@ throughput, or error-rate targets fail.
 ## Local evidence, 2026-07-11
 
 The isolated run used PostgreSQL 16.14, Node 24.15.0, an Apple M3 with 16 GiB
-RAM, the complete 12/3/3 migration set, a fresh projection heartbeat, and
+RAM, the complete 13/3/3 migration set, a fresh projection heartbeat, and
 1,000 generated durable aid-post projections. Each route ran for five seconds
 at concurrency four. The API used PostgreSQL data mode; test environment mode
 disabled external OAuth only.
