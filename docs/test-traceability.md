@@ -20,11 +20,11 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Database-enabled full repository suite | 825 passed |
+| Database-enabled full repository suite | 829 passed |
 | Direct lifecycle service integration | 9 passed |
-| PostgreSQL integration, including HTTP boundary | 23 passed |
-| Browser Chromium suite | 36 passed |
-| Diagnostic coverage without database suites | 58.75% statements, 46.64% branches, 52.00% functions, 59.96% lines |
+| PostgreSQL integration, including HTTP boundary | 24 passed |
+| Browser Chromium suite | 39 passed, 1 externally gated case skipped |
+| Diagnostic coverage without database suites | 58.24% statements, 45.95% branches, 51.50% functions, 59.46% lines |
 | External AT protocol | Two-account create/read/update/close/delete and ownership denial verified manually |
 
 Counts can change as tests are consolidated. Readiness depends on covered boundaries, not the aggregate.
@@ -37,7 +37,7 @@ Counts can change as tests are consolidated. Readiness depends on covered bounda
 | Aid-post repository CRUD | Lexicon and record-client tests | Command service tests | Session persistence only | Command route tests | Posting form and API-client tests | Two-account lifecycle evidence | Automated disposable-PDS job |
 | AT wire encoding | Integer coordinate adapter tests | — | — | — | — | Live staging PDS accepted records | Other custom record families |
 | Lifecycle rules | `packages/shared/src/lifecycle.test.ts` | `lifecycle-service.integration.test.ts` | Restart, retry, rollback, audit, assignment/handoff, deletion, role, and public-sync state | `lifecycle-transition-handler.postgres.test.ts` | Lifecycle UI is fixture-oriented | Author status reconciliation is command-tested; live stream reconciliation is absent | Concurrent-command proof and automatic stream reconciliation |
-| Blocks and reports | Service validation tests | Older chat safety fixtures | Repository retention/deletion tests | Authenticated route wiring lacks full HTTP test | Chat safety UX fixtures | — | Cross-request enforcement |
+| Blocks and reports | Service and typed client validation | Older chat safety fixtures are unavailable in production | Repository retention/deletion and idempotency tests | Authenticated session-derived report/block actors persist through real HTTP | Rendered report details, confirmation, CSRF, success/error behavior | Real journey harness awaits two OAuth states | Cross-request enforcement and external execution |
 | Discovery | Firehose, ranking, discovery rule, data-mode, and typed API failure tests | Local demo fixtures require explicit fixture mode | Cursor, heartbeat, normalized aid-post projections, tombstones, and dead letters persist | Real PostgreSQL projection filters, pagination, freshness, and startup lag rejection | Map/feed UI, accessibility, API-unavailable visibility, and idempotent retry with no fixture substitution | Local Jetstream-compatible WebSocket integration | Controlled live AT lifecycle exercise |
 | Moderation | Policy and queue state tests | Worker fixture services | Concurrent PostgreSQL queue claim using `SKIP LOCKED`; runtime still fixture-backed | — | Console UX fixtures | — | Lease completion/retry, audit store, runtime wiring, and crash recovery |
 | Privacy | Geo floor and redaction tests | Fixture response checks | Audit payload redaction | HTTP boundary avoids actor override | Accessibility only | Redacted lifecycle evidence | Retention enforcement jobs |

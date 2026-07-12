@@ -146,6 +146,7 @@ describePostgres('PostgresProjectionQueryService', () => {
             results: [
                 {
                     uri: `at://did:plc:alice/${recordNsid.aidPost}/a`,
+                    cid: 'cid-a',
                     category: 'food',
                     urgency: 'high',
                     status: 'open',

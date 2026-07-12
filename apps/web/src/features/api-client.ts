@@ -41,6 +41,12 @@ export interface ApiClientFailure {
 
 export type ApiClientResult<TData> = ApiClientSuccess<TData> | ApiClientFailure;
 
+export type AidPostReportReason = 'spam' | 'abuse' | 'fraud' | 'other';
+
+export interface SafetyMutationResult {
+    created: boolean;
+}
+
 export interface ChatInitiationApiResult {
     conversationUri: string;
     created: boolean;
@@ -57,7 +63,6 @@ export interface ChatInitiationApiResult {
 }
 
 export interface AidPostCreateApiInput {
-    authorDid: string;
     draft: NormalizedAidPostingDraft;
     rkey: string;
     now?: string;
@@ -325,6 +330,27 @@ const invalidResponseFailure = (message: string): ApiClientFailure => ({
     kind: 'validation',
     retryable: false,
 });
+
+const parseSafetyMutationResult = <
+    TIdField extends 'reportId' | 'blockId',
+>(
+    payload: unknown,
+    idField: TIdField,
+): ApiClientResult<SafetyMutationResult & Record<TIdField, string>> => {
+    if (!isRecord(payload)) {
+        return invalidResponseFailure('Safety command response was malformed.');
+    }
+    const id = readString(payload, idField);
+    const created = payload['created'];
+    if (!id || typeof created !== 'boolean') {
+        return invalidResponseFailure('Safety command response was malformed.');
+    }
+    return {
+        ok: true,
+        data: { [idField]: id, created } as unknown as SafetyMutationResult &
+            Record<TIdField, string>,
+    };
+};
 
 const requestJson = async (
     path: string,
@@ -766,6 +792,9 @@ const parseRecordIdFromUri = (uri: string, fallback: string): string => {
     return candidate && candidate.length > 0 ? candidate : fallback;
 };
 
+const parseRepositoryDidFromUri = (uri: string): string | undefined =>
+    /^at:\/\/(did:[^/]+)\//.exec(uri)?.[1];
+
 const parseDirectoryCategory = (
     value: string | undefined,
 ): DirectoryResourceCategory => {
@@ -802,6 +831,7 @@ const mapAidPayloadToRecords = (
 
             const uri = readString(row, 'uri');
             const authorDid = readString(row, 'authorDid');
+            const cid = readString(row, 'cid');
             const title = readString(row, 'title');
             const summary = readString(row, 'summary');
             const category = readString(row, 'category');
@@ -844,6 +874,7 @@ const mapAidPayloadToRecords = (
             return {
                 aidPostUri: uri,
                 recipientDid: authorDid,
+                ...(cid ? { cid } : {}),
                 card: createFeedCard({
                     id: parseRecordIdFromUri(uri, `remote-${index}`),
                     title,
@@ -991,6 +1022,38 @@ export const fetchDirectoryCardsFromApi = async (
     : invalidResponseFailure('Directory response was malformed.');
 };
 
+export const reportAidPostViaApi = async (
+    input: {
+        subjectUri: string;
+        reason: AidPostReportReason;
+        details?: string;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<SafetyMutationResult & { reportId: string }>> => {
+    const commandId = newIdempotencyKey();
+    const result = await requestJsonPost(
+        '/reports',
+        { commandId, ...input },
+        signal,
+    );
+    if (!result.ok) return result;
+    return parseSafetyMutationResult(result.data, 'reportId');
+};
+
+export const blockUserViaApi = async (
+    input: { subjectDid: string; reason?: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<SafetyMutationResult & { blockId: string }>> => {
+    const commandId = newIdempotencyKey();
+    const result = await requestJsonPost(
+        '/blocks',
+        { commandId, ...input },
+        signal,
+    );
+    if (!result.ok) return result;
+    return parseSafetyMutationResult(result.data, 'blockId');
+};
+
 export const initiateChatViaApi = async (
     input: {
         aidPostUri: string;
@@ -1081,8 +1144,6 @@ export const initiateChatViaApi = async (
 export interface LifecycleTransitionApiInput {
     postUri: string;
     targetStatus: string;
-    actorDid: string;
-    actorRole: string;
     reason?: string;
     now?: string;
 }
@@ -1133,8 +1194,6 @@ export const transitionAidPostViaApi = async (
     const body = {
         postUri: input.postUri,
         targetStatus: input.targetStatus,
-        actorDid: input.actorDid,
-        actorRole: input.actorRole,
         reason: input.reason,
         now: input.now,
     };
@@ -1211,12 +1270,19 @@ export const createAidPostViaApi = async (
     if (!result.ok) {
         return result;
     }
+    const recipientDid = parseRepositoryDidFromUri(result.data.uri);
+    if (!recipientDid) {
+        return invalidResponseFailure(
+            'Created aid-post URI did not contain a repository DID.',
+        );
+    }
 
     return {
         ok: true,
         data: {
             aidPostUri: result.data.uri,
-            recipientDid: input.authorDid,
+            recipientDid,
+            cid: result.data.cid,
             card: createFeedCard({
                 id: parseRecordIdFromUri(result.data.uri, input.rkey),
                 title: record.title,

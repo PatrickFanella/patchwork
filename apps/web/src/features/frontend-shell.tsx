@@ -71,15 +71,20 @@ import { Input } from '../components/Input';
 import { Panel } from '../components/Panel';
 import { TextLink } from '../components/TextLink';
 import {
+    type AidPostReportReason,
     type ApiDataOrigin,
+    blockUserViaApi,
+    closeAtAidPostViaApi,
     createAidPostViaApi,
     deactivateAccountViaApi,
+    deleteAtAidPostViaApi,
     exportDataViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     fetchSettingsAuditFromApi,
     fetchSettingsFromApi,
     initiateChatViaApi,
+    reportAidPostViaApi,
     updateSettingsViaApi,
     transitionAidPostViaApi,
 } from './api-client';
@@ -1114,13 +1119,245 @@ interface FeedRouteProps {
     onNavigate: (route: AppRoute) => void;
     onOpenChat: (record: FeedRecordEnvelope, surface: ChatEntrySurface) => void;
     onUpdateCard: (id: string, patch: Partial<Omit<FeedAidCard, 'id'>>) => void;
-    onCloseCard: (id: string) => void;
+    onReplaceRecord: (record: FeedRecordEnvelope) => void;
+    onDeleteRecord: (aidPostUri: string) => void;
     onTransition?: (
         id: string,
         postUri: string,
         targetStatus: LifecycleStatus,
     ) => void;
+    currentUserDid?: string;
 }
+
+const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
+    const [mode, setMode] = useState<'report' | 'block'>();
+    const [reason, setReason] = useState<AidPostReportReason>('other');
+    const [details, setDetails] = useState('');
+    const [pending, setPending] = useState(false);
+    const [notice, setNotice] = useState<string>();
+    const [error, setError] = useState<string>();
+
+    const submitReport = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setPending(true);
+        setNotice(undefined);
+        setError(undefined);
+        const result = await reportAidPostViaApi({
+            subjectUri: record.aidPostUri,
+            reason,
+            ...(details.trim() ? { details: details.trim() } : {}),
+        });
+        setPending(false);
+        if (!result.ok) {
+            setError(`${result.code}: ${result.error}`);
+            return;
+        }
+        setNotice(result.data.created ? 'Report submitted.' : 'Report already submitted.');
+        setMode(undefined);
+        setDetails('');
+    };
+
+    const confirmBlock = async () => {
+        setPending(true);
+        setNotice(undefined);
+        setError(undefined);
+        const result = await blockUserViaApi({
+            subjectDid: record.recipientDid,
+            reason: 'Blocked from a discovered aid request.',
+        });
+        setPending(false);
+        if (!result.ok) {
+            setError(`${result.code}: ${result.error}`);
+            return;
+        }
+        setNotice(result.data.created ? 'Author blocked.' : 'Author already blocked.');
+        setMode(undefined);
+    };
+
+    return (
+        <div className='mt-3 border-t-2 border-mh-borderSoft pt-3'>
+            <div className='flex flex-wrap gap-2'>
+                <Button
+                    type='button'
+                    variant='neutral'
+                    className='px-3 py-1 text-xs'
+                    aria-label={`Report ${record.card.title}`}
+                    onClick={() => setMode('report')}
+                >
+                    Report request
+                </Button>
+                <Button
+                    type='button'
+                    variant='neutral'
+                    className='px-3 py-1 text-xs'
+                    aria-label={`Block author of ${record.card.title}`}
+                    onClick={() => setMode('block')}
+                >
+                    Block author
+                </Button>
+            </div>
+
+            {mode === 'report' ?
+                <form className='mt-3 space-y-3' onSubmit={submitReport}>
+                    <label className='block text-xs font-bold'>
+                        Report reason
+                        <select
+                            className='mt-1 block w-full border-2 border-mh-border bg-mh-surface p-2'
+                            value={reason}
+                            onChange={event =>
+                                setReason(event.target.value as AidPostReportReason)
+                            }
+                        >
+                            <option value='spam'>Spam</option>
+                            <option value='abuse'>Abuse</option>
+                            <option value='fraud'>Fraud</option>
+                            <option value='other'>Other</option>
+                        </select>
+                    </label>
+                    <label className='block text-xs font-bold'>
+                        Private report details
+                        <textarea
+                            className='mt-1 block min-h-24 w-full border-2 border-mh-border bg-mh-surface p-2'
+                            maxLength={1000}
+                            value={details}
+                            onChange={event => setDetails(event.target.value)}
+                        />
+                    </label>
+                    <div className='flex flex-wrap gap-2'>
+                        <Button type='submit' disabled={pending}>
+                            {pending ? 'Submitting...' : 'Submit report'}
+                        </Button>
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            onClick={() => setMode(undefined)}
+                            disabled={pending}
+                        >
+                            Cancel
+                        </Button>
+                    </div>
+                </form>
+            : mode === 'block' ?
+                <div role='alertdialog' aria-label='Confirm block author' className='mh-alert mt-3'>
+                    <p className='text-sm font-bold'>Block this request author?</p>
+                    <p className='mt-1 text-xs'>This private safety action is stored by Patchwork and is not published to AT Protocol.</p>
+                    <div className='mt-2 flex flex-wrap gap-2'>
+                        <Button type='button' onClick={() => void confirmBlock()} disabled={pending}>
+                            {pending ? 'Blocking...' : 'Confirm block author'}
+                        </Button>
+                        <Button type='button' variant='neutral' onClick={() => setMode(undefined)} disabled={pending}>
+                            Cancel
+                        </Button>
+                    </div>
+                </div>
+            : null}
+
+            {notice ? <p role='status' className='mt-2 text-xs font-bold text-mh-success'>{notice}</p> : null}
+            {error ? <p role='alert' className='mh-alert mt-2 text-xs font-bold'>{error}</p> : null}
+        </div>
+    );
+};
+
+const OwnerRecordActions = ({
+    record,
+    onReplaceRecord,
+    onDeleteRecord,
+}: {
+    record: FeedRecordEnvelope;
+    onReplaceRecord: (record: FeedRecordEnvelope) => void;
+    onDeleteRecord: (aidPostUri: string) => void;
+}) => {
+    const [confirmDelete, setConfirmDelete] = useState(false);
+    const [pending, setPending] = useState<'close' | 'delete'>();
+    const [notice, setNotice] = useState<string>();
+    const [error, setError] = useState<string>();
+
+    const closeRecord = async () => {
+        if (!record.cid) return;
+        setPending('close');
+        setError(undefined);
+        const result = await closeAtAidPostViaApi({
+            uri: record.aidPostUri,
+            expectedCid: record.cid,
+            updatedAt: nowIso(),
+        });
+        setPending(undefined);
+        if (!result.ok) {
+            setError(`${result.code}: ${result.error}`);
+            return;
+        }
+        onReplaceRecord({
+            ...record,
+            cid: result.data.cid,
+            card: {
+                ...record.card,
+                status: 'closed',
+                updatedAt:
+                    result.data.record.updatedAt ??
+                    result.data.record.createdAt,
+            },
+        });
+        setNotice('Request closed.');
+    };
+
+    const deleteRecord = async () => {
+        if (!record.cid) return;
+        setPending('delete');
+        setError(undefined);
+        const result = await deleteAtAidPostViaApi({
+            uri: record.aidPostUri,
+            expectedCid: record.cid,
+        });
+        setPending(undefined);
+        if (!result.ok) {
+            setError(`${result.code}: ${result.error}`);
+            return;
+        }
+        onDeleteRecord(record.aidPostUri);
+    };
+
+    return (
+        <div className='mt-3 border-t-2 border-mh-borderSoft pt-3'>
+            <div className='flex flex-wrap gap-2'>
+                <Button
+                    type='button'
+                    variant='neutral'
+                    aria-label={`Close ${record.card.title.toLowerCase()}`}
+                    disabled={!record.cid || record.card.status === 'closed' || pending !== undefined}
+                    onClick={() => void closeRecord()}
+                >
+                    {pending === 'close' ? 'Closing...' : 'Close request'}
+                </Button>
+                <Button
+                    type='button'
+                    variant='neutral'
+                    aria-label={`Delete ${record.card.title.toLowerCase()}`}
+                    disabled={!record.cid || pending !== undefined}
+                    onClick={() => setConfirmDelete(true)}
+                >
+                    Delete request
+                </Button>
+            </div>
+            {!record.cid ?
+                <p className='mt-2 text-xs text-mh-textMuted'>Waiting for the indexed record revision before owner mutations are available.</p>
+            : null}
+            {confirmDelete ?
+                <div role='alertdialog' aria-label='Confirm delete request' className='mh-alert mt-3'>
+                    <p className='text-sm font-bold'>Permanently delete this AT record?</p>
+                    <p className='mt-1 text-xs'>Deletion also removes its durable private workflow after the PDS confirms it.</p>
+                    <div className='mt-2 flex flex-wrap gap-2'>
+                        <Button type='button' onClick={() => void deleteRecord()} disabled={pending !== undefined}>
+                            {pending === 'delete' ? 'Deleting...' : 'Confirm delete request'}
+                        </Button>
+                        <Button type='button' variant='neutral' onClick={() => setConfirmDelete(false)} disabled={pending !== undefined}>Cancel</Button>
+                    </div>
+                </div>
+            : null}
+            {notice ? <p role='status' className='mt-2 text-xs font-bold text-mh-success'>{notice}</p> : null}
+            {error ? <p role='alert' className='mh-alert mt-2 text-xs font-bold'>{error}</p> : null}
+        </div>
+    );
+};
 
 const FeedRoute = ({
     discoveryState,
@@ -1133,8 +1370,10 @@ const FeedRoute = ({
     onNavigate,
     onOpenChat,
     onUpdateCard,
-    onCloseCard,
+    onReplaceRecord,
+    onDeleteRecord,
     onTransition,
+    currentUserDid,
 }: FeedRouteProps) => {
     const [expandedTimelineId, setExpandedTimelineId] = useState<
         string | undefined
@@ -1364,31 +1603,16 @@ const FeedRoute = ({
                                             </Button>
                                         :   null}
 
-                                        <Button
-                                            variant='secondary'
-                                            className='px-3 py-1 text-xs'
-                                            onClick={() => {
-                                                onUpdateCard(card.id, {
-                                                    urgency: Math.min(
-                                                        5,
-                                                        card.urgency + 1,
-                                                    ) as 1 | 2 | 3 | 4 | 5,
-                                                    updatedAt: nowIso(),
-                                                });
-                                            }}
-                                            disabled={card.urgency >= 5}
-                                        >
-                                            Escalate urgency
-                                        </Button>
-
-                                        <Button
-                                            variant='neutral'
-                                            className='px-3 py-1 text-xs'
-                                            onClick={() => onCloseCard(card.id)}
-                                            disabled={card.status === 'closed'}
-                                        >
-                                            Close request
-                                        </Button>
+                                        {dataOrigin === 'fixture' ?
+                                            <Button
+                                                variant='secondary'
+                                                className='px-3 py-1 text-xs'
+                                                onClick={() => onUpdateCard(card.id, { urgency: Math.min(5, card.urgency + 1) as 1 | 2 | 3 | 4 | 5, updatedAt: nowIso() })}
+                                                disabled={card.urgency >= 5}
+                                            >
+                                                Escalate urgency
+                                            </Button>
+                                        : null}
 
                                         {/* Timeline toggle */}
                                         {card.timeline &&
@@ -1411,6 +1635,13 @@ const FeedRoute = ({
                                             </Button>
                                         :   null}
                                     </div>
+
+                                    {record && currentUserDid && currentUserDid !== record.recipientDid ?
+                                        <SafetyActions record={record} />
+                                    :   null}
+                                    {record && currentUserDid === record.recipientDid ?
+                                        <OwnerRecordActions record={record} onReplaceRecord={onReplaceRecord} onDeleteRecord={onDeleteRecord} />
+                                    : null}
 
                                     {/* Expanded timeline panel */}
                                     {expandedTimelineId === card.id &&
@@ -1435,12 +1666,10 @@ const FeedRoute = ({
 };
 
 interface PostingRouteProps {
-    authorDid: string;
     center: { lat: number; lng: number };
     onCreateRecord: (record: FeedRecordEnvelope) => void;
     onNavigate: (route: AppRoute) => void;
     onCreateViaApi: (input: {
-        authorDid: string;
         draft: NormalizedAidPostingDraft;
         rkey: string;
         now: string;
@@ -1450,7 +1679,6 @@ interface PostingRouteProps {
 }
 
 const PostingRoute = ({
-    authorDid,
     center,
     onCreateRecord,
     onNavigate,
@@ -1510,7 +1738,6 @@ const PostingRoute = ({
 
         try {
             const createResult = await onCreateViaApi({
-                authorDid,
                 draft: validation.normalizedDraft,
                 rkey: localId,
                 now: nowIso(),
@@ -3550,19 +3777,22 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                         patch,
                     });
                 }}
-                onCloseCard={id => {
-                    applyLifecycleAction({
-                        action: 'close',
-                        id,
-                        closedAt: nowIso(),
-                    });
-                }}
+                onReplaceRecord={replacement =>
+                    setFeedRecords(current =>
+                        current.map(record =>
+                            record.aidPostUri === replacement.aidPostUri ? replacement : record,
+                        ),
+                    )
+                }
+                onDeleteRecord={aidPostUri =>
+                    setFeedRecords(current =>
+                        current.filter(record => record.aidPostUri !== aidPostUri),
+                    )
+                }
                 onTransition={(id, postUri, targetStatus) => {
                     void transitionAidPostViaApi({
                         postUri,
                         targetStatus,
-                        actorDid: currentUserDid,
-                        actorRole: 'coordinator',
                         now: nowIso(),
                     }).then(result => {
                         if (result.ok) {
@@ -3570,16 +3800,16 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                 action: 'transition',
                                 id,
                                 targetStatus,
-                                actorDid: currentUserDid,
-                                actorRole: 'coordinator',
+                                actorDid: result.data.transition.actorDid,
+                                actorRole: result.data.transition.actorRole,
                             });
                         }
                     });
                 }}
+                currentUserDid={currentUserDid}
             />
         : currentRoute === '/posting' ?
             <PostingRoute
-                authorDid={currentUserDid}
                 center={discoveryState.center ?? defaultDiscoveryCenter}
                 onCreateRecord={record => {
                     setFeedRecords(current => [record, ...current]);

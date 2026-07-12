@@ -1,10 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    type AidPostCreateApiInput,
+    type LifecycleTransitionApiInput,
+    blockUserViaApi,
     createAidPostViaApi,
     createAtAidPostViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     initiateChatViaApi,
+    reportAidPostViaApi,
+    transitionAidPostViaApi,
 } from './api-client.js';
 import type { DiscoveryFilterState } from '../discovery-filters.js';
 
@@ -47,6 +52,7 @@ describe('api client', () => {
                 results: [
                     {
                         uri: 'at://did:example:alice/app.patchwork.aid.post/post-1',
+                        cid: 'bafy-discovered',
                         authorDid: 'did:example:alice',
                         title: 'Need groceries',
                         summary: 'Two households need meal kits.',
@@ -77,6 +83,7 @@ describe('api client', () => {
         expect(result.data[0]?.card.title).toBe('Need groceries');
         expect(result.data[0]?.card.category).toBe('food');
         expect(result.data[0]?.card.urgency).toBe(4);
+        expect(result.data[0]?.cid).toBe('bafy-discovered');
 
         const firstCall = (
             fetchMock.mock.calls as unknown as Array<[unknown]>
@@ -184,6 +191,113 @@ describe('api client', () => {
         });
     });
 
+    it('reports an aid post without accepting browser-supplied identity', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({ reportId: '41', created: true }, true, 201),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const result = await reportAidPostViaApi({
+            subjectUri:
+                'at://did:plc:subject/app.patchwork.aid.post/unsafe-post',
+            reason: 'fraud',
+            details: 'The request asks users to send prepaid cards.',
+        });
+
+        expect(result).toEqual({
+            ok: true,
+            data: { reportId: '41', created: true },
+        });
+        const [, init] = (
+            fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+        )[0]!;
+        expect(init).toMatchObject({
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'content-type': 'application/json',
+                'idempotency-key': expect.any(String),
+            },
+        });
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        expect(body).toMatchObject({
+            subjectUri:
+                'at://did:plc:subject/app.patchwork.aid.post/unsafe-post',
+            reason: 'fraud',
+            details: 'The request asks users to send prepaid cards.',
+        });
+        expect(body['commandId']).toEqual(expect.any(String));
+        expect(body).not.toHaveProperty('reporterDid');
+        expect(body).not.toHaveProperty('actorDid');
+    });
+
+    it('blocks the record author without accepting browser-supplied identity', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({ blockId: '51', created: true }, true, 201),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const result = await blockUserViaApi({
+            subjectDid: 'did:plc:subject',
+            reason: 'Unsafe contact after request publication.',
+        });
+
+        expect(result).toEqual({
+            ok: true,
+            data: { blockId: '51', created: true },
+        });
+        const [, init] = (
+            fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+        )[0]!;
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        expect(body).toMatchObject({
+            subjectDid: 'did:plc:subject',
+            reason: 'Unsafe contact after request publication.',
+            commandId: expect.any(String),
+        });
+        expect(body).not.toHaveProperty('blockerDid');
+        expect(body).not.toHaveProperty('actorDid');
+    });
+
+    it('transitions lifecycle status without browser-supplied actor or role', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({
+                postUri:
+                    'at://did:plc:subject/app.patchwork.aid.post/lifecycle-1',
+                previousStatus: 'open',
+                currentStatus: 'resolved',
+                transition: {},
+                timeline: [],
+                updatedAt: '2026-07-11T00:00:00.000Z',
+            }),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const hostileInput: LifecycleTransitionApiInput & {
+            actorDid: string;
+            actorRole: string;
+        } = {
+            postUri:
+                'at://did:plc:subject/app.patchwork.aid.post/lifecycle-1',
+            targetStatus: 'resolved',
+            actorDid: 'did:plc:hostile-browser',
+            actorRole: 'admin',
+        };
+        await transitionAidPostViaApi(hostileInput);
+
+        const [, init] = (
+            fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+        )[0]!;
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        expect(body).toMatchObject({
+            postUri:
+                'at://did:plc:subject/app.patchwork.aid.post/lifecycle-1',
+            targetStatus: 'resolved',
+        });
+        expect(body).not.toHaveProperty('actorDid');
+        expect(body).not.toHaveProperty('actorRole');
+    });
+
     it('maps chat initiation fallback payload from API', async () => {
         const fetchMock = vi.fn(async () =>
             createJsonResponse({
@@ -259,8 +373,8 @@ describe('api client', () => {
 
         globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-        const result = await createAidPostViaApi({
-            authorDid: 'did:example:resident-1',
+        const hostileInput: AidPostCreateApiInput & { authorDid: string } = {
+            authorDid: 'did:plc:hostile-browser',
             rkey: 'post-new-1',
             now: '2026-02-28T18:00:00.000Z',
             draft: {
@@ -275,7 +389,8 @@ describe('api client', () => {
                     precisionMeters: 500,
                 },
             },
-        });
+        };
+        const result = await createAidPostViaApi(hostileInput);
 
         expect(result.ok).toBe(true);
         if (!result.ok) {
@@ -285,6 +400,7 @@ describe('api client', () => {
         expect(result.data.card.title).toBe('Need transport to clinic');
         expect(result.data.card.urgency).toBe(5);
         expect(result.data.aidPostUri).toContain('/post-new-1');
+        expect(result.data.recipientDid).toBe('did:example:resident-1');
 
         const firstCall = (
             fetchMock.mock.calls as unknown as Array<[unknown, unknown]>

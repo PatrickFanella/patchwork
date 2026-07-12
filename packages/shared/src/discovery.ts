@@ -15,6 +15,7 @@ import { isoDateTimeSchema } from './schemas.js';
 export interface IndexedAidRecord extends NormalizedAidPost {
     uri: string;
     authorDid: string;
+    cid?: string;
 }
 
 export interface IndexedDirectoryRecord extends NormalizedDirectoryResource {
@@ -62,6 +63,7 @@ export interface PaginatedQueryResult<T> {
 export interface RankedAidCard {
     uri: string;
     authorDid: string;
+    cid?: string;
     title: string;
     summary: string;
     category: AidPostRecord['category'];
@@ -218,7 +220,7 @@ export class DiscoveryIndexStore {
         }
 
         if (event.payload.kind === 'aid-post') {
-            this.upsertAid(event.uri, event.authorDid, event.payload);
+            this.upsertAid(event.uri, event.authorDid, event.payload, event.cid);
         }
 
         if (event.payload.kind === 'directory-resource') {
@@ -403,6 +405,7 @@ export class DiscoveryIndexStore {
         const cards: RankedAidCard[] = ranked.map(entry => ({
             uri: entry.record.uri,
             authorDid: entry.record.authorDid,
+            ...(entry.record.cid ? { cid: entry.record.cid } : {}),
             title: entry.record.title,
             summary: entry.record.description,
             category: entry.record.category,
@@ -516,6 +519,7 @@ export class DiscoveryIndexStore {
         uri: string,
         authorDid: string,
         record: NormalizedAidPost,
+        cid?: string,
     ): void {
         const existing = this.aidRecords.get(uri);
         if (existing) {
@@ -526,6 +530,7 @@ export class DiscoveryIndexStore {
             ...record,
             uri,
             authorDid,
+            ...(cid ? { cid } : {}),
         };
 
         this.aidRecords.set(uri, indexed);

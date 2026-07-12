@@ -1,0 +1,215 @@
+import { expect, test } from '@playwright/test';
+
+const subjectUri =
+    'at://did:plc:subject/app.patchwork.aid.post/browser-safety-1';
+
+test.beforeEach(async ({ page }) => {
+    await page.context().addCookies([
+        {
+            name: 'patchwork_csrf',
+            value: 'browser-csrf-token',
+            domain: 'localhost',
+            path: '/',
+        },
+    ]);
+    await page.route('http://localhost:4000/**', async route => {
+        const url = new URL(route.request().url());
+        if (url.pathname === '/auth/session') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    session: {
+                        did: 'did:plc:viewer',
+                        expiresAt: '2099-01-01T00:00:00.000Z',
+                    },
+                }),
+            });
+            return;
+        }
+        if (url.pathname === '/query/feed') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    results: [
+                        {
+                            uri: subjectUri,
+                            authorDid: 'did:plc:subject',
+                            title: 'Suspicious request',
+                            summary: 'This record should expose safety actions.',
+                            status: 'open',
+                            category: 'food',
+                            urgency: 'medium',
+                            updatedAt: '2026-07-11T00:00:00.000Z',
+                        },
+                    ],
+                }),
+            });
+            return;
+        }
+        await route.fallback();
+    });
+});
+
+test('authenticated user reports a discovered request with private details', async ({
+    page,
+}) => {
+    let reportBody: Record<string, unknown> | undefined;
+    await page.route('http://localhost:4000/reports', async route => {
+        reportBody = route.request().postDataJSON() as Record<string, unknown>;
+        await route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({ reportId: '41', created: true }),
+        });
+    });
+
+    await page.goto('/feed');
+    await page.getByRole('button', { name: 'Report suspicious request' }).click();
+    await page.getByLabel('Report reason').selectOption('fraud');
+    await page
+        .getByLabel('Private report details')
+        .fill('The request asks for prepaid gift cards.');
+    await page.getByRole('button', { name: 'Submit report' }).click();
+
+    await expect(page.getByText('Report submitted.')).toBeVisible();
+    expect(reportBody).toMatchObject({
+        subjectUri,
+        reason: 'fraud',
+        details: 'The request asks for prepaid gift cards.',
+        commandId: expect.any(String),
+    });
+    expect(reportBody).not.toHaveProperty('reporterDid');
+    expect(reportBody).not.toHaveProperty('actorDid');
+});
+
+test('authenticated user confirms a private block against the record author', async ({
+    page,
+}) => {
+    let blockBody: Record<string, unknown> | undefined;
+    let csrfHeader: string | undefined;
+    await page.route('http://localhost:4000/blocks', async route => {
+        blockBody = route.request().postDataJSON() as Record<string, unknown>;
+        csrfHeader = route.request().headers()['x-csrf-token'];
+        await route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({ blockId: '51', created: true }),
+        });
+    });
+
+    await page.goto('/feed');
+    await page
+        .getByRole('button', { name: 'Block author of Suspicious request' })
+        .click();
+    await expect(
+        page.getByRole('alertdialog', { name: 'Confirm block author' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Confirm block author' }).click();
+
+    await expect(page.getByText('Author blocked.')).toBeVisible();
+    expect(blockBody).toMatchObject({
+        subjectDid: 'did:plc:subject',
+        reason: 'Blocked from a discovered aid request.',
+        commandId: expect.any(String),
+    });
+    expect(blockBody).not.toHaveProperty('blockerDid');
+    expect(blockBody).not.toHaveProperty('actorDid');
+    expect(csrfHeader).toBe('browser-csrf-token');
+});
+
+test('record owner closes with compare-and-swap then deletes the AT record', async ({
+    page,
+}) => {
+    await page.unroute('http://localhost:4000/**');
+    const mutationBodies: Record<string, unknown>[] = [];
+    await page.route('http://localhost:4000/**', async route => {
+        const url = new URL(route.request().url());
+        if (url.pathname === '/auth/session') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    session: {
+                        did: 'did:plc:viewer',
+                        expiresAt: '2099-01-01T00:00:00.000Z',
+                    },
+                }),
+            });
+            return;
+        }
+        if (url.pathname === '/query/feed') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    results: [
+                        {
+                            uri: 'at://did:plc:viewer/app.patchwork.aid.post/owned-1',
+                            cid: 'cid-open',
+                            authorDid: 'did:plc:viewer',
+                            title: 'Owned request',
+                            summary: 'Owner can close and delete this record.',
+                            status: 'open',
+                            category: 'food',
+                            urgency: 'medium',
+                            updatedAt: '2026-07-11T00:00:00.000Z',
+                        },
+                    ],
+                }),
+            });
+            return;
+        }
+        if (url.pathname === '/at/aid-posts/close') {
+            mutationBodies.push(route.request().postDataJSON());
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    uri: 'at://did:plc:viewer/app.patchwork.aid.post/owned-1',
+                    cid: 'cid-closed',
+                    record: {
+                        $type: 'app.patchwork.aid.post',
+                        version: '1.0.0',
+                        title: 'Owned request',
+                        description: 'Owner can close and delete this record.',
+                        category: 'food',
+                        urgency: 'medium',
+                        status: 'closed',
+                        location: {
+                            latitude: 40.71,
+                            longitude: -74.01,
+                            precisionKm: 1,
+                        },
+                        createdAt: '2026-07-11T00:00:00.000Z',
+                        updatedAt: '2026-07-11T01:00:00.000Z',
+                    },
+                }),
+            });
+            return;
+        }
+        if (url.pathname === '/at/aid-posts' && route.request().method() === 'DELETE') {
+            mutationBodies.push(route.request().postDataJSON());
+            await route.fulfill({ status: 204, body: '' });
+            return;
+        }
+        await route.fallback();
+    });
+
+    await page.goto('/feed');
+    await page.getByRole('button', { name: 'Close owned request' }).click();
+    await expect(page.getByText('Request closed.')).toBeVisible();
+    await page.getByRole('button', { name: 'Delete owned request' }).click();
+    await page.getByRole('button', { name: 'Confirm delete request' }).click();
+
+    await expect(page.getByText('Owned request')).toHaveCount(0);
+    expect(mutationBodies).toEqual([
+        expect.objectContaining({ expectedCid: 'cid-open' }),
+        expect.objectContaining({ expectedCid: 'cid-closed' }),
+    ]);
+    for (const body of mutationBodies) {
+        expect(body).not.toHaveProperty('actorDid');
+        expect(body).not.toHaveProperty('authorDid');
+    }
+});

@@ -421,9 +421,17 @@ artifact. Vite rejects `VITE_DATA_MODE=fixture` for a production build.
 - [ ] Cover login, create request, discover from a second session, transition the minimal local workflow, report/block, close, and delete.
 - [ ] Assert that exact coordinates, tokens, and private moderation notes never appear in the DOM, URL, or captured network responses.
 - [ ] Run the test against PostgreSQL and disposable test-PDS accounts rather than mocked browser routes.
-- [ ] Save screenshots and traces only on failure, with a redaction check before artifact upload.
-- [ ] Run `npx playwright install chromium && npm run test:e2e -w @patchwork/web`.
-- [ ] Commit as `test(e2e): cover real AT request lifecycle`.
+- [x] Save screenshots and traces only on failure, with a redaction check before artifact upload.
+- [x] Run `npx playwright install chromium && npm run test:e2e -w @patchwork/web`.
+- [x] Commit the locally verified browser/runtime slice as `feat(web): wire durable alpha safety and owner actions`.
+
+Local evidence: `docs/operations/evidence/phase-6/alpha-browser-journey-local.md`.
+The production UI now creates records without browser-supplied authorship,
+retains projection CIDs, reports/blocks through durable authenticated HTTP, and
+closes/deletes owner records with compare-and-swap. The real two-account spec
+is executable but remains skipped until an authorized staging URL and two
+OAuth storage states are supplied; therefore the first three checklist items
+and the Phase 6 exit gate remain open.
 
 **Phase 6 exit gate:** Two browser sessions complete the real create-to-discover-to-close/delete journey against persistent services with fixture mode disabled.
 

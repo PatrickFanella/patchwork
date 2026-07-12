@@ -51,6 +51,10 @@ jobs:
             - name: Browser E2E tests (Phase 8.2)
               run: npm run test:e2e -w @patchwork/web
 
+            - name: Refuse unreviewed browser artifacts
+              if: always()
+              run: npm run test:e2e:redact
+
             - name: Dependency vulnerability scan
               run: npm audit --audit-level=high
 

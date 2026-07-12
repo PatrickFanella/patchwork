@@ -36,6 +36,10 @@ import {
     requireCapability,
 } from './authorization-guard.js';
 import { createLifecycleTransitionHandler } from './http/lifecycle-transition-handler.js';
+import {
+    createDurableSafetyHandler,
+    isDurableSafetyRoute,
+} from './http/durable-safety-handler.js';
 import { createMethodRouter } from './http/router.js';
 import { readJsonBody } from './http/json-body.js';
 import { authenticateRequest } from './http/authenticated-request.js';
@@ -195,6 +199,15 @@ const lifecycleTransitionHandler =
     authenticateApiRequest && postgresPool ?
         createLifecycleTransitionHandler({
             service: lifecycleService,
+            authenticate: authenticateApiRequest,
+            executeIdempotent: executeIdempotentMutation,
+        })
+    :   undefined;
+const durableSafetyHandler =
+    authenticateApiRequest && blockService && reportService ?
+        createDurableSafetyHandler({
+            blockService,
+            reportService,
             authenticate: authenticateApiRequest,
             executeIdempotent: executeIdempotentMutation,
         })
@@ -580,48 +593,16 @@ const handleDurableSafetyRoute = (
     response: ServerResponse,
     requestUrl: URL,
 ): boolean => {
-    const isBlock = request.method === 'POST' && requestUrl.pathname === '/blocks';
-    const isReport =
-        request.method === 'POST' && requestUrl.pathname === '/reports';
-    if (!isBlock && !isReport) return false;
-
-    void (async () => {
-        try {
-            if (!atAuthRuntime || !blockService || !reportService) {
-                writeJson(response, 503, {
-                    error: {
-                        code: 'DURABLE_CORE_UNAVAILABLE',
-                        message: 'Durable safety services are unavailable.',
-                    },
-                });
-                return;
-            }
-            const authenticated = await authenticateApiRequest!(request);
-            const body = await readJsonBody(request);
-            const result = await executeIdempotentMutation(
-                request,
-                authenticated.principal.did,
-                body,
-                commandBody =>
-                    isBlock ?
-                        blockService.block(
-                            commandBody,
-                            authenticated.principal.authorization,
-                        )
-                    :   reportService.report(
-                            commandBody,
-                            authenticated.principal.authorization,
-                        ),
-            );
-            writeJson(response, result.statusCode, result.body);
-        } catch (error) {
-            if (error instanceof AtClientError) {
-                writeAtAuthError(response, error);
-                return;
-            }
-            writeRouteError(response, error);
-        }
-    })();
+    if (!isDurableSafetyRoute(request, requestUrl)) return false;
+    if (durableSafetyHandler) {
+        return durableSafetyHandler(request, response, requestUrl);
+    }
+    writeJson(response, 503, {
+        error: {
+            code: 'DURABLE_CORE_UNAVAILABLE',
+            message: 'Durable safety services are unavailable.',
+        },
+    });
     return true;
 };
 

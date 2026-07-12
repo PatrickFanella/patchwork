@@ -198,6 +198,7 @@ export const createFixtureQueryService = (): ApiDiscoveryQueryService => {
 
 interface ProjectionRow {
     uri: string;
+    cid: string | null;
     title: string;
     description: string;
     category: string;
@@ -315,7 +316,7 @@ export class PostgresProjectionQueryService {
     }> {
         const [result, stateResult] = await Promise.all([
             this.pool.query<ProjectionRow>(
-            `SELECT uri, title, description, category, urgency, status,
+            `SELECT uri, cid, title, description, category, urgency, status,
                     searchable_text, latitude, longitude, precision_km,
                     record_created_at, record_updated_at, source_cursor,
                     projected_at
@@ -335,6 +336,7 @@ export class PostgresProjectionQueryService {
             uri: row.uri,
             collection: 'app.patchwork.aid.post',
             authorDid: authorDidFromUri(row.uri),
+            ...(row.cid ? { cid: row.cid } : {}),
             receivedAt: new Date(row.record_updated_at).toISOString(),
             payload: {
                 kind: 'aid-post',
