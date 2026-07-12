@@ -6,13 +6,17 @@ This monorepo is designed for fast local development with deterministic fixtures
 
 ## Current maturity
 
-Patchwork is a **pre-alpha prototype**, not a deployable AT Protocol service. Its
-domain contracts, lexicons, UI models, and deterministic tests are substantial,
-but real AT OAuth, repository writes, live stream ingestion, and most durable
-service state are not yet implemented. The authoritative subsystem inventory is
+Patchwork is a **pre-alpha, NO-GO system**, not an approved public service. The
+narrow alpha now has real AT client adapters, durable private state, live-event
+ingestion, PostgreSQL projections, secured HTTP commands, and fail-closed
+production data paths. Its complete browser OAuth journey and real staging
+deployment, rollback, restore, and alert exercises remain unproven. The
+authoritative subsystem inventory is
 [`docs/architecture/current-state-matrix.md`](docs/architecture/current-state-matrix.md),
 and continuation work is sequenced by the
 [`2026-07-10 continuation roadmap`](docs/superpowers/plans/2026-07-10-patchwork-continuation-roadmap.md).
+The current launch decision is the
+[`2026-07-11 alpha go/no-go review`](docs/operations/evidence/phase-8/alpha-go-no-go.md).
 
 ## What’s in this repo
 
@@ -22,7 +26,7 @@ and continuation work is sequenced by the
 - `services/moderation-worker` — moderation/trust-safety worker
 - `packages/shared` — shared contracts, config/env schemas, utilities
 - `packages/at-lexicons` — AT lexicon schemas, fixtures, and validators
-- `packages/at-client` — isolated official AT OAuth and repository client adapters (not yet wired into API startup)
+- `packages/at-client` — official AT OAuth and repository client adapters used by non-test API startup
 
 ## Patchwork component naming
 

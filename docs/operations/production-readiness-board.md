@@ -7,6 +7,14 @@ Current authority:
 - Runtime maturity: `docs/architecture/current-state-matrix.md`
 - Continuation phases and exit gates: `docs/superpowers/plans/2026-07-10-patchwork-continuation-roadmap.md`
 - Test coverage: `docs/test-traceability.md`
+- Current launch decision: `docs/operations/evidence/phase-8/alpha-go-no-go.md`
+
+## Current decision
+
+The 2026-07-11 review records **NO-GO**. Local implementation and verification
+continue, but public deployment and pilot recruitment remain prohibited until
+the real browser, immutable staging, rollback, restore, alert-game-day,
+retention, accessibility, capacity, and ownership gates have current evidence.
 
 An issue being represented by code or tests does not mean its subsystem is externally integrated, durable, or production-ready. Use the maturity matrix for that determination.
 

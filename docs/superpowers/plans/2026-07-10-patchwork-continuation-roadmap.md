@@ -519,11 +519,16 @@ exercises run through the authorized staging alert receiver and browser path.
 - Modify: `docs/operations/production-readiness-board.md`
 - Modify: `README.md`
 
-- [ ] Collect Phase 1–7 exit evidence, unresolved security findings, data-retention decisions, accessibility results, performance envelope, and operator ownership.
-- [ ] Require zero open critical/high security findings, successful restore and rollback evidence, and a green real-PDS browser journey.
-- [ ] Record a single decision: `NO-GO`, `CONDITIONAL-GO`, or `GO`, with named conditions and expiry dates for every exception.
-- [ ] Update README maturity language only to the level demonstrated by the decision.
-- [ ] Commit as `docs: record Patchwork alpha go-no-go decision`.
+- [x] Collect Phase 1–7 exit evidence, unresolved security findings, data-retention decisions, accessibility results, performance envelope, and operator ownership.
+- [x] Require zero open critical/high security findings, successful restore and rollback evidence, and a green real-PDS browser journey.
+- [x] Record a single decision: `NO-GO`, `CONDITIONAL-GO`, or `GO`, with named conditions and expiry dates for every exception.
+- [x] Update README maturity language only to the level demonstrated by the decision.
+- [x] Commit as `docs: record Patchwork alpha go-no-go decision`.
+
+Decision evidence: `docs/operations/evidence/phase-8/alpha-go-no-go.md`. The
+result is `NO-GO` with no exceptions because the mandatory browser, staging,
+rollback, restore, alert-delivery, retention, accessibility, capacity, and
+human-ownership evidence is incomplete.
 
 ### Task 8.2: Re-evaluate expansion features
 
