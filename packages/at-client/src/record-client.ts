@@ -96,7 +96,7 @@ export interface GetRecordInput {
 
 export interface PutRecordInput extends CreateRecordInput {
     rkey: string;
-    swapRecord: string;
+    swapRecord?: string;
 }
 
 export interface DeleteRecordInput {
@@ -155,14 +155,18 @@ const parseAidPostUri = (
 export class AidPostRecordClient {
     constructor(private readonly transport: AtRecordTransport) {}
 
-    async create(input: unknown): Promise<AidPostRecordResult> {
+    async create(input: unknown, rkey?: string): Promise<AidPostRecordResult> {
         try {
             const record = validateAidPost(input);
-            const result = await this.transport.createRecord({
+            const createInput = {
                 repo: this.transport.did,
                 collection: COLLECTION,
                 record,
-            });
+            };
+            const result =
+                rkey ?
+                    await this.transport.putRecord({ ...createInput, rkey })
+                :   await this.transport.createRecord(createInput);
             return { ...result, record };
         } catch (error) {
             throw toAtClientError(error, 'Unable to create the AT aid-post record.');

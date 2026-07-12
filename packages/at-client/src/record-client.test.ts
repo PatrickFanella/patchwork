@@ -69,6 +69,21 @@ describe('AidPostRecordClient', () => {
         });
     });
 
+    it('uses a deterministic put when an idempotent create key is supplied', async () => {
+        const at = transport();
+        const client = new AidPostRecordClient(at);
+
+        await client.create(validRecord, 'pw123');
+
+        expect(at.createRecord).not.toHaveBeenCalled();
+        expect(at.putRecord).toHaveBeenCalledWith({
+            repo: 'did:plc:alice',
+            collection: 'app.patchwork.aid.post',
+            rkey: 'pw123',
+            record: validRecord,
+        });
+    });
+
     it('rejects a public record below the alpha one-kilometre precision floor', async () => {
         const client = new AidPostRecordClient(transport());
 

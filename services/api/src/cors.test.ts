@@ -123,6 +123,9 @@ describe('getCorsHeaders', () => {
             expect(headers['access-control-allow-headers']).toContain(
                 'X-CSRF-Token',
             );
+            expect(headers['access-control-allow-headers']).toContain(
+                'Idempotency-Key',
+            );
             expect(headers['access-control-max-age']).toBe('86400');
             expect(headers['vary']).toBe('Origin');
             expect(headers['access-control-allow-origin']).not.toBe('*');

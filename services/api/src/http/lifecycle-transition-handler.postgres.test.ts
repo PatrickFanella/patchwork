@@ -9,12 +9,18 @@ import { createLifecycleService } from '../lifecycle-service.js';
 import { createLifecycleTransitionHandler } from './lifecycle-transition-handler.js';
 import { authenticateRequest } from './authenticated-request.js';
 import { AtClientError } from '@patchwork/at-client';
+import { PostgresIdempotencyExecutor } from './idempotency-store.js';
+import {
+    idempotencyKeyFromRequest,
+    withIdempotencyKey,
+} from './idempotent-request.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithPostgres = databaseUrl ? describe : describe.skip;
 
 const startServer = async (pool: Pool): Promise<{ server: Server; baseUrl: string }> => {
     const roles = new PostgresRoleRepository(pool);
+    const idempotency = new PostgresIdempotencyExecutor(pool);
     const handler = createLifecycleTransitionHandler({
         service: createLifecycleService(new PostgresLifecycleRepository(pool)),
         authenticate: request =>
@@ -30,6 +36,20 @@ const startServer = async (pool: Pool): Promise<{ server: Server; baseUrl: strin
                 },
                 resolveRole: did => roles.resolve(did),
             }),
+        executeIdempotent: (request, actorDid, body, effect) => {
+            const key = idempotencyKeyFromRequest(request);
+            const commandBody = withIdempotencyKey(body, key);
+            return idempotency.execute(
+                {
+                    actorDid,
+                    method: request.method ?? 'POST',
+                    pathname: '/aid/post/transition',
+                    idempotencyKey: key,
+                    body: commandBody,
+                },
+                () => effect(commandBody),
+            );
+        },
     });
     const server = createServer((request, response) => {
         const url = new URL(request.url ?? '/', 'http://localhost');
@@ -101,7 +121,13 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
             ),
         );
         await pool.query(
-            'TRUNCATE platform_roles, operational_audit_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
+            await readFile(
+                new URL('../db/migrations/0011_http_idempotency.sql', import.meta.url),
+                'utf8',
+            ),
+        );
+        await pool.query(
+            'TRUNCATE http_idempotency_commands, platform_roles, operational_audit_events, request_transition_events, request_workflows RESTART IDENTITY CASCADE',
         );
     });
 
@@ -124,6 +150,7 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
             headers: {
                 'content-type': 'application/json',
                 cookie: 'patchwork_session=alice-session',
+                'idempotency-key': request.commandId,
             },
             body: JSON.stringify(request),
         });
@@ -138,6 +165,7 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
                 headers: {
                     'content-type': 'application/json',
                     cookie: 'patchwork_session=alice-session',
+                    'idempotency-key': request.commandId,
                 },
                 body: JSON.stringify(request),
             },
@@ -211,6 +239,7 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
             headers: {
                 'content-type': 'application/json',
                 cookie: 'patchwork_session=alice-session',
+                'idempotency-key': 'http-transition-forbidden',
             },
             body: JSON.stringify({
                 commandId: 'http-transition-forbidden',
@@ -237,6 +266,7 @@ describeWithPostgres('lifecycle HTTP boundary with PostgreSQL', () => {
             headers: {
                 'content-type': 'application/json',
                 cookie: 'patchwork_session=alice-session',
+                'idempotency-key': 'http-transition-moderator',
             },
             body: JSON.stringify({
                 commandId: 'http-transition-moderator',

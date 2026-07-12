@@ -102,6 +102,10 @@ audit actor came from the authenticated gateway header.
 `idempotency-store.postgres.test.ts` proves concurrent execute-once behavior,
 durable response replay after reconstruction, canonical payload matching, and
 conflicting-key rejection against PostgreSQL.
+`idempotent-request.test.ts` proves header validation and hostile body-command
+replacement. The lifecycle PostgreSQL HTTP restart test exercises the wired
+ledger, `record-client.test.ts` proves deterministic PDS create uses the same
+record key, and the web API-client test asserts mutation header generation.
 
 ### Browser E2E
 

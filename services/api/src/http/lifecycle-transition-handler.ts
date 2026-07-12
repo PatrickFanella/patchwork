@@ -4,10 +4,20 @@ import type { LifecycleService } from '../lifecycle-service.js';
 import { PublicHttpError, writeJsonResponse, writePublicError } from './error-response.js';
 import { readJsonBody } from './json-body.js';
 import type { AuthenticatedRequest } from './authenticated-request.js';
+import {
+    IdempotencyError,
+    type IdempotentResponse,
+} from './idempotency-store.js';
 
 export interface LifecycleTransitionHandlerDependencies {
     service: LifecycleService;
     authenticate(request: IncomingMessage): Promise<AuthenticatedRequest>;
+    executeIdempotent(
+        request: IncomingMessage,
+        actorDid: string,
+        body: unknown,
+        effect: (commandBody: Record<string, unknown>) => Promise<IdempotentResponse>,
+    ): Promise<IdempotentResponse>;
 }
 
 const writeJson = (
@@ -36,14 +46,30 @@ export const createLifecycleTransitionHandler = (
         void (async () => {
             try {
                 const authenticated = await dependencies.authenticate(request);
-                const result = await dependencies.service.transitionFromBody(
-                    await readJsonBody(request),
-                    authenticated.principal.authorization,
+                const body = await readJsonBody(request);
+                const result = await dependencies.executeIdempotent(
+                    request,
+                    authenticated.principal.did,
+                    body,
+                    commandBody =>
+                        dependencies.service.transitionFromBody(
+                            commandBody,
+                            authenticated.principal.authorization,
+                        ),
                 );
                 writeJson(response, result.statusCode, result.body);
             } catch (error) {
                 if (error instanceof PublicHttpError) {
                     writePublicError(response, error);
+                    return;
+                }
+                if (error instanceof IdempotencyError) {
+                    writeJson(response, 409, {
+                        error: {
+                            code: error.code,
+                            message: 'Idempotency key reused for another command.',
+                        },
+                    });
                     return;
                 }
                 if (error instanceof AtClientError) {

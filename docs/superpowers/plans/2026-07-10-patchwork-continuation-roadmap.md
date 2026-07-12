@@ -277,12 +277,17 @@ Compose. Development and tests may still opt into the explicit fixture runtime.
 - Modify: `docs/test-traceability.md`
 
 - [x] Remove query-parameter login, token refresh, mutation, and administrative routes.
-- [ ] Convert mutations to `POST`, `PATCH`, or `DELETE` with JSON bodies and explicit idempotency keys.
+- [x] Convert mutations to `POST`, `PATCH`, or `DELETE` with JSON bodies and explicit idempotency keys.
 - [x] Verify logs and request IDs never contain passwords, tokens, exact coordinates, or unredacted DIDs where redaction is required.
 - [x] Add a repository scan that fails CI if sensitive or mutation data is read from `URLSearchParams` in runtime entrypoints.
-- [ ] Commit as `fix(security): remove query-string credentials and mutations`.
+- [x] Commit the compatibility removal and durable idempotency work as focused verified slices.
 
 **Phase 4 exit gate:** The API passes an authenticated authorization matrix and perimeter test suite; no credential or mutation input is transported in a query string.
+
+Exit evidence: authenticated PostgreSQL lifecycle HTTP, perimeter, URL-guard,
+moderation service-auth, and durable command-ledger suites are green. Domain
+mutations require an `Idempotency-Key`; body command IDs are overwritten at the
+edge, and AT creates use deterministic record keys.
 
 ## Phase 5 — Build the live ingestion and projection runtime
 

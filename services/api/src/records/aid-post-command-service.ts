@@ -3,7 +3,7 @@ import { AtClientError, type AidPostRecordResult } from '@patchwork/at-client';
 import { z } from 'zod';
 
 export interface AidPostClient {
-    create(record: unknown): Promise<AidPostRecordResult>;
+    create(record: unknown, rkey?: string): Promise<AidPostRecordResult>;
     get(uri: string): Promise<AidPostRecordResult>;
     update(
         uri: string,
@@ -109,9 +109,14 @@ export class AidPostCommandService {
     async create(
         sessionToken: string,
         record: unknown,
+        idempotencyKey?: string,
     ): Promise<AidPostRecordResult> {
         const client = await this.clientFactory(sessionToken);
-        return client.create(record);
+        const rkey =
+            idempotencyKey ?
+                `pw${createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 22)}`
+            :   undefined;
+        return rkey ? client.create(record, rkey) : client.create(record);
     }
 
     async get(
@@ -238,3 +243,4 @@ export class AidPostCommandService {
         }
     }
 }
+import { createHash } from 'node:crypto';

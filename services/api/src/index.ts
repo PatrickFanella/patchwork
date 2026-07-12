@@ -40,6 +40,15 @@ import { readJsonBody } from './http/json-body.js';
 import { authenticateRequest } from './http/authenticated-request.js';
 import { createGracefulShutdown } from './http/graceful-shutdown.js';
 import { createModerationGateway } from './http/moderation-gateway.js';
+import {
+    idempotencyKeyFromRequest,
+    withIdempotencyKey,
+} from './http/idempotent-request.js';
+import {
+    IdempotencyError,
+    PostgresIdempotencyExecutor,
+    type IdempotentResponse,
+} from './http/idempotency-store.js';
 import { securityHeaders } from './http/security-headers.js';
 import {
     assertCsrfProtection,
@@ -110,6 +119,42 @@ const moderationGateway =
             serviceToken: config.MODERATION_SERVICE_TOKEN,
         })
     :   undefined;
+const idempotencyExecutor =
+    postgresPool ? new PostgresIdempotencyExecutor(postgresPool) : undefined;
+
+const executeIdempotentMutation = async (
+    request: IncomingMessage,
+    actorDid: string,
+    body: unknown,
+    effect: (
+        commandBody: Record<string, unknown>,
+        idempotencyKey: string,
+    ) => Promise<IdempotentResponse>,
+    field: 'commandId' | 'idempotencyKey' | null = 'commandId',
+): Promise<IdempotentResponse> => {
+    if (!idempotencyExecutor) {
+        throw new PublicHttpError(
+            503,
+            'IDEMPOTENCY_STORE_UNAVAILABLE',
+            'Durable command processing is unavailable.',
+        );
+    }
+    const idempotencyKey = idempotencyKeyFromRequest(request);
+    const commandBody =
+        field ?
+            withIdempotencyKey(body, idempotencyKey, field)
+        :   { ...(body as Record<string, unknown>) };
+    return idempotencyExecutor.execute(
+        {
+            actorDid,
+            method: request.method ?? 'POST',
+            pathname: new URL(request.url ?? '/', 'http://localhost').pathname,
+            idempotencyKey,
+            body: commandBody,
+        },
+        () => effect(commandBody, idempotencyKey),
+    );
+};
 
 const aidPostCommandService =
     atAuthRuntime ?
@@ -125,6 +170,7 @@ const lifecycleTransitionHandler =
         createLifecycleTransitionHandler({
             service: lifecycleService,
             authenticate: authenticateApiRequest,
+            executeIdempotent: executeIdempotentMutation,
         })
     :   undefined;
 
@@ -242,6 +288,15 @@ const writeJson = (
 };
 
 const writeRouteError = (response: ServerResponse, error: unknown): void => {
+    if (error instanceof IdempotencyError) {
+        writeJson(response, 409, {
+            error: {
+                code: error.code,
+                message: 'The idempotency key was already used for another command.',
+            },
+        });
+        return;
+    }
     writePublicError(response, error);
 };
 
@@ -407,7 +462,11 @@ const handleRealAuthRoute = (
             response.writeHead(405, { allow: 'GET, POST, DELETE' });
             response.end();
         } catch (error) {
-            writeAtAuthError(response, error);
+            if (error instanceof AtClientError) {
+                writeAtAuthError(response, error);
+                return;
+            }
+            writeRouteError(response, error);
         }
     })();
     return true;
@@ -417,6 +476,10 @@ const writeAidPostCommandError = (
     response: ServerResponse,
     error: unknown,
 ): void => {
+    if (error instanceof IdempotencyError) {
+        writeRouteError(response, error);
+        return;
+    }
     if (error instanceof PublicHttpError) {
         writeRouteError(response, error);
         return;
@@ -465,19 +528,28 @@ const handleDurableSafetyRoute = (
             }
             const authenticated = await authenticateApiRequest!(request);
             const body = await readJsonBody(request);
-            const result =
-                isBlock ?
-                    await blockService.block(
-                        body,
-                        authenticated.principal.authorization,
-                    )
-                :   await reportService.report(
-                        body,
-                        authenticated.principal.authorization,
-                    );
+            const result = await executeIdempotentMutation(
+                request,
+                authenticated.principal.did,
+                body,
+                commandBody =>
+                    isBlock ?
+                        blockService.block(
+                            commandBody,
+                            authenticated.principal.authorization,
+                        )
+                    :   reportService.report(
+                            commandBody,
+                            authenticated.principal.authorization,
+                        ),
+            );
             writeJson(response, result.statusCode, result.body);
         } catch (error) {
-            writeAtAuthError(response, error);
+            if (error instanceof AtClientError) {
+                writeAtAuthError(response, error);
+                return;
+            }
+            writeRouteError(response, error);
         }
     })();
     return true;
@@ -519,11 +591,22 @@ const handleAidPostCommandRoute = (
                 request.method === 'POST' &&
                 requestUrl.pathname === '/at/aid-posts'
             ) {
-                const result = await aidPostCommandService.create(
-                    sessionToken,
-                    await readJsonBody(request),
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    authenticated.principal.did,
+                    body,
+                    async (commandBody, idempotencyKey) => ({
+                        statusCode: 201,
+                        body: await aidPostCommandService.create(
+                            sessionToken,
+                            commandBody,
+                            idempotencyKey,
+                        ),
+                    }),
+                    null,
                 );
-                writeJson(response, 201, result);
+                writeJson(response, result.statusCode, result.body);
                 return;
             }
 
@@ -531,11 +614,21 @@ const handleAidPostCommandRoute = (
                 request.method === 'PUT' &&
                 requestUrl.pathname === '/at/aid-posts'
             ) {
-                const result = await aidPostCommandService.update(
-                    sessionToken,
-                    await readJsonBody(request),
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    authenticated.principal.did,
+                    body,
+                    async commandBody => ({
+                        statusCode: 200,
+                        body: await aidPostCommandService.update(
+                            sessionToken,
+                            commandBody,
+                        ),
+                    }),
+                    null,
                 );
-                writeJson(response, 200, result);
+                writeJson(response, result.statusCode, result.body);
                 return;
             }
 
@@ -543,11 +636,21 @@ const handleAidPostCommandRoute = (
                 request.method === 'POST' &&
                 requestUrl.pathname === '/at/aid-posts/status/reconcile'
             ) {
-                const result = await aidPostCommandService.reconcileStatus(
-                    sessionToken,
-                    await readJsonBody(request),
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    authenticated.principal.did,
+                    body,
+                    async commandBody => ({
+                        statusCode: 200,
+                        body: await aidPostCommandService.reconcileStatus(
+                            sessionToken,
+                            commandBody,
+                        ),
+                    }),
+                    null,
                 );
-                writeJson(response, 200, result);
+                writeJson(response, result.statusCode, result.body);
                 return;
             }
 
@@ -555,11 +658,21 @@ const handleAidPostCommandRoute = (
                 request.method === 'POST' &&
                 requestUrl.pathname === '/at/aid-posts/close'
             ) {
-                const result = await aidPostCommandService.close(
-                    sessionToken,
-                    await readJsonBody(request),
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    authenticated.principal.did,
+                    body,
+                    async commandBody => ({
+                        statusCode: 200,
+                        body: await aidPostCommandService.close(
+                            sessionToken,
+                            commandBody,
+                        ),
+                    }),
+                    null,
                 );
-                writeJson(response, 200, result);
+                writeJson(response, result.statusCode, result.body);
                 return;
             }
 
@@ -567,11 +680,21 @@ const handleAidPostCommandRoute = (
                 request.method === 'DELETE' &&
                 requestUrl.pathname === '/at/aid-posts'
             ) {
-                await aidPostCommandService.delete(
-                    sessionToken,
-                    await readJsonBody(request),
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    authenticated.principal.did,
+                    body,
+                    async commandBody => {
+                        await aidPostCommandService.delete(
+                            sessionToken,
+                            commandBody,
+                        );
+                        return { statusCode: 204, body: null };
+                    },
+                    null,
                 );
-                response.writeHead(204);
+                response.writeHead(result.statusCode);
                 response.end();
                 return;
             }
@@ -627,11 +750,20 @@ const handleModerationGatewayRoute = (
             const result =
                 method === 'GET' ?
                     await moderationGateway.readQueue(authenticated.principal.did)
-                :   await moderationGateway.command({
-                        path: requestUrl.pathname,
-                        actorDid: authenticated.principal.did,
-                        body: await readJsonBody(request),
-                    });
+                :   await executeIdempotentMutation(
+                        request,
+                        authenticated.principal.did,
+                        await readJsonBody(request),
+                        commandBody =>
+                            moderationGateway.command({
+                                path: requestUrl.pathname,
+                                actorDid: authenticated.principal.did,
+                                body: commandBody,
+                            }),
+                        requestUrl.pathname === '/moderation/policy/apply' ?
+                            'idempotencyKey'
+                        :   'commandId',
+                    );
             writeJson(response, result.statusCode, result.body);
         } catch (error) {
             if (error instanceof AuthorizationError) {
@@ -851,9 +983,15 @@ export const createApiServer = () => {
                         );
                     }
                     const authenticated = await authenticateApiRequest(request);
-                    return lifecycleService.assignRequest(
+                    return executeIdempotentMutation(
+                        request,
+                        authenticated.principal.did,
                         body,
-                        authenticated.principal.authorization,
+                        commandBody =>
+                            lifecycleService.assignRequest(
+                                commandBody,
+                                authenticated.principal.authorization,
+                            ),
                     );
                 })
                 .then(result => {
@@ -883,9 +1021,15 @@ export const createApiServer = () => {
                         );
                     }
                     const authenticated = await authenticateApiRequest(request);
-                    return lifecycleService.acceptAssignment(
+                    return executeIdempotentMutation(
+                        request,
+                        authenticated.principal.did,
                         body,
-                        authenticated.principal.authorization,
+                        commandBody =>
+                            lifecycleService.acceptAssignment(
+                                commandBody,
+                                authenticated.principal.authorization,
+                            ),
                     );
                 })
                 .then(result => {
@@ -915,9 +1059,15 @@ export const createApiServer = () => {
                         );
                     }
                     const authenticated = await authenticateApiRequest(request);
-                    return lifecycleService.declineAssignment(
+                    return executeIdempotentMutation(
+                        request,
+                        authenticated.principal.did,
                         body,
-                        authenticated.principal.authorization,
+                        commandBody =>
+                            lifecycleService.declineAssignment(
+                                commandBody,
+                                authenticated.principal.authorization,
+                            ),
                     );
                 })
                 .then(result => {
@@ -947,9 +1097,15 @@ export const createApiServer = () => {
                         );
                     }
                     const authenticated = await authenticateApiRequest(request);
-                    return lifecycleService.completeHandoff(
+                    return executeIdempotentMutation(
+                        request,
+                        authenticated.principal.did,
                         body,
-                        authenticated.principal.authorization,
+                        commandBody =>
+                            lifecycleService.completeHandoff(
+                                commandBody,
+                                authenticated.principal.authorization,
+                            ),
                     );
                 })
                 .then(result => {

@@ -222,6 +222,9 @@ describe('api client', () => {
         const init = firstCall?.[1] as RequestInit | undefined;
         expect(String(url)).toContain('/at/aid-posts');
         expect(init?.method).toBe('POST');
+        expect(init?.headers).toMatchObject({
+            'idempotency-key': expect.any(String),
+        });
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         expect(body['category']).toBe('transport');
         expect(body['urgency']).toBe('critical');

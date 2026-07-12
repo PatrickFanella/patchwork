@@ -78,6 +78,8 @@ const csrfHeaders = (): Record<string, string> => {
     return {};
 };
 
+const newIdempotencyKey = (): string => globalThis.crypto.randomUUID();
+
 type AidQueryScope = 'map' | 'feed';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -364,6 +366,7 @@ const requestJsonPost = async (
                 headers: {
                     'content-type': 'application/json',
                     accept: 'application/json',
+                    'idempotency-key': newIdempotencyKey(),
                     ...csrfHeaders(),
                 },
                 body: JSON.stringify(body),
@@ -429,6 +432,7 @@ const requestJsonPut = async (
                 headers: {
                     'content-type': 'application/json',
                     accept: 'application/json',
+                    'idempotency-key': newIdempotencyKey(),
                     ...csrfHeaders(),
                 },
                 body: JSON.stringify(body),
@@ -479,6 +483,7 @@ const requestJsonDelete = async (
                 headers: {
                     'content-type': 'application/json',
                     accept: 'application/json',
+                    'idempotency-key': newIdempotencyKey(),
                     ...csrfHeaders(),
                 },
                 body: JSON.stringify(body),

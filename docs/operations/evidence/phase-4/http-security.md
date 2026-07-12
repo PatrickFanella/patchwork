@@ -128,5 +128,16 @@ different payload, and rolls back failed effects for retry.
 
 PostgreSQL integration proves two simultaneous deliveries invoke the effect
 once, a reconstructed executor returns the durable response without invoking it
-again, and changed input raises `IDEMPOTENCY_KEY_REUSED`. This checkpoint is the
-foundation only; route wiring and deterministic external AT create keys remain.
+again, and changed input raises `IDEMPOTENCY_KEY_REUSED`.
+
+The ledger now wraps blocks, reports, lifecycle transitions, assignments,
+handoffs, AT create/update/close/reconcile/delete, and moderation commands. The
+edge overwrites hostile body command IDs with the validated header, and the web
+generates the header for every JSON mutation. AT create derives a stable hashed
+record key and uses `putRecord`, so retry after an external-write/local-commit
+crash targets the same record rather than creating another.
+
+The authenticated lifecycle HTTP restart test returns one durable response and
+one workflow effect for the repeated key. Together with the authorization,
+perimeter, query-string, and moderation service-auth suites, this satisfies the
+Phase 4 exit gate.
