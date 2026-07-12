@@ -4,7 +4,7 @@ Date: 2026-07-11
 
 ## Demonstrated
 
-- PostgreSQL migrations `0003` through `0010` apply from an empty database and
+- PostgreSQL migrations `0003` through `0011` apply from an empty database and
   replay without changes.
 - Lifecycle registration, ordered transitions, assignment, acceptance,
   decline, timeout, handoff, deletion reconciliation, and public-status sync
@@ -36,8 +36,9 @@ npm run check
 ```
 
 The isolated PostgreSQL integration run used loopback port 5433 so the existing
-home-network service on port 5432 remained untouched. Ten migrations applied,
-the replay skipped all ten, and 20 PostgreSQL/HTTP integration tests passed.
+home-network service on port 5432 remained untouched. Eleven migrations apply
+and replay without changes; the focused Phase 3 run recorded 20 PostgreSQL/HTTP
+integration tests, with later Phase 4 additions tracked separately.
 
 Automatic repository-event reconciliation remains part of the live-indexer
 phase; the current public-status command is author initiated and does not weaken

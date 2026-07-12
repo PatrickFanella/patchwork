@@ -117,3 +117,16 @@ the immutable audit entry records the gateway actor rather than the hostile
 body actor. Worker error logging emits only a fixed event and route pathname.
 The remaining Phase 4 gap is effectful idempotency enforcement across every
 mutation.
+
+## Durable idempotency ledger checkpoint
+
+API migration `0011_http_idempotency.sql` adds a command ledger keyed by actor,
+method, pathname, and idempotency key. The executor hashes canonical JSON,
+serializes concurrent delivery with a row lock, stores the completed public
+status/body, replays it after repository reconstruction, rejects reuse with a
+different payload, and rolls back failed effects for retry.
+
+PostgreSQL integration proves two simultaneous deliveries invoke the effect
+once, a reconstructed executor returns the durable response without invoking it
+again, and changed input raises `IDEMPOTENCY_KEY_REUSED`. This checkpoint is the
+foundation only; route wiring and deterministic external AT create keys remain.

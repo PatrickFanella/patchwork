@@ -99,6 +99,9 @@ mutation is now `405` and the JSON route refuses fixture persistence.
 session-derived actor while stripping hostile actor fields. Worker live HTTP
 coverage proves credential rejection; its PostgreSQL branch proves the durable
 audit actor came from the authenticated gateway header.
+`idempotency-store.postgres.test.ts` proves concurrent execute-once behavior,
+durable response replay after reconstruction, canonical payload matching, and
+conflicting-key rejection against PostgreSQL.
 
 ### Browser E2E
 
