@@ -1,5 +1,10 @@
 # Privacy Policy
 
+> **Unapproved draft — not in force.** Patchwork is `NO-GO` and has no approved
+> public service. Described user-rights workflows such as export, account
+> deactivation, correction, and consent controls are commitments that must be
+> implemented and legally approved before this document can become effective.
+
 **Effective date:** [DATE]
 **Last updated:** [DATE]
 

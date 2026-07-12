@@ -122,9 +122,10 @@ Posted: YYYY-MM-DD HH:MM UTC
 
 ## 4. Response Procedures by Alert Type
 
-Each procedure references the alert rules defined in
-[alerting-policy.md](alerting-policy.md). All services emit structured alert
-logs via `formatAlertLog()` in `packages/shared/src/alerting.ts`.
+Each procedure references the executable Prometheus rules defined in
+[alerting-policy.md](alerting-policy.md). Services emit source metrics and
+redacted structured operational events; Prometheus and the external alert
+receiver evaluate and deliver alerts.
 
 ### API error rate
 

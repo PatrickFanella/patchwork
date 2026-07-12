@@ -8,6 +8,8 @@ Current authority:
 - Continuation phases and exit gates: `docs/superpowers/plans/2026-07-10-patchwork-continuation-roadmap.md`
 - Test coverage: `docs/test-traceability.md`
 - Current launch decision: `docs/operations/evidence/phase-8/alpha-go-no-go.md`
+- Final continuation snapshot: `docs/operations/evidence/phase-8/final-continuation-report.md`
+- Approval-gated closure plan: `docs/operations/evidence/phase-8/project-closure.md`
 
 ## Current decision
 

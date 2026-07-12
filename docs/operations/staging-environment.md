@@ -100,11 +100,15 @@ Both must pass for `allowed: true`. See the `PromotionGateResult` type for detai
 
 ## Staging Ownership
 
+The entries below are role placeholders, not accepted assignments or working
+contact addresses. Replace them with named owners during the required staging
+approval; until then the ownership gate is unmet.
+
 | Responsibility | Owner |
 |---------------|-------|
 | Environment health | INFRA team |
-| Primary on-call | infra-oncall@patchwork.community |
-| Escalation | eng-lead@patchwork.community |
+| Primary on-call | Unassigned placeholder |
+| Escalation | Unassigned placeholder |
 | Deployment pipeline | `ci.yml` deploy-staging job |
 
 ## Make Targets

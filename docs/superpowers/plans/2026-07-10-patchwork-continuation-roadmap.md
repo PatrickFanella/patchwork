@@ -90,7 +90,7 @@ flowchart LR
 - [x] Replace dated board statuses with links to this matrix; preserve old issue numbers only as historical references.
 - [x] Add a README “Current maturity” section stating that the repository is a pre-alpha until Phase 7 closes.
 - [x] Run `rg -n "production-ready|AT Protocol-native|fully implemented" README.md docs` and reconcile claims that conflict with the matrix.
-- [ ] Commit as `docs: establish Patchwork current-state matrix`.
+- [x] Commit the current-state matrix and architecture reset (`23aecd7`).
 
 ### Task 1.2: Decide AT and private-data boundaries
 
@@ -106,7 +106,7 @@ flowchart LR
 - [x] Specify deletion behavior from repository tombstone through projection removal, cache invalidation, and private audit retention.
 - [x] Specify that exact coordinates never enter AT records, public projections, URLs, or application logs.
 - [x] Record the selected ingestion source—Jetstream for the alpha unless a measured requirement demands the repository firehose—and its consistency limits.
-- [ ] Commit as `docs: define AT alpha data boundaries`.
+- [x] Commit the AT alpha data boundaries (`23aecd7`).
 
 **Phase 1 exit gate:** A new engineer can classify every subsystem and determine the authoritative storage location for every alpha datum without consulting the historical wave plans.
 
@@ -500,7 +500,7 @@ until GHCR publication and an authorized staging deployment actually run.
 
 Local progress: backup publication is now archive-validated, checksummed, and
 atomic; restore is empty-target-only, invalidates all restored sessions, runs
-operator-defined invariants, and reports RTO/RPO measurements. Seven executable
+operator-defined invariants, and reports RTO/RPO measurements. Eleven executable
 Prometheus rules validate with `promtool`, and the API, indexer, moderation, and
 backup paths emit their required source metrics. An isolated PostgreSQL 16
 drill recovered workflow, projection, and moderation state while removing all
@@ -553,7 +553,7 @@ any future selected slice must receive.
 - Create: `docs/operations/evidence/phase-8/project-closure.md` when the decision is `NO-GO`
 
 - [ ] For a pilot, define participant count, geography, support hours, escalation owner, consent language, data-retention window, success metrics, and immediate shutdown triggers.
-- [ ] For closure, document retained reusable assets, data destruction steps, infrastructure shutdown, dependency archival, and repository status.
+- [x] For closure, document retained reusable assets, data destruction steps, infrastructure shutdown, dependency archival, and repository status.
 - [ ] Do not begin expansion work until the pilot or closure document is approved by product, engineering, and trust-and-safety owners.
 - [ ] Commit as `docs: charter Patchwork pilot` or `docs: close Patchwork continuation` according to the decision.
 

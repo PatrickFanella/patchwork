@@ -1,5 +1,9 @@
 # Terms of Service
 
+> **Unapproved draft — not in force.** Patchwork is `NO-GO`; this document
+> describes intended service terms and cannot be published as effective terms
+> until product/legal approval and the corresponding runtime capabilities exist.
+
 **Effective date:** [DATE]
 **Last updated:** [DATE]
 

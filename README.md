@@ -56,7 +56,7 @@ The current launch decision is the
 2. Create local env file: copy `.env.example` → `.env`
 3. Generate `ATPROTO_SESSION_ENCRYPTION_KEY` with `openssl rand -base64 32`,
    set the OAuth client ID and callback URL documented in `.env.example`, and
-   run `npm run db:up && npm run db:migrate`.
+   run `npm run db:up`, then all three migration commands listed below.
 4. Start the app surfaces you need:
     - Web: `npm run dev:web`
     - API: `npm run dev:api`
@@ -85,7 +85,10 @@ The API retains two datasource modes, but fixture mode is test-only:
     - `API_DATABASE_URL=postgresql://patchwork:patchwork@localhost:5432/patchwork`
     - `API_MODERATION_SERVICE_URL=http://localhost:4200`
     - matching `MODERATION_SERVICE_TOKEN` values for API and moderation worker
-3. Run migrations: `npm run db:migrate`
+3. Run migrations:
+    - `npm run db:migrate -w @patchwork/api`
+    - `DATABASE_URL=... npm run db:migrate -w @patchwork/indexer`
+    - `DATABASE_URL=... npm run db:migrate -w @patchwork/moderation-worker`
 4. Optionally seed deterministic discovery data: `npm run db:seed`
 5. Start API in postgres mode: `npm run dev:api`
 
@@ -170,7 +173,9 @@ Services:
 
 Monitoring:
 
-- Prometheus scrapes `/metrics` from API, Spool, and Thimble jobs via the shared network.
+- API, Spool, and Thimble expose `/metrics`, and validated rules live under
+  `monitoring/prometheus/`. The repository does not bundle or deploy a
+  Prometheus server or notification receiver.
 
 ## Architecture and protocol docs
 
