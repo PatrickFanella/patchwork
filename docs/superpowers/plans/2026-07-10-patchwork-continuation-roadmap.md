@@ -457,7 +457,7 @@ Evidence: `docs/operations/evidence/phase-7/persistent-topology.md`. Both
 manifests render only with injected production values, order all three
 migration jobs before readiness, and gate web/API startup through dependency
 readiness. All four Node 22-compatible image targets build, and a disposable
-Compose database applied API 11, indexer 3, and moderation 2 migrations.
+Compose database applies API 12, indexer 3, and moderation 2 migrations.
 Deployment to the real staging host remains Task 7.2 and the Phase 7 exit gate.
 
 ### Task 7.2: Publish and deploy immutable artifacts

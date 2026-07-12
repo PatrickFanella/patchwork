@@ -66,6 +66,12 @@ import {
     writeJsonResponse,
     writePublicError,
 } from './http/error-response.js';
+import { PostgresRetentionService } from './db/retention-service.js';
+import {
+    startRetentionScheduler,
+    type RetentionScheduler,
+} from './db/retention-scheduler.js';
+import { RetentionMetrics } from './db/retention-metrics.js';
 
 const config = loadApiConfig();
 
@@ -214,6 +220,7 @@ const durableSafetyHandler =
     :   undefined;
 
 const sliCollector = new SliCollector();
+const retentionMetrics = new RetentionMetrics();
 
 const healthChecks: HealthCheck[] = [];
 
@@ -338,7 +345,7 @@ const renderPrometheusMetrics = (): string => {
 
     const sliMetrics = sliCollector.renderPrometheus('api');
 
-    return `${baseMetrics}\n${sliMetrics}`;
+    return `${baseMetrics}\n${sliMetrics}\n${retentionMetrics.renderPrometheus()}`;
 };
 
 const writeJson = (
@@ -1226,11 +1233,39 @@ export const createApiServer = () => {
 
 export const startApiServer = () => {
     const server = createApiServer();
+    let retentionScheduler: RetentionScheduler | undefined;
+    if (postgresPool) {
+        const retention = new PostgresRetentionService(postgresPool);
+        retentionScheduler = startRetentionScheduler({
+            intervalMs: config.API_RETENTION_INTERVAL_SECONDS * 1_000,
+            enforce: async () => {
+                const result = await retention.enforce();
+                retentionMetrics.recordSuccess();
+                console.log(
+                    JSON.stringify({
+                        level: 'info',
+                        event: 'private_retention_completed',
+                        ...result,
+                    }),
+                );
+            },
+            onError: () => {
+                retentionMetrics.recordFailure();
+                console.error(
+                    JSON.stringify({
+                        level: 'error',
+                        event: 'private_retention_failed',
+                    }),
+                );
+            },
+        });
+    }
     server.listen(config.API_PORT, config.API_HOST, () => {
         console.log(
             `[api] listening on http://${config.API_HOST}:${config.API_PORT} (contracts=${CONTRACT_VERSION}, datasource=${config.API_DATA_SOURCE})`,
         );
     });
+    server.once('close', () => retentionScheduler?.stop());
     return server;
 };
 

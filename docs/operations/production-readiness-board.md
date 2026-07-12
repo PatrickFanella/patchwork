@@ -24,7 +24,7 @@ An issue being represented by code or tests does not mean its subsystem is exter
 | --- | --- | --- |
 | Program governance | #94, #95 | Historical planning artifacts; Phase 1 of the continuation roadmap replaces their status model. |
 | Runtime completeness | #96, #97, #98, #99 | Some contracts, guards, checkpoints, and tests landed; durable moderation, live ingestion, and real integration remain continuation work. |
-| Security and privacy | #100, #101, #102, #103 | CI scans, CORS, rate-limit, redaction, and policy code exist; the real authenticated HTTP perimeter and retention enforcement remain incomplete. |
+| Security and privacy | #100, #101, #102, #103 | The authenticated HTTP perimeter, privacy redaction, and scheduled API-private retention are implemented locally. Moderation retention, formal privacy approval, and deployed evidence remain incomplete. |
 | Reliability and observability | #104, #105, #106, #107 | Metrics and runbooks exist; current real staging alert, restore, rollback, and game-day evidence does not. |
 | Release engineering | #108, #109, #110, #111 | Image-build and rollout models exist; the workflow does not currently publish and deploy a verified staging release. |
 | Trust, safety, and launch | #112, #113, #114, #115 | Console models, policies, and documents exist; durable casework and pilot/GA evidence do not. |

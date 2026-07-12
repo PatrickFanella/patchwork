@@ -152,6 +152,14 @@ Stop writes, determine whether the failure is transient or data-loss related,
 and choose restart, immutable rollback, or empty-database restore. Follow the
 disaster-recovery runbook for restoration and require new OAuth login afterward.
 
+### Retention enforcement
+
+Check the API retention completion/failure event and the last-attempt and
+last-success metrics. A failed pass rolls back its entire transaction and must
+be retried only after checking database availability and migration 0012. Never
+manually broaden a deletion predicate to clear the alert. A stale pass beyond
+two hours is treated as a scheduler or API-liveness fault.
+
 Every game day records UTC timestamps, commands, alert transition and delivery,
 operator decision, recovery observation, and follow-up fixes in the Phase 7
 evidence file. Local simulations do not satisfy the staging alert-delivery gate.

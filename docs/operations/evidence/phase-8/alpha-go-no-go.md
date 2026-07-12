@@ -24,7 +24,7 @@ exceptions to the launch criteria in this decision.
 | Staging topology and delivery | Phase 7 topology and digest-deployment mechanism evidence | No signed registry digest or staging deployment/rollback run |
 | Recovery and alerting | Phase 7 isolated PostgreSQL 16 restore and seven validated alert rules | No staging restore, notification delivery, or incident exercise |
 | Security | `npm audit --omit=dev --audit-level=high`: zero vulnerabilities on 2026-07-11; delivery workflow is configured to reject high/critical Trivy findings | Dependency gate green; deployed-image scan has not run |
-| Data retention | Private rows carry retention metadata and deletion paths minimize retained data | Scheduled retention enforcement and backup-aware deletion are incomplete |
+| Data retention | API migration 0012 and an hourly non-overlapping scheduler transactionally enforce workflow, block, report, audit, authentication-state, and idempotency expiry with failure/staleness metrics | Moderation queue/audit expiry and formal privacy approval remain incomplete |
 | Accessibility | 39 Chromium cases pass, including keyboard and landmark coverage | No independent WCAG 2.2 audit or assistive-technology review |
 | Performance | Local performance contracts and capacity envelope exist | No deployed staging load envelope or database saturation measurement |
 | Operations | Role-based RACI and incident procedures exist | No named humans have accepted staging on-call, product, engineering, or trust-and-safety ownership |
@@ -37,7 +37,7 @@ Current verification baseline:
 - Chromium: 39 passed, 1 externally gated case skipped;
 - coverage: 58.18% statements, 45.86% branches, 51.40% functions,
   59.39% lines;
-- API/indexer/moderation migrations replay cleanly at 11/3/2;
+- API/indexer/moderation migrations replay cleanly at 12/3/2;
 - build, typecheck, lint, artifact redaction, and high-severity dependency audit
   pass.
 

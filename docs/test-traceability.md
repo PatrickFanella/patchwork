@@ -160,6 +160,16 @@ The committed Phase 7 evidence separately records the disposable PostgreSQL
 restore and negative-path drills. These local checks prove mechanism behavior;
 they do not replace alert delivery or browser validation on real staging.
 
+## Private-data retention
+
+`retention-service.postgres.test.ts` proves elapsed private deadlines delete
+blocks, reports, audits, and workflows with cascading timelines while future
+records remain. It also proves expired browser/OAuth state, old revoked OAuth
+sessions, and completed HTTP replay entries are pruned without deleting active
+sessions. Scheduler and metric tests cover immediate/repeated non-overlapping
+execution, clean stop, and preservation of the last-success timestamp after a
+failure. Moderation retention remains a separate worker-owned slice.
+
 ## Local full-matrix procedure
 
 ```sh

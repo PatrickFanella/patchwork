@@ -61,6 +61,12 @@ const apiSchema = baseSchema.merge(atprotoSchema).extend({
         .min(1)
         .max(86_400)
         .default(300),
+    API_RETENTION_INTERVAL_SECONDS: z.coerce
+        .number()
+        .int()
+        .min(60)
+        .max(86_400)
+        .default(3_600),
     API_MODERATION_SERVICE_URL: optionalUrlField,
     MODERATION_SERVICE_TOKEN: optionalSecretField,
     API_DATA_SOURCE: z.enum(['fixture', 'postgres']).default('fixture'),
