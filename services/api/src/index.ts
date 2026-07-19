@@ -75,6 +75,7 @@ import {
     writeJsonResponse,
     writePublicError,
 } from './http/error-response.js';
+import { createPdsSignupService } from './auth/pds-signup-service.js';
 import { PostgresRetentionService } from './db/retention-service.js';
 import {
     startRetentionScheduler,
@@ -174,6 +175,9 @@ const moderationGateway =
     :   undefined;
 const idempotencyExecutor =
     postgresPool ? new PostgresIdempotencyExecutor(postgresPool) : undefined;
+const pdsSignupService = createPdsSignupService({
+    pdsUrl: config.ATPROTO_ACCOUNT_PDS_URL,
+});
 
 const executeIdempotentMutation = async (
     request: IncomingMessage,
@@ -448,6 +452,39 @@ const handleRealAuthRoute = (
     response: ServerResponse,
     requestUrl: URL,
 ): boolean => {
+    if (request.method === 'POST' && requestUrl.pathname === '/auth/signup') {
+        void (async () => {
+            try {
+                if (request.headers.origin !== config.API_PUBLIC_ORIGIN) {
+                    throw new PublicHttpError(
+                        403,
+                        'CSRF_ORIGIN_INVALID',
+                        'The request origin is not allowed.',
+                    );
+                }
+                const body = await readJsonBody(request);
+                if (typeof body !== 'object' || body === null) {
+                    throw new PublicHttpError(
+                        400,
+                        'INVALID_REQUEST',
+                        'The request body is invalid.',
+                    );
+                }
+                const record = body as Record<string, unknown>;
+                const result = await pdsSignupService.createAccount({
+                    handle: typeof record.handle === 'string' ? record.handle : '',
+                    email: typeof record.email === 'string' ? record.email : '',
+                    password: typeof record.password === 'string' ? record.password : '',
+                    inviteCode: typeof record.inviteCode === 'string' ? record.inviteCode : '',
+                });
+                writeJson(response, 201, result);
+            } catch (error) {
+                writeRouteError(response, error);
+            }
+        })();
+        return true;
+    }
+
     if (!atAuthRuntime) return false;
 
     if (
@@ -897,6 +934,7 @@ type ApiRouteHandler = (
 
 const contractRoutes = [
     '/oauth/client-metadata.json',
+    '/auth/signup',
     '/oauth/login',
     '/oauth/callback',
     '/auth/session',

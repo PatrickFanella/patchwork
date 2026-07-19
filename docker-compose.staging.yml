@@ -195,6 +195,7 @@ services:
             NODE_ENV: production
             ATPROTO_SERVICE_DID: ${STAGING_ATPROTO_SERVICE_DID:?Set STAGING_ATPROTO_SERVICE_DID in .env}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
+            ATPROTO_ACCOUNT_PDS_URL: ${ATPROTO_ACCOUNT_PDS_URL:-https://pds.subcult.tv}
             API_DATA_SOURCE: postgres
             API_DATABASE_URL: postgresql://patchwork:${PATCHWORK_STAGING_POSTGRES_PASSWORD:?Set PATCHWORK_STAGING_POSTGRES_PASSWORD in .env}@patchwork-staging-postgres:5432/patchwork
         networks:
