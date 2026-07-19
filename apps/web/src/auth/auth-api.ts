@@ -3,6 +3,21 @@ const DEFAULT_API_BASE_URL = 'http://localhost:4000';
 const apiBaseUrl = (): string =>
     import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 
+const requestCsrfHeaders = (): Record<string, string> => {
+    if (typeof document === 'undefined') return {};
+    for (const cookie of document.cookie.split(';')) {
+        const [name, ...parts] = cookie.trim().split('=');
+        if (name === 'patchwork_csrf') {
+            try {
+                return { 'x-csrf-token': decodeURIComponent(parts.join('=')) };
+            } catch {
+                return {};
+            }
+        }
+    }
+    return {};
+};
+
 const sensitiveDestinationKeys = new Set([
     'access_token',
     'refresh_token',
@@ -27,7 +42,7 @@ export const sanitizeReturnTo = (value: string): string => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
 
-const csrfHeaders = (): Record<string, string> => {
+const cookieCsrfHeaders = (): Record<string, string> => {
     if (typeof document === 'undefined') return {};
     for (const cookie of document.cookie.split(';')) {
         const [name, ...parts] = cookie.trim().split('=');
@@ -97,6 +112,7 @@ export const beginLogin = async (
         headers: {
             accept: 'application/json',
             'content-type': 'application/json',
+            ...requestCsrfHeaders(),
         },
         body: JSON.stringify({
             handle: handle.trim(),
@@ -154,7 +170,7 @@ export const refreshSession = async (): Promise<AuthSessionSummary> => {
         credentials: 'include',
         headers: {
             accept: 'application/json',
-            ...csrfHeaders(),
+            ...cookieCsrfHeaders(),
         },
     });
     const payload: unknown = await response.json();
@@ -177,7 +193,7 @@ export const logoutSession = async (): Promise<void> => {
         credentials: 'include',
         headers: {
             accept: 'application/json',
-            ...csrfHeaders(),
+            ...cookieCsrfHeaders(),
         },
     });
     if (!response.ok) {
@@ -209,7 +225,7 @@ export const signup = async (credentials: SignupCredentials): Promise<SignupResu
         headers: {
             accept: 'application/json',
             'content-type': 'application/json',
-            ...csrfHeaders(),
+            ...cookieCsrfHeaders(),
         },
         body: JSON.stringify({
             handle: credentials.handle.trim(),

@@ -43,16 +43,6 @@ const setNativeInputValue = (input: HTMLInputElement, value: string) => {
     setter.call(input, value);
 };
 
-const setNativeInputChecked = (input: HTMLInputElement, checked: boolean) => {
-    const setter = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        'checked',
-    )?.set;
-
-    if (!setter) throw new Error('Expected native input checked setter.');
-    setter.call(input, checked);
-};
-
 const createInputEvent = (type: 'input' | 'change') =>
     typeof InputEvent === 'function' ? new InputEvent(type, { bubbles: true }) : new Event(type, { bubbles: true });
 
@@ -66,6 +56,7 @@ describe('AT authentication flow', () => {
     });
 
     it('begins OAuth with a safe intended destination and no browser token', async () => {
+        document.cookie = 'patchwork_csrf=csrf-proof; Path=/';
         const fetchMock = vi.fn(async () =>
             new Response(
                 JSON.stringify({
@@ -78,8 +69,6 @@ describe('AT authentication flow', () => {
             ),
         );
         globalThis.fetch = fetchMock as typeof fetch;
-        const navigate = vi.fn();
-
         const result = await beginLogin('alice.example.com', '/posting?from=feed');
 
         expect(result).toEqual({
@@ -91,6 +80,9 @@ describe('AT authentication flow', () => {
                 method: 'POST',
                 credentials: 'include',
                 redirect: 'error',
+                headers: expect.objectContaining({
+                    'x-csrf-token': 'csrf-proof',
+                }),
                 body: JSON.stringify({
                     handle: 'alice.example.com',
                     returnTo: '/posting?from=feed',
@@ -382,6 +374,70 @@ describe('AT authentication flow', () => {
 
         expect(fetchMock).not.toHaveBeenCalled();
         expect(container.textContent).toContain('Passwords do not match');
+        await act(async () => root.unmount());
+    });
+
+    it('shows a recovery state when signup succeeds but OAuth begin fails', async () => {
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                new Response(
+                    JSON.stringify({ did: 'did:plc:alice', handle: 'alice.subcult.tv' }),
+                    { status: 200, headers: { 'content-type': 'application/json' } },
+                ),
+            )
+            .mockResolvedValueOnce(
+                new Response(
+                    JSON.stringify({
+                        error: {
+                            code: 'RATE_LIMITED',
+                            message: 'Temporarily rate limited.',
+                        },
+                    }),
+                    { status: 429, headers: { 'content-type': 'application/json' } },
+                ),
+            );
+        globalThis.fetch = fetchMock as typeof fetch;
+
+        const container = document.createElement('div');
+        const root = createRoot(container);
+        const navigate = vi.fn();
+
+        await act(async () => {
+            root.render(
+                <AuthProvider initialStatus='anonymous' navigate={navigate}>
+                    <SignupPage />
+                </AuthProvider>,
+            );
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+
+        await act(async () => {
+            const setValue = (selector: string, value: string) => {
+                const input = container.querySelector(selector) as HTMLInputElement;
+                setNativeInputValue(input, value);
+                input.dispatchEvent(createInputEvent('input'));
+                input.dispatchEvent(createInputEvent('change'));
+            };
+
+            setValue('#handle-label', 'alice');
+            setValue('#email', 'alice@example.com');
+            setValue('#password', 'password1');
+            setValue('#password-confirm', 'password1');
+            setValue('#invite-code', 'invite-123');
+            (container.querySelector('#terms-accepted') as HTMLInputElement).click();
+        });
+
+        await act(async () => {
+            (container.querySelector('form') as HTMLFormElement | null)?.requestSubmit();
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(navigate).not.toHaveBeenCalled();
+        expect(container.textContent).toContain('Account created for alice.subcult.tv.');
+        expect(container.textContent).toContain('the login page');
+        expect(container.textContent).not.toContain('invite-123');
         await act(async () => root.unmount());
     });
 

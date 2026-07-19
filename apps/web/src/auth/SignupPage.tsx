@@ -29,7 +29,7 @@ const signupErrorMessage = (error: AuthApiError): string => {
     if (error.code === 'INVALID_PASSWORD') {
         return 'Your password does not meet the requirements. It must be at least 8 characters.';
     }
-    if (error.code === 'PDS_RATE_LIMITED') {
+    if (error.code === 'PDS_RATE_LIMITED' || error.code === 'RATE_LIMITED') {
         return 'Too many signup attempts. Please wait a moment and try again.';
     }
     if (error.code === 'PDS_UNAVAILABLE') {
@@ -48,6 +48,7 @@ export const SignupPage = () => {
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<AuthApiError | null>(null);
+    const [createdAccount, setCreatedAccount] = useState<SignupResult | null>(null);
 
     const fullHandle = handleLabel.trim() ?
         `${handleLabel.trim().toLowerCase()}.subcult.tv`
@@ -107,7 +108,9 @@ export const SignupPage = () => {
                 inviteCode: inviteCode.trim(),
             });
             clearPasswords();
-            await auth.login(result.handle, returnTo);
+            setCreatedAccount(result);
+            const started = await auth.login(result.handle, returnTo);
+            if (!started) return;
         } catch (err) {
             clearPasswords();
             if (err instanceof AuthApiError) {
@@ -119,6 +122,53 @@ export const SignupPage = () => {
             setIsLoading(false);
         }
     };
+
+    if (createdAccount && auth.status === 'error') {
+        const loginUrl = `/login${
+            returnTo !== '/' ? `?returnTo=${encodeURIComponent(returnTo)}` : ''
+        }`;
+        return (
+            <main
+                id='main-content'
+                tabIndex={-1}
+                aria-labelledby='signup-recovery-heading'
+                className='mh-login-shell'
+            >
+                <section className='mh-login-intro'>
+                    <a href='/' className='mh-brand'>
+                        <span className='mh-brand-mark' aria-hidden='true'>P</span>
+                        <span>
+                            <strong>Patchwork</strong>
+                            <small>Mutual aid, block by block</small>
+                        </span>
+                    </a>
+                    <p className='mh-kicker mt-12'>Your account is ready</p>
+                    <h1
+                        id='signup-recovery-heading'
+                        className='font-heading mt-3 text-5xl font-black leading-none tracking-[-0.045em] sm:text-6xl'
+                    >
+                        One more step.
+                    </h1>
+                </section>
+                <div role='status' className='mh-card space-y-4 p-6 sm:p-8'>
+                    <p>
+                        Account created for <strong>{createdAccount.handle}</strong>.
+                    </p>
+                    <p className='text-mh-textMuted'>
+                        We could not open sign-in automatically. Your invite was
+                        already used successfully, so continue with the account
+                        you just created.
+                    </p>
+                    <a
+                        href={loginUrl}
+                        className='mh-button mh-button--primary inline-flex px-4 py-2 font-bold'
+                    >
+                        Continue to the login page
+                    </a>
+                </div>
+            </main>
+        );
+    }
 
     return (
         <main

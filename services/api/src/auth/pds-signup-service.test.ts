@@ -45,7 +45,7 @@ describe('createPdsSignupService', () => {
         async handle => {
             const service = createPdsSignupService({ pdsUrl: 'https://pds.subcult.tv' });
             await expect(
-                service.createAccount({ ...baseInput, handle }),
+                service.createAccount({ ...baseInput, handle } as unknown as typeof baseInput),
             ).rejects.toEqual(
                 expect.objectContaining({
                     code: 'RESERVED_HANDLE',
@@ -58,7 +58,7 @@ describe('createPdsSignupService', () => {
         'rejects malformed handle %s',
         async handle => {
             const service = createPdsSignupService({ pdsUrl: 'https://pds.subcult.tv' });
-            await expect(service.createAccount({ ...baseInput, handle })).rejects.toBeInstanceOf(PublicHttpError);
+            await expect(service.createAccount({ ...baseInput, handle } as unknown as typeof baseInput)).rejects.toBeInstanceOf(PublicHttpError);
         },
     );
 
@@ -69,7 +69,7 @@ describe('createPdsSignupService', () => {
         ['inviteCode', { inviteCode: '' }],
     ])('rejects invalid %s input with a stable public error', async (_field, patch) => {
         const service = createPdsSignupService({ pdsUrl: 'https://pds.subcult.tv' });
-        await expect(service.createAccount({ ...baseInput, ...patch })).rejects.toMatchObject({
+        await expect(service.createAccount({ ...baseInput, ...patch } as unknown as typeof baseInput)).rejects.toMatchObject({
             code: 'INVALID_SIGNUP_INPUT',
             statusCode: 400,
         });
@@ -82,7 +82,7 @@ describe('createPdsSignupService', () => {
         ['inviteCode', { inviteCode: undefined }],
     ])('rejects missing %s input with a stable public error', async (_field, patch) => {
         const service = createPdsSignupService({ pdsUrl: 'https://pds.subcult.tv' });
-        await expect(service.createAccount({ ...baseInput, ...patch })).rejects.toMatchObject({
+        await expect(service.createAccount({ ...baseInput, ...patch } as unknown as typeof baseInput)).rejects.toMatchObject({
             code: 'INVALID_SIGNUP_INPUT',
             statusCode: 400,
         });

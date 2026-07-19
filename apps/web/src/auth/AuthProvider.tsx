@@ -29,7 +29,7 @@ export interface AuthContextValue {
     status: AuthStatus;
     session: AuthSessionSummary | null;
     error: AuthApiError | null;
-    login(handle: string, returnTo: string): Promise<void>;
+    login(handle: string, returnTo: string): Promise<boolean>;
     refresh(): Promise<void>;
     logout(): Promise<void>;
     restore(): Promise<void>;
@@ -104,9 +104,11 @@ export const AuthProvider = ({
             try {
                 const result = await beginLogin(handle, returnTo);
                 navigate(result.authorizationUrl);
+                return true;
             } catch (cause) {
                 setError(toAuthError(cause));
                 setStatus('error');
+                return false;
             }
         },
         [navigate],

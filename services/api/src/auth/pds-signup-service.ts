@@ -2,7 +2,20 @@ import { z } from 'zod';
 import { PublicHttpError } from '../http/error-response.js';
 
 const HANDLE_SUFFIX = '.subcult.tv';
-const RESERVED_LABELS = new Set(['patchwork', 'grafana', 'edda']);
+const RESERVED_LABELS = new Set([
+    'admin',
+    'api',
+    'edda',
+    'git',
+    'grafana',
+    'mail',
+    'patchwork',
+    'pds',
+    'staging',
+    'status',
+    'support',
+    'www',
+]);
 const MAX_HANDLE_LENGTH = 63;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_PASSWORD_LENGTH = 256;

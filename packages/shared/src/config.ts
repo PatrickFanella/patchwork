@@ -46,7 +46,7 @@ const apiSchema = baseSchema.merge(atprotoSchema).extend({
     API_HOST: z.string().min(1).default('0.0.0.0'),
     API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
     API_PUBLIC_ORIGIN: z.string().url().default('http://localhost:5173'),
-    ATPROTO_ACCOUNT_PDS_URL: z.string().url().default('https://pds.subcult.tv'),
+    ATPROTO_ACCOUNT_PDS_URL: z.string().url().default('http://localhost:3000'),
     API_TRUSTED_PROXIES: z
         .string()
         .default('')
