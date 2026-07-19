@@ -20,6 +20,7 @@ const composeEnvironment = {
         'https://staging.patchwork.test/oauth/client-metadata.json',
     STAGING_ATPROTO_OAUTH_REDIRECT_URI:
         'https://staging.patchwork.test/oauth/callback',
+    ATPROTO_ACCOUNT_PDS_URL: 'http://pds.internal.test:3000',
     ATPROTO_SESSION_ENCRYPTION_KEY: 'test-production-encryption-key',
     STAGING_ATPROTO_SESSION_ENCRYPTION_KEY: 'test-staging-encryption-key',
     MODERATION_SERVICE_TOKEN: 'test-production-service-token',
@@ -77,6 +78,7 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
             const api = services['patchwork-api']?.environment;
             expect(api).toMatchObject({
                 API_DATA_SOURCE: 'postgres',
+                ATPROTO_ACCOUNT_PDS_URL: 'http://pds.internal.test:3000',
                 ATPROTO_OAUTH_CLIENT_ID: expect.stringMatching(/^https:/),
                 ATPROTO_OAUTH_REDIRECT_URI: expect.stringMatching(/^https:/),
                 ATPROTO_SESSION_ENCRYPTION_KEY: expect.any(String),

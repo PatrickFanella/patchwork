@@ -40,7 +40,7 @@ describe('createPdsSignupService', () => {
         );
     });
 
-    it.each(['patchwork.subcult.tv', 'grafana.subcult.tv', 'edda.subcult.tv'])(
+    it.each(['patchwork.subcult.tv', 'grafana.subcult.tv', 'edda.subcult.tv', 'pds.subcult.tv', 'service.subcult.tv'])(
         'rejects reserved handle %s',
         async handle => {
             const service = createPdsSignupService({ pdsUrl: 'https://pds.subcult.tv' });

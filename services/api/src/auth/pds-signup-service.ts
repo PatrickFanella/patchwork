@@ -11,6 +11,7 @@ const RESERVED_LABELS = new Set([
     'mail',
     'patchwork',
     'pds',
+    'service',
     'staging',
     'status',
     'support',
