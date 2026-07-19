@@ -188,3 +188,53 @@ export const logoutSession = async (): Promise<void> => {
         );
     }
 };
+
+export interface SignupCredentials {
+    handle: string;
+    email: string;
+    password: string;
+    inviteCode: string;
+}
+
+export interface SignupResult {
+    did: string;
+    handle: string;
+}
+
+export const signup = async (credentials: SignupCredentials): Promise<SignupResult> => {
+    const response = await fetch(`${apiBaseUrl()}/auth/signup`, {
+        method: 'POST',
+        credentials: 'include',
+        redirect: 'error',
+        headers: {
+            accept: 'application/json',
+            'content-type': 'application/json',
+            ...csrfHeaders(),
+        },
+        body: JSON.stringify({
+            handle: credentials.handle.trim(),
+            email: credentials.email.trim(),
+            password: credentials.password,
+            inviteCode: credentials.inviteCode.trim(),
+        }),
+    });
+    const payload: unknown = await response.json();
+
+    if (!response.ok) {
+        throw errorForResponse(payload, 'Unable to create account.');
+    }
+
+    // Helper returns only did/handle and drops any other fields
+    if (
+        isRecord(payload) &&
+        typeof payload.did === 'string' &&
+        typeof payload.handle === 'string'
+    ) {
+        return { did: payload.did, handle: payload.handle };
+    }
+
+    throw new AuthApiError(
+        'INVALID_SIGNUP_RESPONSE',
+        'The signup response was invalid.',
+    );
+};

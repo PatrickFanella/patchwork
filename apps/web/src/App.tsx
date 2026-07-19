@@ -2,6 +2,7 @@ import { FrontendShell } from './features/frontend-shell';
 import { AuthProvider } from './auth/AuthProvider';
 import { AuthCallbackPage } from './auth/AuthCallbackPage';
 import { LoginPage } from './auth/LoginPage';
+import { SignupPage } from './auth/SignupPage';
 
 export const APP_TITLE = 'Patchwork';
 
@@ -11,6 +12,7 @@ export const App = () => {
     return (
         <AuthProvider>
             {pathname === '/login' ? <LoginPage />
+            : pathname === '/signup' ? <SignupPage />
             : pathname === '/auth/callback' ? <AuthCallbackPage />
             : <FrontendShell appTitle={APP_TITLE} />}
         </AuthProvider>

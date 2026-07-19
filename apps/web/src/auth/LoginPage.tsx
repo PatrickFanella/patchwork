@@ -30,9 +30,11 @@ export const LoginPage = () => {
     const auth = useAuth();
     const [handle, setHandle] = useState('');
 
+    const returnTo = safeReturnTo();
+
     const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        if (handle.trim()) void auth.login(handle, safeReturnTo());
+        if (handle.trim()) void auth.login(handle, returnTo);
     };
 
     return (
@@ -90,7 +92,7 @@ export const LoginPage = () => {
                     :   'Continue with AT Protocol'}
                 </button>
                 <p className='text-xs leading-relaxed text-mh-textSoft'>
-                    You will continue on your own provider’s secure sign-in
+                    You will continue on your own provider's secure sign-in
                     page, then return here.
                 </p>
             </form>
@@ -112,6 +114,17 @@ export const LoginPage = () => {
                     </button>
                 </div>
             :   null}
+            <div className='mt-6 text-center sm:mt-8'>
+                <a
+                    href={`/signup${returnTo !== '/' ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`}
+                    className='mh-button mh-button--secondary inline-block px-6 py-3 text-base font-bold'
+                >
+                    Create a Subcult account
+                </a>
+                <p className='mt-3 text-xs text-mh-textMuted'>
+                    New to the network? Get your own handle and join the community.
+                </p>
+            </div>
         </main>
     );
 };

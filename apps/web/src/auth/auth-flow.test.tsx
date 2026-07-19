@@ -9,10 +9,12 @@ import {
     getCurrentSession,
     logoutSession,
     refreshSession,
+    signup,
 } from './auth-api.js';
 import { AuthProvider, useAuth } from './AuthProvider.js';
 import { AuthCallbackPage } from './AuthCallbackPage.js';
 import { LoginPage } from './LoginPage.js';
+import { SignupPage } from './SignupPage.js';
 
 const originalFetch = globalThis.fetch;
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
@@ -30,6 +32,29 @@ const AuthProbe = () => {
         </div>
     );
 };
+
+const setNativeInputValue = (input: HTMLInputElement, value: string) => {
+    const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value',
+    )?.set;
+
+    if (!setter) throw new Error('Expected native input value setter.');
+    setter.call(input, value);
+};
+
+const setNativeInputChecked = (input: HTMLInputElement, checked: boolean) => {
+    const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'checked',
+    )?.set;
+
+    if (!setter) throw new Error('Expected native input checked setter.');
+    setter.call(input, checked);
+};
+
+const createInputEvent = (type: 'input' | 'change') =>
+    typeof InputEvent === 'function' ? new InputEvent(type, { bubbles: true }) : new Event(type, { bubbles: true });
 
 describe('AT authentication flow', () => {
     beforeEach(() => {
@@ -53,6 +78,7 @@ describe('AT authentication flow', () => {
             ),
         );
         globalThis.fetch = fetchMock as typeof fetch;
+        const navigate = vi.fn();
 
         const result = await beginLogin('alice.example.com', '/posting?from=feed');
 
@@ -232,6 +258,229 @@ describe('AT authentication flow', () => {
         expect(html).toContain('Continue with AT Protocol');
     });
 
+    it('renders a labelled signup form without exposing secrets', () => {
+        window.history.replaceState({}, '', '/signup?returnTo=/feed?state=secret&token=secret');
+        const html = renderToStaticMarkup(
+            <AuthProvider initialStatus='anonymous'>
+                <SignupPage />
+            </AuthProvider>,
+        );
+
+        expect(html).toContain('for="handle-label"');
+        expect(html).toContain('id="handle-label"');
+        expect(html).toContain('.subcult.tv');
+        expect(html).toContain('for="email"');
+        expect(html).toContain('for="password"');
+        expect(html).toContain('for="password-confirm"');
+        expect(html).toContain('for="invite-code"');
+        expect(html).toContain('for="terms-accepted"');
+        expect(html).not.toContain('supersecret');
+        expect(html).not.toContain('invite-123');
+        expect(html).not.toContain('fake-jwt');
+        expect(html).not.toContain('fake-access');
+        expect(html).not.toContain('fake-refresh');
+    });
+
+    it('signs up with CSRF and strips fake JWT fields from the result', async () => {
+        document.cookie = 'patchwork_csrf=signup-proof; Path=/';
+        const fetchMock = vi.fn(async () =>
+            new Response(
+                JSON.stringify({
+                    did: 'did:plc:alice',
+                    handle: 'alice.subcult.tv',
+                    accessJwt: 'fake-access',
+                    refreshJwt: 'fake-refresh',
+                    jwt: 'fake-jwt',
+                }),
+                {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                },
+            ),
+        );
+        globalThis.fetch = fetchMock as typeof fetch;
+
+        const result = await signup({
+            handle: 'alice.subcult.tv',
+            email: 'alice@example.com',
+            password: 'supersecret',
+            inviteCode: 'invite-123',
+        });
+
+        expect(result).toEqual({ did: 'did:plc:alice', handle: 'alice.subcult.tv' });
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:4000/auth/signup',
+            expect.objectContaining({
+                method: 'POST',
+                credentials: 'include',
+                redirect: 'error',
+                headers: expect.objectContaining({
+                    'x-csrf-token': 'signup-proof',
+                }),
+                body: JSON.stringify({
+                    handle: 'alice.subcult.tv',
+                    email: 'alice@example.com',
+                    password: 'supersecret',
+                    inviteCode: 'invite-123',
+                }),
+            }),
+        );
+        expect(JSON.stringify(result)).not.toMatch(/accessJwt|refreshJwt|jwt|token|supersecret|invite-123/i);
+    });
+
+    it('does not submit mismatched passwords', async () => {
+        const fetchMock = vi.fn();
+        globalThis.fetch = fetchMock as typeof fetch;
+        const navigate = vi.fn();
+
+        const container = document.createElement('div');
+        const root = createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <AuthProvider initialStatus='anonymous' navigate={navigate}>
+                    <SignupPage />
+                </AuthProvider>,
+            );
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+
+        await act(async () => {
+            const handle = container.querySelector('#handle-label') as HTMLInputElement;
+            setNativeInputValue(handle, 'alice');
+            handle.dispatchEvent(createInputEvent('input'));
+            handle.dispatchEvent(createInputEvent('change'));
+
+            const email = container.querySelector('#email') as HTMLInputElement;
+            setNativeInputValue(email, 'alice@example.com');
+            email.dispatchEvent(createInputEvent('input'));
+            email.dispatchEvent(createInputEvent('change'));
+
+            const password = container.querySelector('#password') as HTMLInputElement;
+            setNativeInputValue(password, 'password1');
+            password.dispatchEvent(createInputEvent('input'));
+            password.dispatchEvent(createInputEvent('change'));
+
+            const passwordConfirm = container.querySelector('#password-confirm') as HTMLInputElement;
+            setNativeInputValue(passwordConfirm, 'password2');
+            passwordConfirm.dispatchEvent(createInputEvent('input'));
+            passwordConfirm.dispatchEvent(createInputEvent('change'));
+
+            const inviteCode = container.querySelector('#invite-code') as HTMLInputElement;
+            setNativeInputValue(inviteCode, 'invite');
+            inviteCode.dispatchEvent(createInputEvent('input'));
+            inviteCode.dispatchEvent(createInputEvent('change'));
+
+            const termsAccepted = container.querySelector('#terms-accepted') as HTMLInputElement;
+            termsAccepted.click();
+        });
+
+        await act(async () => {
+            (container.querySelector('form') as HTMLFormElement | null)?.requestSubmit();
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(container.textContent).toContain('Passwords do not match');
+        await act(async () => root.unmount());
+    });
+
+    it('submits signup and starts OAuth with sanitized returnTo', async () => {
+        window.history.replaceState({}, '', '/signup?returnTo=/posting?state=secret&code=secret');
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                new Response(
+                    JSON.stringify({
+                        did: 'did:plc:alice',
+                        handle: 'alice.subcult.tv',
+                        accessJwt: 'fake-access',
+                    }),
+                    {
+                        status: 200,
+                        headers: { 'content-type': 'application/json' },
+                    },
+                ),
+            )
+            .mockResolvedValueOnce(
+                new Response(
+                    JSON.stringify({
+                        authorizationUrl: 'https://pds.example/oauth/authorize?request=opaque',
+                    }),
+                    {
+                        status: 200,
+                        headers: { 'content-type': 'application/json' },
+                    },
+                ),
+            );
+        globalThis.fetch = fetchMock as typeof fetch;
+
+        const container = document.createElement('div');
+        const root = createRoot(container);
+        const navigate = vi.fn(() => {
+            root.unmount();
+        });
+
+        await act(async () => {
+            root.render(
+                <AuthProvider initialStatus='anonymous' navigate={navigate}>
+                    <SignupPage />
+                </AuthProvider>,
+            );
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+
+        await act(async () => {
+            const setValue = (selector: string, value: string) => {
+                const input = container.querySelector(selector) as HTMLInputElement;
+                setNativeInputValue(input, value);
+                input.dispatchEvent(createInputEvent('input'));
+                input.dispatchEvent(createInputEvent('change'));
+            };
+
+            setValue('#handle-label', 'alice');
+            setValue('#email', 'alice@example.com');
+            setValue('#password', 'password1');
+            setValue('#password-confirm', 'password1');
+            setValue('#invite-code', 'invite-123');
+
+            const termsAccepted = container.querySelector('#terms-accepted') as HTMLInputElement;
+            termsAccepted.click();
+        });
+
+        await act(async () => {
+            (container.querySelector('form') as HTMLFormElement | null)?.requestSubmit();
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            1,
+            'http://localhost:4000/auth/signup',
+            expect.objectContaining({
+                body: JSON.stringify({
+                    handle: 'alice.subcult.tv',
+                    email: 'alice@example.com',
+                    password: 'password1',
+                    inviteCode: 'invite-123',
+                }),
+            }),
+        );
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            2,
+            'http://localhost:4000/oauth/login',
+            expect.objectContaining({
+                body: JSON.stringify({
+                    handle: 'alice.subcult.tv',
+                    returnTo: '/posting',
+                }),
+            }),
+        );
+        expect(container.innerHTML).not.toContain('password1');
+        expect(container.innerHTML).not.toContain('invite-123');
+        expect(container.innerHTML).not.toContain('fake-access');
+        await act(async () => root.unmount());
+    });
+
     it('renders stale-callback recovery without reflecting OAuth parameters', () => {
         window.history.replaceState(
             {},
@@ -265,6 +514,19 @@ describe('AT authentication flow', () => {
             </AuthProvider>,
         );
         expect(unavailable).toContain('temporarily unavailable');
+    });
+
+    it('links from login to signup with a sanitized returnTo', () => {
+        window.history.replaceState({}, '', '/login?returnTo=/feed?state=secret&token=secret');
+        const html = renderToStaticMarkup(
+            <AuthProvider initialStatus='anonymous'>
+                <LoginPage />
+            </AuthProvider>,
+        );
+
+        expect(html).toContain('href="/signup?returnTo=%2Ffeed"');
+        expect(html).not.toContain('secret');
+        expect(html).not.toContain('token');
     });
 
     it('restores and clears the real provider session through public actions', async () => {
