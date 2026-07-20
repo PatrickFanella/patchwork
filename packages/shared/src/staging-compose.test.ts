@@ -12,6 +12,8 @@ const composeEnvironment = {
     STAGING_ATPROTO_SERVICE_DID: 'did:web:staging.patchwork.test',
     PATCHWORK_PUBLIC_ORIGIN: 'https://patchwork.test',
     STAGING_PUBLIC_ORIGIN: 'https://staging.patchwork.test',
+    API_TRUSTED_PROXIES: '10.0.0.0/8',
+    STAGING_API_TRUSTED_PROXIES: '10.0.0.0/8',
     VITE_API_BASE_URL: 'https://patchwork.test/api',
     STAGING_VITE_API_BASE_URL: 'https://staging.patchwork.test/api',
     ATPROTO_OAUTH_CLIENT_ID: 'https://patchwork.test/oauth/client-metadata.json',
@@ -50,6 +52,11 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
             const raw = readFileSync(resolve(repositoryRoot, filename), 'utf8');
             expect(raw).not.toContain('did:example');
             expect(raw).not.toContain('API_DATA_SOURCE:-');
+            expect(raw).toContain(
+                filename === 'docker-compose.yml' ?
+                    'API_TRUSTED_PROXIES: ${API_TRUSTED_PROXIES:?' :
+                    'API_TRUSTED_PROXIES: ${STAGING_API_TRUSTED_PROXIES:?',
+            );
 
             const { services } = renderCompose(filename);
             for (const migration of [

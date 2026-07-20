@@ -34,13 +34,39 @@ describe('createPdsSignupService', () => {
             'https://pds.subcult.tv/xrpc/com.atproto.server.createAccount',
             expect.objectContaining({
                 method: 'POST',
+                redirect: 'error',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify(baseInput),
             }),
         );
     });
 
-    it.each(['patchwork.subcult.tv', 'grafana.subcult.tv', 'edda.subcult.tv', 'pds.subcult.tv', 'service.subcult.tv'])(
+    it.each([
+        'abuse.subcult.tv',
+        'admin.subcult.tv',
+        'api.subcult.tv',
+        'auth.subcult.tv',
+        'contact.subcult.tv',
+        'edda.subcult.tv',
+        'git.subcult.tv',
+        'grafana.subcult.tv',
+        'help.subcult.tv',
+        'legal.subcult.tv',
+        'login.subcult.tv',
+        'mail.subcult.tv',
+        'oauth.subcult.tv',
+        'patchwork.subcult.tv',
+        'pds.subcult.tv',
+        'privacy.subcult.tv',
+        'security.subcult.tv',
+        'service.subcult.tv',
+        'signup.subcult.tv',
+        'staging.subcult.tv',
+        'status.subcult.tv',
+        'support.subcult.tv',
+        'terms.subcult.tv',
+        'www.subcult.tv',
+    ])(
         'rejects reserved handle %s',
         async handle => {
             const service = createPdsSignupService({ pdsUrl: 'https://pds.subcult.tv' });

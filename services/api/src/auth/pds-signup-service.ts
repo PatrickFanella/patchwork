@@ -4,16 +4,27 @@ import { PublicHttpError } from '../http/error-response.js';
 const HANDLE_SUFFIX = '.subcult.tv';
 const RESERVED_LABELS = new Set([
     'admin',
+    'abuse',
     'api',
+    'auth',
     'edda',
+    'contact',
     'git',
     'grafana',
+    'help',
     'mail',
+    'legal',
+    'login',
+    'oauth',
+    'privacy',
     'patchwork',
     'pds',
+    'security',
     'service',
+    'signup',
     'staging',
     'status',
+    'terms',
     'support',
     'www',
 ]);
@@ -98,6 +109,7 @@ export const createPdsSignupService = ({ pdsUrl, fetchImpl = fetch, timeoutMs = 
         try {
             const response = await fetchImpl(`${pdsUrl.replace(/\/$/, '')}/xrpc/com.atproto.server.createAccount`, {
                 method: 'POST',
+                redirect: 'error',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({
                     handle,
