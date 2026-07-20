@@ -221,7 +221,7 @@ services:
         environment:
             VITE_MAP_TILE_URL: ${STAGING_VITE_MAP_TILE_URL:?Set STAGING_VITE_MAP_TILE_URL to the versioned tile URL}
         healthcheck:
-            test: ['CMD-SHELL', 'wget --spider -q http://127.0.0.1${STAGING_VITE_MAP_TILE_URL:?Set STAGING_VITE_MAP_TILE_URL}']
+            test: ['CMD-SHELL', 'test -r /srv/patchwork-map/${STAGING_PATCHWORK_PM_TILES_FILENAME:?Set STAGING_PATCHWORK_PM_TILES_FILENAME} && wget -qO- http://127.0.0.1/ >/dev/null']
             interval: 10s
             timeout: 3s
             retries: 12

@@ -86,9 +86,13 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
                 'patchwork-thimble',
                 'patchwork-web',
             ]) {
-                expect(services[runtime]?.healthcheck?.test?.join(' ')).toContain(
-                    runtime === 'patchwork-web' ? '/tiles/' : '/health/ready',
+                const healthcheck = services[runtime]?.healthcheck?.test?.join(' ');
+                expect(healthcheck).toContain(
+                    runtime === 'patchwork-web' ? '/srv/patchwork-map/' : '/health/ready',
                 );
+                if (runtime === 'patchwork-web') {
+                    expect(healthcheck).toContain('wget -qO- http://127.0.0.1/');
+                }
             }
             expect(services['patchwork-web']?.environment).toMatchObject({
                 VITE_MAP_TILE_URL: '/tiles/us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
