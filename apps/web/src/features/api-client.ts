@@ -249,27 +249,43 @@ const readApiBaseUrl = (): string => {
     return DEFAULT_API_BASE_URL;
 };
 
+const joinApiPath = (basePath: string, path: string): string => {
+    const trimmedBase = basePath.replace(/\/+$/, '');
+    const trimmedPath = path.replace(/^\/+/, '');
+
+    if (!trimmedBase) {
+        return `/${trimmedPath}`;
+    }
+
+    return `${trimmedBase}/${trimmedPath}`;
+};
+
 const resolveApiUrl = (path: string, params: URLSearchParams): string => {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const baseUrl = readApiBaseUrl();
 
     let url: URL;
     if (/^https?:\/\//i.test(baseUrl)) {
+        const parsedBase = new URL(baseUrl);
         url = new URL(
-            normalizedPath,
-            baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`,
+            joinApiPath(parsedBase.pathname, normalizedPath),
+            `${parsedBase.origin}/`,
         );
+        url.search = parsedBase.search;
     } else {
         const origin =
             typeof window !== 'undefined' ?
                 window.location.origin
             :   DEFAULT_API_BASE_URL;
-        const normalizedBase =
-            baseUrl.startsWith('/') ? baseUrl : `/${baseUrl}`;
-        url = new URL(
-            `${normalizedBase.replace(/\/$/, '')}${normalizedPath}`,
+        const parsedBase = new URL(
+            baseUrl.startsWith('/') ? baseUrl : `/${baseUrl}`,
             origin,
         );
+        url = new URL(
+            joinApiPath(parsedBase.pathname, normalizedPath),
+            `${parsedBase.origin}/`,
+        );
+        url.search = parsedBase.search;
     }
 
     url.search = params.toString();

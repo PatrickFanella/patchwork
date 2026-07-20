@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     type AidPostCreateApiInput,
     type LifecycleTransitionApiInput,
@@ -18,7 +18,6 @@ import {
 import type { DiscoveryFilterState } from '../discovery-filters.js';
 
 const originalFetch = globalThis.fetch;
-
 const baseDiscoveryState: DiscoveryFilterState = {
     feedTab: 'nearby',
     center: {
@@ -37,9 +36,23 @@ const createJsonResponse = (payload: unknown, ok = true, status = 200) => {
     } as Response;
 };
 
+const setApiBaseUrl = (value: string | undefined) => {
+    if (value === undefined) {
+        vi.unstubAllEnvs();
+        return;
+    }
+
+    vi.stubEnv('VITE_API_BASE_URL', value);
+};
+
 describe('api client', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
+        setApiBaseUrl(undefined);
+    });
+
+    afterEach(() => {
+        setApiBaseUrl(undefined);
     });
 
     afterAll(() => {
@@ -152,6 +165,29 @@ describe('api client', () => {
         expect(String(url)).toContain('latitude=1.300000');
         expect(String(url)).toContain('searchText=food');
     });
+
+    it.each([
+        ['https://example.test/api', 'https://example.test/api/query/map?'],
+        ['https://example.test/api/', 'https://example.test/api/query/map?'],
+        ['/api', '/api/query/map?'],
+        ['/api/', '/api/query/map?'],
+    ] as const)(
+        'preserves configured API base path for %s',
+        async (baseUrl, expectedPrefix) => {
+            setApiBaseUrl(baseUrl);
+            const fetchMock = vi.fn(async () =>
+                createJsonResponse({ total: 0, page: 1, pageSize: 20, hasNextPage: false, results: [] }),
+            );
+            globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+            await fetchFeedRecordsFromApi(baseDiscoveryState, 'map');
+
+            const calls = fetchMock.mock.calls as unknown as Array<[string]>;
+            const url = calls[0][0];
+            expect(String(url)).toContain(expectedPrefix);
+            expect(String(url)).toContain('latitude=1.300000');
+        },
+    );
 
     it('returns API error message for directory fetch failure', async () => {
         const fetchMock = vi.fn(async () =>
