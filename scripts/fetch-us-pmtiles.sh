@@ -8,7 +8,7 @@ readonly PMTILES_CLI_SHA256="${PMTILES_CLI_SHA256:-71b2212d6796e172b8ba27c21e662
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 readonly PMTILES_REGION_GEOJSON="${PMTILES_REGION_GEOJSON:-$REPO_ROOT/deploy/maps/us-region.geojson}"
-readonly PMTILES_DESTINATION="${PMTILES_DESTINATION:-/srv/data/patchwork-map/us.pmtiles}"
+readonly PMTILES_DESTINATION_DIR="${PMTILES_DESTINATION_DIR:-/srv/data/patchwork-map}"
 readonly PMTILES_DRY_RUN="${PMTILES_DRY_RUN:-0}"
 
 readonly CURL_BIN="${CURL_BIN:-curl}"
@@ -67,7 +67,7 @@ download_cli() {
 }
 
 main() {
-  local destination="${1:-$PMTILES_DESTINATION}"
+  local destination_dir="${1:-$PMTILES_DESTINATION_DIR}"
   require_tool "$CURL_BIN"
   require_tool "$SHA256SUM_BIN"
   require_tool "$TAR_BIN"
@@ -77,17 +77,13 @@ main() {
   require_tool "$PYTHON_BIN"
   require_file "$PMTILES_REGION_GEOJSON"
   validate_region_geojson
-  local destination_dir
-  destination_dir=$(dirname "$destination")
-  local artifact_tmp checksum_tmp cli_archive headers pmtiles_bin tmp_destination tmp_checksum
+  local artifact_tmp cli_archive headers pmtiles_bin output_hash output_name final_artifact final_checksum
   tmpdir=
   tmpdir=$($MKTEMP_BIN -d)
   cleanup() { "$RM_BIN" -rf "$tmpdir"; }
   trap cleanup EXIT
   cli_archive="$tmpdir/pmtiles.tar.gz"
   artifact_tmp="$tmpdir/us.pmtiles.tmp"
-  tmp_destination="$tmpdir/$(basename -- "$destination")"
-  tmp_checksum="$tmp_destination.sha256"
 
   headers=$("$CURL_BIN" -fsSI "$PMTILES_SOURCE_URL")
   verify_content_length "$headers"
@@ -105,11 +101,17 @@ main() {
   local metadata_tmp="$tmpdir/us.pmtiles.metadata.json"
   "$pmtiles_bin" show "$artifact_tmp" --header-json > "$metadata_tmp"
   validate_pmtiles_metadata "$metadata_tmp"
-  "$SHA256SUM_BIN" "$artifact_tmp" | awk -v name="$(basename -- "$destination")" '{print $1 "  " name}' > "$tmp_checksum"
+  output_hash=$($SHA256SUM_BIN "$artifact_tmp" | awk '{print $1}')
+  output_name="us.${output_hash}.pmtiles"
+  final_artifact="$destination_dir/$output_name"
+  final_checksum="$final_artifact.sha256"
   mkdir -p "$destination_dir"
-  "$MV_BIN" -f "$artifact_tmp" "$tmp_destination"
-  "$MV_BIN" -f "$tmp_destination" "$destination"
-  "$MV_BIN" -f "$tmp_checksum" "$destination.sha256"
+  [[ ! -e "$final_artifact" ]] || fail "destination already exists: $final_artifact"
+  [[ ! -e "$final_checksum" ]] || fail "destination already exists: $final_checksum"
+  "$MV_BIN" "$artifact_tmp" "$final_artifact"
+  printf '%s  %s\n' "$output_hash" "$output_name" > "$tmpdir/$output_name.sha256"
+  "$MV_BIN" "$tmpdir/$output_name.sha256" "$final_checksum"
+  printf '{"filename":"%s","sha256":"%s","path":"%s"}\n' "$output_name" "$output_hash" "$final_artifact"
 }
 
 main "$@"

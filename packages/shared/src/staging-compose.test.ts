@@ -27,8 +27,12 @@ const composeEnvironment = {
     STAGING_ATPROTO_SESSION_ENCRYPTION_KEY: 'test-staging-encryption-key',
     MODERATION_SERVICE_TOKEN: 'test-production-service-token',
     STAGING_MODERATION_SERVICE_TOKEN: 'test-staging-service-token',
-    PATCHWORK_PM_TILES_PATH: '/tmp/us.pmtiles',
-    STAGING_PATCHWORK_PM_TILES_PATH: '/tmp/us.pmtiles',
+    PATCHWORK_PM_TILES_DIRECTORY: '/tmp/tiles',
+    PATCHWORK_PM_TILES_FILENAME: 'us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
+    STAGING_PATCHWORK_PM_TILES_DIRECTORY: '/tmp/tiles',
+    STAGING_PATCHWORK_PM_TILES_FILENAME: 'us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
+    VITE_MAP_TILE_URL: '/tiles/us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
+    STAGING_VITE_MAP_TILE_URL: '/tiles/us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
 };
 
 interface ComposeService {
@@ -54,6 +58,7 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
             const raw = readFileSync(resolve(repositoryRoot, filename), 'utf8');
             expect(raw).not.toContain('did:example');
             expect(raw).not.toContain('API_DATA_SOURCE:-');
+            expect(raw).toContain('VITE_MAP_TILE_URL: ${');
             expect(raw).toContain(
                 filename === 'docker-compose.yml' ?
                     'API_TRUSTED_PROXIES: ${API_TRUSTED_PROXIES:?' :
@@ -79,11 +84,15 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
                 'patchwork-api',
                 'patchwork-spool',
                 'patchwork-thimble',
+                'patchwork-web',
             ]) {
                 expect(services[runtime]?.healthcheck?.test?.join(' ')).toContain(
-                    '/health/ready',
+                    runtime === 'patchwork-web' ? '/tiles/' : '/health/ready',
                 );
             }
+            expect(services['patchwork-web']?.environment).toMatchObject({
+                VITE_MAP_TILE_URL: '/tiles/us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
+            });
             const api = services['patchwork-api']?.environment;
             expect(api).toMatchObject({
                 API_DATA_SOURCE: 'postgres',

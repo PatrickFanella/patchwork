@@ -4,6 +4,7 @@ import L from 'leaflet';
 import { leafletLayer } from 'protomaps-leaflet';
 import type { MapAidCard, MapCluster } from '../../map-ux.js';
 import { toApproximateMapMarker } from '../../map-ux.js';
+import { resolveMapTileUrl } from '../../config.js';
 
 export interface InteractiveMapProps {
     cards: readonly MapAidCard[];
@@ -51,6 +52,7 @@ export const InteractiveMap = ({
         () => new Set(clusters.filter(cluster => cluster.count > 1).flatMap(cluster => cluster.postIds)),
         [clusters],
     );
+    const tileUrl = resolveMapTileUrl(import.meta.env, import.meta.env.PROD);
 
     useEffect(() => {
         if (!mapRef.current || mapInstance.current) return;
@@ -59,7 +61,7 @@ export const InteractiveMap = ({
             zoomAnimation: !prefersReducedMotion.current,
             fadeAnimation: !prefersReducedMotion.current,
         }).setView([center.lat, center.lng], 9);
-        const layer = leafletLayer({ url: '/tiles/us.pmtiles', flavor: 'light', lang: 'en' });
+        const layer = leafletLayer({ url: tileUrl, flavor: 'light', lang: 'en' });
         layer.on('tileerror', (event: unknown) => {
             onTilesFailedRef.current(`Tile layer failed to load${event ? '.' : ''}`);
         });
@@ -71,7 +73,7 @@ export const InteractiveMap = ({
             mapInstance.current = null;
             map.remove();
         };
-    }, []);
+    }, [tileUrl]);
 
     useEffect(() => {
         if (!mapInstance.current) return;

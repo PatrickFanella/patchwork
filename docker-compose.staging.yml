@@ -212,15 +212,23 @@ services:
                 VITE_APP_NAME: 'Patchwork (Staging)'
                 VITE_API_BASE_URL: ${STAGING_VITE_API_BASE_URL:?Set STAGING_VITE_API_BASE_URL}
                 VITE_DATA_MODE: api
+                VITE_MAP_TILE_URL: ${STAGING_VITE_MAP_TILE_URL:?Set STAGING_VITE_MAP_TILE_URL to the versioned tile URL}
         container_name: patchwork-staging-web
         restart: unless-stopped
         depends_on:
             patchwork-api:
                 condition: service_healthy
+        environment:
+            VITE_MAP_TILE_URL: ${STAGING_VITE_MAP_TILE_URL:?Set STAGING_VITE_MAP_TILE_URL to the versioned tile URL}
+        healthcheck:
+            test: ['CMD-SHELL', 'wget --spider -q http://127.0.0.1${STAGING_VITE_MAP_TILE_URL:?Set STAGING_VITE_MAP_TILE_URL}']
+            interval: 10s
+            timeout: 3s
+            retries: 12
         volumes:
             - type: bind
-              source: ${STAGING_PATCHWORK_PM_TILES_PATH:?Set STAGING_PATCHWORK_PM_TILES_PATH to the host us.pmtiles file}
-              target: /srv/patchwork-map/us.pmtiles
+              source: ${STAGING_PATCHWORK_PM_TILES_DIRECTORY:?Set STAGING_PATCHWORK_PM_TILES_DIRECTORY to the host tile directory}
+              target: /srv/patchwork-map
               read_only: true
               bind:
                   create_host_path: false
