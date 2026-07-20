@@ -53,7 +53,7 @@
 ### Scope
 
 - Real interactive map using Leaflet + protomaps-leaflet.
-- Same-origin, self-hosted `/tiles/us.pmtiles` basemap artifact.
+- Same-origin, self-hosted `/tiles/us.<sha256>.pmtiles` basemap artifact.
 - United States coverage only.
 - Preserve semantic list/detail fallback.
 - Lazy-load map code only on `/map`.
@@ -65,11 +65,11 @@
 
 ### Acceptance evidence
 
-- [ ] `npm run check -w @patchwork/web` passes with map unit tests.
-- [ ] `npm run test -w @patchwork/web -- map-ux.test.ts` passes.
-- [ ] `npm run build -w @patchwork/web` produces a lazy-loaded `/map` chunk and no exact-pin fallback.
-- [ ] Nginx serves `/tiles/us.pmtiles` with `Range` support and immutable caching verified by `curl -I` and a byte-range request.
-- [ ] The map route shows circles/clusters for approximate locations, and records without usable geography fall back to the semantic list/detail experience.
+- [x] `npm run check` passes with map unit tests and tile script tests.
+- [x] `npm run test -w @patchwork/web -- map-ux.test.ts` passes.
+- [x] `npm run build -w @patchwork/web` produces a lazy-loaded map chunk and no exact-pin fallback.
+- [x] Nginx serves `/tiles/us.<sha256>.pmtiles` with Range support and immutable caching; byte-range requests return 206 and `/tiles/us.pmtiles` returns 404.
+- [x] The map route renders the basemap even for zero records; automated tests prove approximate circles/clusters, and records without usable geography retain the semantic list/detail fallback.
 
 ### Non-goals
 
@@ -84,8 +84,8 @@
 - `npm run test -w @patchwork/web -- map-ux.test.ts`
 - `npm run test -w @patchwork/web -- map-ux`
 - `npm run build -w @patchwork/web`
-- `curl -I http://localhost/tiles/us.pmtiles`
-- `curl -r 0-1023 -I http://localhost/tiles/us.pmtiles`
+- `curl -I http://localhost/tiles/us.<sha256>.pmtiles`
+- `curl -r 0-1023 -I http://localhost/tiles/us.<sha256>.pmtiles`
 
 ## Phase 5 — Controlled live AT indexing/projection proof
 

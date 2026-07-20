@@ -4,7 +4,9 @@
 
 **Goal:** Replace the current map placeholder behavior with a real interactive map for US-only approximate discovery while preserving the existing semantic list/detail fallback and the privacy boundary.
 
-**Architecture:** Use Leaflet + protomaps-leaflet on a lazy-loaded `/map` route. The map consumes approximate location data only, never exact pins; it must render circles and clusters at a minimum 1km precision floor, bind selection with the list and drawer, and distinguish no records, no location, API failure, and tile failure states. A same-origin `/tiles/us.pmtiles` artifact is served by Nginx with Range support and immutable caching.
+**Architecture:** Use Leaflet + protomaps-leaflet in a lazy-loaded map chunk inside the existing `/map` shell. The map consumes approximate location data only, never exact pins; it renders circles and clusters at a minimum 1km precision floor, binds selection with the list and drawer, and distinguishes no records, no location, API failure, and tile failure states. Nginx serves a same-origin, content-addressed `/tiles/us.<sha256>.pmtiles` artifact with Range support and immutable caching; the mutable `/tiles/us.pmtiles` path is intentionally unavailable.
+
+**Execution status (2026-07-20):** Complete and deployed. Runtime revision `796795b57e13ccf9a4955851c9239cb00f426db0` is healthy. The deployed archive is `us.9a7697125792ba1aa267fca4fa8751172ddd9347e00e9462beb727edf9bbde82.pmtiles`, capped at zoom 10. The current artifact was generated before the later territory context boxes were added to the source region and therefore covers the CONUS/Alaska/Hawaii pilot context; regenerate it before claiming the additional territory context documented for future archives.
 
 **Fixed decisions:**
 
@@ -27,14 +29,12 @@ Why: it keeps the first US basemap small enough for staged delivery and low-risk
 **Files:**
 
 - Modify: `apps/web/src/features/frontend-shell.tsx`
-- Modify: `apps/web/src/App.tsx`
-- Modify: `apps/web/src/main.tsx`
-- Create: `apps/web/src/map-route.tsx`
+- Create: `apps/web/src/components/map/InteractiveMap.tsx`
 
-- [ ] Add a dedicated `/map` route that lazy-loads the map code and leaves other routes untouched.
-- [ ] Keep the semantic list/detail view as the fallback when map data is missing or unavailable.
-- [ ] Ensure route loading does not pull the map bundle onto non-map pages.
-- [ ] Replace the fabricated fallback location in `toMapAidCard` with a strict optional location pass-through.
+- [x] Add a lazy-loaded map chunk inside the existing `/map` shell and leave other routes untouched.
+- [x] Keep the semantic list/detail view as the fallback when map data is missing or unavailable.
+- [x] Ensure route loading does not pull the map bundle onto non-map pages.
+- [x] Replace the fabricated fallback location in `toMapAidCard` with a strict optional location pass-through.
 
 **Verification commands:**
 
@@ -55,11 +55,11 @@ Why: it keeps the first US basemap small enough for staged delivery and low-risk
 - Modify: `apps/web/src/feed-ux.ts`
 - Modify: `packages/shared/src/privacy.ts`
 
-- [ ] Raise map marker precision to `>= 1km` using the shared privacy constant.
-- [ ] Never emit exact pins; convert approximate locations into circles/clusters only.
-- [ ] Remove the synthetic 300m fallback and any forced area label based on exact rounding.
-- [ ] Preserve `approximateGeo.precisionKm` from the API all the way into UI models.
-- [ ] Keep no-record, no-location, and malformed API results distinguishable.
+- [x] Raise map marker precision to `>= 1km` using the shared privacy constant.
+- [x] Never emit exact pins; convert approximate locations into circles/clusters only.
+- [x] Remove the synthetic 300m fallback and any forced area label based on exact rounding.
+- [x] Preserve `approximateGeo.precisionKm` from the API all the way into UI models.
+- [x] Keep no-record, no-location, and malformed API results distinguishable.
 
 **Representative interface target:**
 
@@ -87,15 +87,14 @@ export interface MapAidLocation {
 **Files:**
 
 - Create: `apps/web/src/components/map/InteractiveMap.tsx`
-- Create: `apps/web/src/components/map/MapLegend.tsx`
-- Create: `apps/web/src/components/map/MapStatusBanner.tsx`
 - Modify: `apps/web/src/features/frontend-shell.tsx`
+- Modify: `apps/web/src/styles/index.css`
 
-- [ ] Render Leaflet with protomaps-leaflet using the same-origin PMTiles source.
-- [ ] Draw circles for approximate markers and aggregate clusters when nearby markers overlap.
-- [ ] Bind selection both ways between map markers, list rows, and the detail drawer.
-- [ ] Show distinct banners for empty results, no location, API error, and tile load failure.
-- [ ] Add OSM attribution in the map control/footer area.
+- [x] Render Leaflet with protomaps-leaflet using the same-origin PMTiles source.
+- [x] Draw circles for approximate markers and aggregate clusters when nearby markers overlap.
+- [x] Bind selection both ways between map markers, list rows, and the detail drawer.
+- [x] Show distinct banners for empty results, no location, API error, and tile load failure.
+- [x] Add OSM attribution in the map control/footer area.
 
 **Representative behavior contract:**
 
@@ -126,10 +125,10 @@ type MapState =
 - Modify: `apps/web/src/features/api-client.test.ts`
 - Create: `apps/web/src/components/map/InteractiveMap.test.tsx`
 
-- [ ] Add a precision-floor test that proves `precisionKm < 1` becomes `>= 1km`.
-- [ ] Add API mapping tests for `approximateGeo.precisionKm`, missing location, malformed payload, and tile/API failure separation.
-- [ ] Add component tests for circle rendering, cluster rendering, selection binding, and fallback states.
-- [ ] Add a test proving no fabricated fallback location is used.
+- [x] Add a precision-floor test that proves `precisionKm < 1` becomes `>= 1km`.
+- [x] Add API mapping tests for `approximateGeo.precisionKm`, missing location, malformed payload, and tile/API failure separation.
+- [x] Add component tests for circle rendering, cluster rendering, selection binding, and fallback states.
+- [x] Add a test proving no fabricated fallback location is used.
 
 **Verification commands:**
 
@@ -141,7 +140,7 @@ type MapState =
 
 - Test suite captures both privacy and UX behavior.
 
-## Task 5 — Serve `/tiles/us.pmtiles` from Nginx
+## Task 5 — Serve content-addressed PMTiles from Nginx
 
 **Files:**
 
@@ -149,15 +148,15 @@ type MapState =
 - Modify: `docker-compose.yml`
 - Modify: `docker-compose.staging.yml`
 
-- [ ] Add a location block for `/tiles/us.pmtiles`.
-- [ ] Preserve HTTP Range support and immutable caching headers.
-- [ ] Keep the tile artifact same-origin to avoid cross-origin leakage.
-- [ ] Mount the artifact as a required host file in Compose.
+- [x] Add a strict location block for `/tiles/us.<sha256>.pmtiles` and return 404 for `/tiles/us.pmtiles`.
+- [x] Preserve HTTP Range support and immutable caching headers.
+- [x] Keep the tile artifact same-origin to avoid cross-origin leakage.
+- [x] Mount the artifact directory read-only and require its content-addressed filename in Compose.
 
 **Representative Nginx snippet:**
 
 ```nginx
-location /tiles/ {
+location ~ ^/tiles/us\.[0-9a-f]{64}\.pmtiles$ {
     add_header Cache-Control "public, max-age=31536000, immutable";
     try_files $uri =404;
 }
@@ -165,8 +164,9 @@ location /tiles/ {
 
 **Verification commands:**
 
-- `curl -I http://localhost/tiles/us.pmtiles`
-- `curl -r 0-1023 -I http://localhost/tiles/us.pmtiles`
+- `curl -I http://localhost/tiles/us.<sha256>.pmtiles`
+- `curl -r 0-1023 -I http://localhost/tiles/us.<sha256>.pmtiles`
+- `curl -I http://localhost/tiles/us.pmtiles` (expected 404)
 
 **Expected outcome:**
 
@@ -180,12 +180,12 @@ location /tiles/ {
 - Create: `scripts/fetch-us-pmtiles.test.sh`
 - Create: `deploy/maps/us-region.geojson`
 
-- [ ] Download the pinned PMTiles CLI release for Linux x86_64.
-- [ ] Verify the CLI SHA-256 before use.
-- [ ] Verify the pinned source build's HTTP Content-Length before extraction.
-- [ ] Extract US coverage directly from the remote archive with HTTP Range requests, `deploy/maps/us-region.geojson`, and `--maxzoom=10`; do not download the 136 GB planet archive.
-- [ ] Validate the extracted temporary artifact, checksum it, and atomically replace the destination file.
-- [ ] Fail closed on checksum mismatch, truncated download, or partial extraction.
+- [x] Download the pinned PMTiles CLI release for Linux x86_64.
+- [x] Verify the CLI SHA-256 before use.
+- [x] Verify the pinned source build's HTTP Content-Length before extraction.
+- [x] Extract US-centered coverage directly from the remote archive with HTTP Range requests, `deploy/maps/us-region.geojson`, and `--maxzoom=10`; do not download the 136 GB planet archive.
+- [x] Validate the extracted temporary artifact, checksum it, and publish it under its content-addressed filename without deleting prior versions.
+- [x] Fail closed on checksum mismatch, missing PMTiles CLI, wrong maxzoom, truncated download, or partial extraction.
 
 **Pinned first artifact:**
 
@@ -217,11 +217,11 @@ trap 'rm -rf "$tmpdir"' EXIT
 **Files:**
 
 - Modify: `docker-compose.staging.yml`
-- Modify: `docs/operations/rollback-policy.md`
+- Modify: `deploy/maps/README.md`
 
-- [ ] Require the PMTiles artifact before the web service can start.
-- [ ] Document rollout and rollback for the tile artifact alongside the app images.
-- [ ] Keep rollout atomic: replace the file only after validation succeeds.
+- [x] Require the PMTiles artifact before the web service can start without reading the archive during recurring health probes.
+- [x] Document rollout and rollback for the tile artifact alongside the app images.
+- [x] Keep rollout immutable: publish a new hash-named file only after validation succeeds and retain prior versions for rollback.
 
 **Verification commands:**
 
@@ -236,12 +236,12 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 **Files:**
 
-- Modify: `docs/operations/evidence/`
+- Create: `docs/operations/evidence/interactive-map-deployment.md`
 
-- [ ] Verify `/map` with real data and the US PMTiles artifact.
-- [ ] Confirm keyboard navigation, focus order, and drawer selection work.
-- [ ] Confirm the fallback list/detail experience still works when the map cannot load.
-- [ ] Record the exact commands and the resulting artifact hashes in evidence.
+- [x] Verify `/map` against the live empty-result API and the deployed US PMTiles artifact; marker behavior is covered with automated fixtures because no real aid request was created.
+- [x] Confirm keyboard navigation, focus behavior, Escape deselection, and shared drawer selection in component tests and UI review.
+- [x] Confirm the fallback list/detail experience remains available when the map cannot load.
+- [x] Record the exact commands and resulting artifact hashes in deployment evidence.
 
 **Verification commands:**
 
@@ -257,7 +257,7 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 - Roll out behind the `/map` route only.
 - If the tile artifact or map bundle fails, keep the list/detail fallback and disable the route entrypoint.
-- Roll back by restoring the previous web image and previous tile artifact checksum.
+- Roll back by restoring the previous web image; its embedded content-addressed URL selects the retained prior tile artifact.
 
 ## Non-goals
 
