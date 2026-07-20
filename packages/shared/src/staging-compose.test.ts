@@ -27,6 +27,8 @@ const composeEnvironment = {
     STAGING_ATPROTO_SESSION_ENCRYPTION_KEY: 'test-staging-encryption-key',
     MODERATION_SERVICE_TOKEN: 'test-production-service-token',
     STAGING_MODERATION_SERVICE_TOKEN: 'test-staging-service-token',
+    PATCHWORK_PM_TILES_PATH: '/tmp/us.pmtiles',
+    STAGING_PATCHWORK_PM_TILES_PATH: '/tmp/us.pmtiles',
 };
 
 interface ComposeService {

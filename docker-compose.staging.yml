@@ -217,6 +217,13 @@ services:
         depends_on:
             patchwork-api:
                 condition: service_healthy
+        volumes:
+            - type: bind
+              source: ${STAGING_PATCHWORK_PM_TILES_PATH:?Set STAGING_PATCHWORK_PM_TILES_PATH to the host us.pmtiles file}
+              target: /srv/patchwork-map/us.pmtiles
+              read_only: true
+              bind:
+                  create_host_path: false
         networks:
             staging-web:
                 aliases:
