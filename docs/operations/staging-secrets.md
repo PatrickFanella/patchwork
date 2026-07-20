@@ -16,6 +16,7 @@ do not commit resolved Compose output or an environment file.
 | `STAGING_ATPROTO_SESSION_ENCRYPTION_KEY` | Base64 encoding of exactly 32 random bytes | API session encryption |
 | `STAGING_PUBLIC_ORIGIN` | Canonical staging web HTTPS origin | API origin/CSRF policy |
 | `STAGING_VITE_API_BASE_URL` | Browser-visible staging API HTTPS origin | Web build |
+| `STAGING_VITE_MAP_TILE_URL` | Same-origin content-addressed URL matching `/tiles/us.<sha256>.pmtiles` | Web build |
 | `STAGING_MODERATION_SERVICE_TOKEN` | Random internal bearer secret | API and moderation worker |
 | `INDEXER_FIREHOSE_URL` | Approved Jetstream/WebSocket source | Indexer |
 

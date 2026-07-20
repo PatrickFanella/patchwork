@@ -59,7 +59,10 @@ jobs:
                   password: ${{ secrets.GITHUB_TOKEN }}
             - uses: sigstore/cosign-installer@v3
             - name: Build once
+              env:
+                  STAGING_VITE_MAP_TILE_URL: ${{ vars.STAGING_VITE_MAP_TILE_URL }}
               run: |
+                  [[ "$STAGING_VITE_MAP_TILE_URL" =~ ^/tiles/us\.[0-9a-f]{64}\.pmtiles$ ]]
                   image="${REGISTRY}/${{ matrix.image }}:${SOURCE_SHA}"
                   docker build --target ${{ matrix.target }} \
                     --build-arg GIT_SHA="${SOURCE_SHA}" \
@@ -68,6 +71,7 @@ jobs:
                     --build-arg CI_RUN_ID="${GITHUB_RUN_ID}" \
                     --build-arg VITE_API_BASE_URL="${{ vars.STAGING_VITE_API_BASE_URL }}" \
                     --build-arg VITE_DATA_MODE=api \
+                    --build-arg VITE_MAP_TILE_URL="$STAGING_VITE_MAP_TILE_URL" \
                     -t "$image" .
             - name: Scan before publication
               uses: aquasecurity/trivy-action@0.28.0

@@ -27,6 +27,7 @@ main() {
   [[ -n "$directory" && -n "$filename" ]] || fail 'usage: verify-us-pmtiles.sh <directory> <filename>'
   require_tool sha256sum
   require_tool python3
+  [[ -n "$PMTILES_BIN" && -x "$PMTILES_BIN" ]] || fail 'PMTILES_BIN must point to an executable pmtiles CLI'
   validate_filename "$filename"
   local artifact="$directory/$filename"
   local sidecar="$artifact.sha256"
@@ -36,13 +37,11 @@ main() {
   actual_hash=$(sha256sum "$artifact" | awk '{print $1}')
   [[ "$actual_hash" == "$sidecar_hash" ]] || fail "hash mismatch for $filename"
   [[ "$filename" == "us.$actual_hash.pmtiles" ]] || fail "filename hash mismatch for $filename"
-  if [[ -n "$PMTILES_BIN" ]]; then
-    local header_json
-    header_json=$($PMTILES_BIN show "$artifact" --header-json)
-    python3 -c 'import json, sys; data = json.loads(sys.argv[1]);
+  local header_json
+  header_json=$($PMTILES_BIN show "$artifact" --header-json)
+  python3 -c 'import json, sys; data = json.loads(sys.argv[1]);
 if data.get("maxzoom") != 10:
     raise SystemExit(f"unexpected pmtiles maxzoom: {data.get('"'"'maxzoom'"'"')!r}")' "$header_json"
-  fi
   printf '{"filename":"%s","sha256":"%s","verified":true}\n' "$filename" "$actual_hash"
 }
 
