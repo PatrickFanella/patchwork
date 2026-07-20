@@ -23,6 +23,7 @@ import {
     aidPostSchema,
     type AidPostRecord,
 } from '@patchwork/at-lexicons';
+import { enforceMinimumGeoPrecisionKm } from '@patchwork/shared';
 
 export type ApiDataOrigin = 'api' | 'fixture' | 'unavailable';
 
@@ -937,6 +938,9 @@ const mapAidPayloadToRecords = (
                             {
                                 lat,
                                 lng,
+                                precisionKm: enforceMinimumGeoPrecisionKm(
+                                    approximateGeo ? (readNumber(approximateGeo, 'precisionKm') ?? 1) : 1,
+                                ),
                             }
                         :   undefined,
                 }),
@@ -1012,10 +1016,9 @@ const mapDirectoryPayloadToCards = (
             location: {
                 lat,
                 lng,
-                precisionMeters:
-                    precisionKm !== undefined ?
-                        Math.round(precisionKm * 1000)
-                    :   300,
+                precisionMeters: Math.round(
+                    enforceMinimumGeoPrecisionKm(precisionKm ?? 1) * 1000,
+                ),
                 areaLabel: readString(row, 'serviceArea'),
             },
             openHours: readString(row, 'openHours'),
@@ -1346,6 +1349,7 @@ export const createAidPostViaApi = async (
                 location: {
                     lat: record.location.latitude,
                     lng: record.location.longitude,
+                    precisionKm: record.location.precisionKm,
                 },
             }),
         },

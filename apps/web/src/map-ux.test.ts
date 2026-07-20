@@ -25,11 +25,11 @@ describe('map ux', () => {
         const cards = [
             buildCard({
                 id: 'near-1',
-                location: { lat: 1.3, lng: 103.8, precisionMeters: 300 },
+                location: { lat: 1.3, lng: 103.8, precisionKm: 1 },
             }),
             buildCard({
                 id: 'near-2',
-                location: { lat: 1.3002, lng: 103.8002, precisionMeters: 300 },
+                location: { lat: 1.3002, lng: 103.8002, precisionKm: 1 },
             }),
         ];
 
@@ -45,17 +45,17 @@ describe('map ux', () => {
             buildCard({
                 id: 'in-radius',
                 category: 'food',
-                location: { lat: 1.3, lng: 103.8, precisionMeters: 500 },
+                location: { lat: 1.3, lng: 103.8, precisionKm: 1 },
             }),
             buildCard({
                 id: 'out-radius',
                 category: 'food',
-                location: { lat: 1.35, lng: 103.85, precisionMeters: 500 },
+                location: { lat: 1.35, lng: 103.85, precisionKm: 1 },
             }),
             buildCard({
                 id: 'wrong-category',
                 category: 'medical',
-                location: { lat: 1.3001, lng: 103.8001, precisionMeters: 500 },
+                location: { lat: 1.3001, lng: 103.8001, precisionKm: 1 },
             }),
         ];
 
@@ -77,14 +77,19 @@ describe('map ux', () => {
                 location: {
                     lat: 1.30019,
                     lng: 103.80019,
-                    precisionMeters: 120,
+                    precisionKm: 0.12,
                     areaLabel: 'Downtown West',
                 },
             }),
         );
 
-        expect(marker?.radiusMeters).toBeGreaterThanOrEqual(300);
+        expect(marker?.radiusMeters).toBeGreaterThanOrEqual(1000);
         expect(marker?.label).toBe('Downtown West');
+    });
+
+    it('does not fabricate location for missing geography', () => {
+        const marker = toApproximateMapMarker(buildCard({ id: 'no-geo' }));
+        expect(marker).toBeUndefined();
     });
 
     it('opens detail drawer with contact-helper CTA and triage actions', () => {
@@ -93,7 +98,7 @@ describe('map ux', () => {
                 id: 'drawer-1',
                 title: 'Need water',
                 status: 'open',
-                location: { lat: 1.3, lng: 103.8, precisionMeters: 300 },
+                location: { lat: 1.3, lng: 103.8, precisionKm: 1 },
             }),
         ];
 

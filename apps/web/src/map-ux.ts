@@ -7,13 +7,12 @@ import {
     type SharedAidDiscoveryQuery,
 } from './discovery-filters.js';
 import { haversineDistanceMeters } from './geo-utils.js';
-
-const minimumPublicPrecisionMeters = 300;
+import { PUBLIC_MIN_PRECISION_KM } from '@patchwork/shared';
 
 export interface MapAidLocation {
     lat: number;
     lng: number;
-    precisionMeters: number;
+    precisionKm: number;
     areaLabel?: string;
 }
 
@@ -98,8 +97,8 @@ export interface MapViewModel {
     clusters: MapCluster[];
 }
 
-const normalizePrecision = (precisionMeters: number): number => {
-    return Math.max(minimumPublicPrecisionMeters, Math.round(precisionMeters));
+const normalizePrecision = (precisionKm: number): number => {
+    return Math.max(PUBLIC_MIN_PRECISION_KM * 1000, Math.round(precisionKm * 1000));
 };
 
 const snapLocation = (
@@ -159,7 +158,7 @@ export function toApproximateMapMarker(
         return undefined;
     }
 
-    const precisionMeters = normalizePrecision(card.location.precisionMeters);
+    const precisionMeters = normalizePrecision(card.location.precisionKm);
     const snapped = snapLocation(card.location.lat, card.location.lng, precisionMeters);
 
     return {

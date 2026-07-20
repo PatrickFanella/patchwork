@@ -6,6 +6,7 @@ import {
     type SharedAidDiscoveryQuery,
 } from './discovery-filters.js';
 import { haversineDistanceMeters } from './geo-utils.js';
+import { PUBLIC_MIN_PRECISION_KM } from '@patchwork/shared';
 // ---------------------------------------------------------------------------
 // Local reputation types (avoids cross-workspace runtime import issues)
 // ---------------------------------------------------------------------------
@@ -98,6 +99,7 @@ export interface FeedAidCard {
     location?: {
         lat: number;
         lng: number;
+        precisionKm: number;
     };
     timeline?: FeedStatusTransition[];
     assignment?: FeedAssignmentInfo;
@@ -359,7 +361,7 @@ export function createFeedCard(input: {
     accessibilityTags?: string[];
     createdAt?: string;
     updatedAt?: string;
-    location?: { lat: number; lng: number };
+    location?: { lat: number; lng: number; precisionKm: number };
 }): FeedAidCard {
     const now = new Date().toISOString();
 
@@ -373,7 +375,10 @@ export function createFeedCard(input: {
         accessibilityTags: input.accessibilityTags ?? [],
         createdAt: input.createdAt ?? now,
         updatedAt: input.updatedAt ?? input.createdAt ?? now,
-        location: input.location,
+        location: input.location ? {
+            ...input.location,
+            precisionKm: Math.max(PUBLIC_MIN_PRECISION_KM, input.location.precisionKm),
+        } : undefined,
     };
 }
 

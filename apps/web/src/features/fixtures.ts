@@ -17,7 +17,7 @@ export const fixtureFeedRecords: FeedRecordEnvelope[] = [
             status: 'open',
             accessibilityTags: ['wheelchair', 'quiet-arrival'],
             updatedAt: '2026-02-28T16:20:00.000Z',
-            location: { lat: 40.7134, lng: -74.0049 },
+            location: { lat: 40.7134, lng: -74.0049, precisionKm: 1 },
         }),
     },
     {
@@ -33,7 +33,7 @@ export const fixtureFeedRecords: FeedRecordEnvelope[] = [
             status: 'in-progress',
             accessibilityTags: ['mobility-aid'],
             updatedAt: '2026-02-28T15:42:00.000Z',
-            location: { lat: 40.7182, lng: -74.0007 },
+            location: { lat: 40.7182, lng: -74.0007, precisionKm: 1 },
         }),
     },
     {
@@ -49,7 +49,7 @@ export const fixtureFeedRecords: FeedRecordEnvelope[] = [
             status: 'open',
             accessibilityTags: ['child-safe'],
             updatedAt: '2026-02-28T14:55:00.000Z',
-            location: { lat: 40.7063, lng: -74.0125 },
+            location: { lat: 40.7063, lng: -74.0125, precisionKm: 1 },
         }),
     },
     {
@@ -65,7 +65,7 @@ export const fixtureFeedRecords: FeedRecordEnvelope[] = [
             status: 'resolved',
             accessibilityTags: ['language-support'],
             updatedAt: '2026-02-28T12:05:00.000Z',
-            location: { lat: 40.7211, lng: -74.0143 },
+            location: { lat: 40.7211, lng: -74.0143, precisionKm: 1 },
         }),
     },
 ];

@@ -16,7 +16,7 @@ const sampleCards = (): FeedAidCard[] => [
         urgency: 4,
         status: 'open',
         updatedAt: '2026-02-26T10:00:00.000Z',
-        location: { lat: 1.3001, lng: 103.8001 },
+        location: { lat: 1.3001, lng: 103.8001, precisionKm: 1 },
     }),
     createFeedCard({
         id: 'b',
@@ -26,7 +26,7 @@ const sampleCards = (): FeedAidCard[] => [
         urgency: 5,
         status: 'in-progress',
         updatedAt: '2026-02-26T11:00:00.000Z',
-        location: { lat: 1.35, lng: 103.85 },
+        location: { lat: 1.35, lng: 103.85, precisionKm: 1 },
     }),
 ];
 

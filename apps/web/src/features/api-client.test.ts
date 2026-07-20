@@ -155,6 +155,7 @@ describe('api client', () => {
         expect(result.data[0]?.card.title).toBe('Need groceries');
         expect(result.data[0]?.card.category).toBe('food');
         expect(result.data[0]?.card.urgency).toBe(4);
+        expect(result.data[0]?.card.location?.precisionKm).toBe(1);
         expect(result.data[0]?.cid).toBe('bafy-discovered');
 
         const firstCall = (

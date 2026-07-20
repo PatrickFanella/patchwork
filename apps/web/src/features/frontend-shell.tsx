@@ -1,4 +1,6 @@
 import {
+    lazy,
+    Suspense,
     useEffect,
     useMemo,
     useRef,
@@ -275,13 +277,6 @@ const toUrgencyTone = (
 };
 
 const toMapAidCard = (record: FeedRecordEnvelope): MapAidCard => {
-    const fallbackLocation = {
-        lat: defaultDiscoveryCenter.lat,
-        lng: defaultDiscoveryCenter.lng,
-    };
-
-    const location = record.card.location ?? fallbackLocation;
-
     return {
         id: record.card.id,
         title: record.card.title,
@@ -290,12 +285,7 @@ const toMapAidCard = (record: FeedRecordEnvelope): MapAidCard => {
         status: record.card.status,
         urgency: record.card.urgency,
         updatedAt: record.card.updatedAt,
-        location: {
-            lat: location.lat,
-            lng: location.lng,
-            precisionMeters: 300 + record.card.urgency * 60,
-            areaLabel: `Grid ${location.lat.toFixed(3)}, ${location.lng.toFixed(3)}`,
-        },
+        location: record.card.location,
     };
 };
 
@@ -802,6 +792,12 @@ interface MapRouteProps {
     onOpenChat: (record: FeedRecordEnvelope, surface: ChatEntrySurface) => void;
 }
 
+const LazyInteractiveMap = lazy(() =>
+    import('../components/map/InteractiveMap.js').then(module => ({
+        default: module.InteractiveMap,
+    })),
+);
+
 const MapRoute = ({
     discoveryState,
     onPatchDiscovery,
@@ -815,6 +811,7 @@ const MapRoute = ({
     onTriageAction,
     onOpenChat,
 }: MapRouteProps) => {
+    const [tileError, setTileError] = useState<string>();
     useEffect(() => {
         if (!selectedPostId) {
             return undefined;
@@ -888,6 +885,24 @@ const MapRoute = ({
                 state={discoveryState}
                 onPatch={onPatchDiscovery}
             />
+
+            <section className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'>
+                {tileError ? (
+                    <div role='alert' className='mh-alert mb-3 text-xs font-bold'>
+                        <p>{tileError}</p>
+                    </div>
+                ) : null}
+                <Suspense fallback={<div className='mh-skeleton h-96 w-full' />}>
+                    <LazyInteractiveMap
+                        cards={mapView.filteredCards}
+                        clusters={mapView.clusters}
+                        selectedPostId={selectedPostId}
+                        center={discoveryState.center ?? defaultDiscoveryCenter}
+                        onSelectPostId={onSelectPost}
+                        onTilesFailed={setTileError}
+                    />
+                </Suspense>
+            </section>
 
             <div className='grid gap-6 xl:grid-cols-2'>
                 <Card title='Cluster overview'>

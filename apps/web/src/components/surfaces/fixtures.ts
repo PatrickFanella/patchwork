@@ -18,7 +18,7 @@ export const feedSurfacePreview = buildFeedViewModel(
             urgency: 5,
             status: 'open',
             updatedAt: '2026-02-27T18:00:00.000Z',
-            location: { lat: 1.3001, lng: 103.8001 },
+            location: { lat: 1.3001, lng: 103.8001, precisionKm: 1 },
         }),
         createFeedCard({
             id: 'feed-2',
@@ -28,7 +28,7 @@ export const feedSurfacePreview = buildFeedViewModel(
             urgency: 4,
             status: 'in-progress',
             updatedAt: '2026-02-27T17:10:00.000Z',
-            location: { lat: 1.305, lng: 103.812 },
+            location: { lat: 1.305, lng: 103.812, precisionKm: 1 },
         }),
     ],
     {
