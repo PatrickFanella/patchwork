@@ -221,6 +221,62 @@ describe('api client', () => {
         });
     });
 
+    it('maps durable directory projection responses into resource cards', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({
+                total: 1,
+                page: 1,
+                pageSize: 100,
+                hasNextPage: false,
+                results: [
+                    {
+                        uri: 'at://did:plc:pantry/app.patchwork.directory.resource/main',
+                        name: 'Northside Community Pantry',
+                        category: 'food-bank',
+                        serviceArea: 'Near North Side',
+                        status: 'community-verified',
+                        contact: { url: 'https://pantry.example' },
+                        approximateGeo: {
+                            latitude: 41.9,
+                            longitude: -87.64,
+                            precisionKm: 2,
+                        },
+                        openHours: 'Mon-Fri 09:00-17:00',
+                        eligibilityNotes: 'Open to local residents.',
+                        operationalStatus: 'open',
+                        createdAt: '2026-07-26T12:00:00.000Z',
+                        updatedAt: '2026-07-26T12:00:00.000Z',
+                    },
+                ],
+            }),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const result = await fetchDirectoryCardsFromApi(baseDiscoveryState);
+
+        expect(result).toMatchObject({
+            ok: true,
+            data: [
+                {
+                    id: 'main',
+                    name: 'Northside Community Pantry',
+                    category: 'food-bank',
+                    location: {
+                        lat: 41.9,
+                        lng: -87.64,
+                        precisionMeters: 2000,
+                        areaLabel: 'Near North Side',
+                    },
+                    contact: { url: 'https://pantry.example' },
+                },
+            ],
+        });
+        const firstCall = (
+            fetchMock.mock.calls as unknown as Array<[unknown]>
+        )[0];
+        expect(String(firstCall?.[0])).toContain('/query/directory');
+    });
+
     it.each([
         [401, 'AUTH_REQUIRED', 'authentication', false],
         [503, 'SERVICE_UNAVAILABLE', 'server', true],

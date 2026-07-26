@@ -214,6 +214,30 @@ interface ProjectionRow {
     projected_at: Date | string;
 }
 
+interface DirectoryProjectionRow {
+    uri: string;
+    cid: string | null;
+    name: string;
+    service_area: string;
+    category: string;
+    verification_status: string;
+    contact: {
+        url?: string;
+        phone?: string;
+    };
+    searchable_text: string;
+    latitude: number | null;
+    longitude: number | null;
+    precision_km: number | null;
+    open_hours: string | null;
+    eligibility_notes: string | null;
+    operational_status: string;
+    record_created_at: Date | string;
+    record_updated_at: Date | string;
+    source_cursor: string | number;
+    projected_at: Date | string;
+}
+
 interface ProjectionStateRow {
     latest_cursor: string | number | null;
     heartbeat_at: Date | string;
@@ -226,7 +250,7 @@ const authorDidFromUri = (uri: string): string => {
 };
 
 const freshnessForRows = (
-    rows: readonly ProjectionRow[],
+    rows: readonly { projected_at: Date | string }[],
     state: ProjectionStateRow | undefined,
 ): ProjectionFreshness => {
     if (!state) {
@@ -281,8 +305,8 @@ export class PostgresProjectionQueryService {
     }
 
     async queryDirectory(params: URLSearchParams): Promise<ApiRouteResult> {
-        const snapshot = await this.loadSnapshot();
-        const service = createQueryServiceFromNormalizedEvents([]);
+        const snapshot = await this.loadDirectorySnapshot();
+        const service = createQueryServiceFromNormalizedEvents(snapshot.events);
         const result = service.queryDirectory(params);
         if ('error' in result.body) return result;
         return {
@@ -381,6 +405,76 @@ export class PostgresProjectionQueryService {
                     trustScore: 0.5,
                 },
             }));
+        return {
+            events,
+            freshness: freshnessForRows(result.rows, stateResult.rows[0]),
+        };
+    }
+
+    private async loadDirectorySnapshot(): Promise<{
+        events: NormalizedFirehoseEvent[];
+        freshness: ProjectionFreshness;
+    }> {
+        const [result, stateResult] = await Promise.all([
+            this.pool.query<DirectoryProjectionRow>(
+                `SELECT uri, cid, name, service_area, category,
+                        verification_status, contact, searchable_text,
+                        latitude, longitude, precision_km, open_hours,
+                        eligibility_notes, operational_status,
+                        record_created_at, record_updated_at, source_cursor,
+                        projected_at
+                 FROM indexer_directory_resource_projections
+                 ORDER BY source_cursor, uri`,
+            ),
+            this.pool.query<ProjectionStateRow>(
+                `SELECT latest_cursor, heartbeat_at
+                 FROM indexer_projection_state
+                 WHERE singleton = TRUE`,
+            ),
+        ]);
+        const events: NormalizedFirehoseEvent[] = result.rows.map(row => {
+            const hasApproximateGeo =
+                row.latitude !== null &&
+                row.longitude !== null &&
+                row.precision_km !== null;
+            return {
+                eventId: `projection:${row.source_cursor}:${row.uri}`,
+                seq: Number(row.source_cursor),
+                action: 'create',
+                uri: row.uri,
+                collection: 'app.patchwork.directory.resource',
+                authorDid: authorDidFromUri(row.uri),
+                ...(row.cid ? { cid: row.cid } : {}),
+                receivedAt: new Date(row.record_updated_at).toISOString(),
+                payload: {
+                    kind: 'directory-resource',
+                    name: row.name,
+                    serviceArea: row.service_area,
+                    category: row.category as 'food-bank',
+                    verificationStatus:
+                        row.verification_status as 'unverified',
+                    contact: row.contact,
+                    ...(hasApproximateGeo ?
+                        {
+                            approximateGeo: {
+                                latitude: Number(row.latitude),
+                                longitude: Number(row.longitude),
+                                precisionKm: Number(row.precision_km),
+                            },
+                        }
+                    :   {}),
+                    ...(row.open_hours ? { openHours: row.open_hours } : {}),
+                    ...(row.eligibility_notes ?
+                        { eligibilityNotes: row.eligibility_notes }
+                    :   {}),
+                    operationalStatus: row.operational_status as 'open',
+                    createdAt: new Date(row.record_created_at).toISOString(),
+                    updatedAt: new Date(row.record_updated_at).toISOString(),
+                    searchableText: row.searchable_text,
+                    trustScore: 0.5,
+                },
+            };
+        });
         return {
             events,
             freshness: freshnessForRows(result.rows, stateResult.rows[0]),

@@ -59,7 +59,9 @@ describePostgres('session-aware durable discovery HTTP boundary', () => {
         await pool.query(
             `TRUNCATE user_blocks, indexer_projection_events,
                       indexer_projection_tombstones,
-                      indexer_aid_post_projections, indexer_dead_letters
+                      indexer_aid_post_projections,
+                      indexer_directory_resource_projections,
+                      indexer_dead_letters
              RESTART IDENTITY CASCADE`,
         );
         const now = new Date();
@@ -100,6 +102,29 @@ describePostgres('session-aware durable discovery HTTP boundary', () => {
              ) VALUES ('discovery-block', $1, $2,
                        NOW() + INTERVAL '1 year', NOW())`,
             [viewerDid, blockedDid],
+        );
+        await pool.query(
+            `INSERT INTO indexer_directory_resource_projections (
+                uri, collection, cid, author_did_hash, name, service_area,
+                category, verification_status, contact, searchable_text,
+                latitude, longitude, precision_km, open_hours,
+                eligibility_notes, operational_status, record_created_at,
+                record_updated_at, source_cursor, source_event_id
+             ) VALUES (
+                $1, $2, 'cid-directory', $3, 'Community Pantry',
+                'Near North Side', 'food-bank', 'community-verified',
+                '{"url":"https://pantry.example"}',
+                'community pantry near north side food bank',
+                41.88, -87.63, 2, 'Mon-Fri 09:00-17:00',
+                'Open to local residents', 'open', $4, $4, 3,
+                'directory-event'
+             )`,
+            [
+                `at://did:plc:directory/${recordNsid.directoryResource}/pantry`,
+                recordNsid.directoryResource,
+                hash('did:plc:directory'),
+                now,
+            ],
         );
     });
 
@@ -142,6 +167,28 @@ describePostgres('session-aware durable discovery HTTP boundary', () => {
         expect(response.status).toBe(401);
         await expect(response.json()).resolves.toMatchObject({
             error: { code: 'SESSION_EXPIRED' },
+        });
+    });
+
+    it('serves durable directory resources through the public discovery boundary', async () => {
+        const running = await startServer(pool);
+        const response = await fetch(
+            `${running.origin}/query/directory?latitude=41.88&longitude=-87.63&radiusKm=10&category=food-bank`,
+        );
+        await stopServer(running.server);
+
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+            total: 1,
+            results: [
+                {
+                    name: 'Community Pantry',
+                    category: 'food-bank',
+                    status: 'community-verified',
+                    contact: { url: 'https://pantry.example' },
+                    operationalStatus: 'open',
+                },
+            ],
         });
     });
 });

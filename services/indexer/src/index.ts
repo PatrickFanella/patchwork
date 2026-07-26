@@ -51,6 +51,7 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
     });
     const schema = await pool.query<{
         projections: string | null;
+        directoryProjections: string | null;
         state: string | null;
         workflows: string | null;
         audit: string | null;
@@ -58,6 +59,8 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projections,
+            to_regclass('indexer_directory_resource_projections')::TEXT
+                AS "directoryProjections",
             to_regclass('indexer_projection_state')::TEXT AS state,
             to_regclass('request_workflows')::TEXT AS workflows,
             to_regclass('operational_audit_events')::TEXT AS audit,
@@ -65,6 +68,7 @@ const createPipeline = async (): Promise<PersistentPipeline> => {
     );
     if (
         !schema.rows[0]?.projections ||
+        !schema.rows[0]?.directoryProjections ||
         !schema.rows[0]?.state ||
         !schema.rows[0]?.workflows ||
         !schema.rows[0]?.audit ||
@@ -291,7 +295,7 @@ export const startIndexerServer = async () => {
     const { pipeline, pool, projectionStore } = await createPipeline();
     const source = new JetstreamEventSource({
         url: config.INDEXER_FIREHOSE_URL,
-        collections: [recordNsid.aidPost],
+        collections: [recordNsid.aidPost, recordNsid.directoryResource],
     });
     const runtime = new IndexerRuntime({
         pipeline,

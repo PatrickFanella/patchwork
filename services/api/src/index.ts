@@ -98,14 +98,18 @@ const postgresPool =
 if (postgresPool) {
     const projectionSchema = await postgresPool.query<{
         projection_table: string | null;
+        directory_projection_table: string | null;
         state_table: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
+            to_regclass('indexer_directory_resource_projections')::TEXT
+                AS directory_projection_table,
             to_regclass('indexer_projection_state')::TEXT AS state_table`,
     );
     if (
         !projectionSchema.rows[0]?.projection_table ||
+        !projectionSchema.rows[0]?.directory_projection_table ||
         !projectionSchema.rows[0]?.state_table
     ) {
         await postgresPool.end();

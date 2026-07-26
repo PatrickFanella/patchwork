@@ -64,6 +64,11 @@ export class AccountPrivacyService {
                  WHERE author_did_hash = $1`,
                 [didHash],
             );
+            const publicDirectoryResources = await client.query(
+                `DELETE FROM indexer_directory_resource_projections
+                 WHERE author_did_hash = $1`,
+                [didHash],
+            );
             const legacyDiscoveryEvents = await client.query(
                 `DELETE FROM discovery_events WHERE author_did = $1`,
                 [did],
@@ -150,6 +155,8 @@ export class AccountPrivacyService {
                 effectiveAt: now,
                 removed: {
                     publicAidPosts: publicAidPosts.rowCount ?? 0,
+                    publicDirectoryResources:
+                        publicDirectoryResources.rowCount ?? 0,
                     legacyDiscoveryEvents: legacyDiscoveryEvents.rowCount ?? 0,
                     workflows: workflows.rowCount ?? 0,
                     platformRoles: platformRoles.rowCount ?? 0,
@@ -238,6 +245,35 @@ export class AccountPrivacyService {
                     latitude, longitude, precision_km, record_created_at,
                     record_updated_at
              FROM indexer_aid_post_projections
+             WHERE author_did_hash = $1
+             ORDER BY record_created_at, uri`,
+            [hash(did)],
+        );
+        const publicDirectoryResources = await client.query<{
+                uri: string;
+                cid: string | null;
+                name: string;
+                service_area: string;
+                category: string;
+                verification_status: string;
+                contact: {
+                    url?: string;
+                    phone?: string;
+                };
+                latitude: number | null;
+                longitude: number | null;
+                precision_km: number | null;
+                open_hours: string | null;
+                eligibility_notes: string | null;
+                operational_status: string;
+                record_created_at: Date | string;
+                record_updated_at: Date | string;
+            }>(
+            `SELECT uri, cid, name, service_area, category,
+                    verification_status, contact, latitude, longitude,
+                    precision_km, open_hours, eligibility_notes,
+                    operational_status, record_created_at, record_updated_at
+             FROM indexer_directory_resource_projections
              WHERE author_did_hash = $1
              ORDER BY record_created_at, uri`,
             [hash(did)],
@@ -382,6 +418,33 @@ export class AccountPrivacyService {
                     createdAt: iso(row.record_created_at),
                     updatedAt: iso(row.record_updated_at),
                 })),
+                publicDirectoryResources: publicDirectoryResources.rows.map(
+                    row => ({
+                        uri: row.uri,
+                        cid: row.cid,
+                        name: row.name,
+                        serviceArea: row.service_area,
+                        category: row.category,
+                        verificationStatus: row.verification_status,
+                        contact: row.contact,
+                        ...(row.latitude !== null &&
+                        row.longitude !== null &&
+                        row.precision_km !== null ?
+                            {
+                                approximateGeo: {
+                                    latitude: Number(row.latitude),
+                                    longitude: Number(row.longitude),
+                                    precisionKm: Number(row.precision_km),
+                                },
+                            }
+                        :   {}),
+                        openHours: row.open_hours,
+                        eligibilityNotes: row.eligibility_notes,
+                        operationalStatus: row.operational_status,
+                        createdAt: iso(row.record_created_at),
+                        updatedAt: iso(row.record_updated_at),
+                    }),
+                ),
                 workflows: workflows.rows.map(row => ({
                     postUri: row.post_uri,
                     currentStatus: row.current_status,
@@ -436,7 +499,7 @@ export class AccountPrivacyService {
                 {
                     category: 'at-repository',
                     reason:
-                        'The public aid-post section is a Patchwork projection, not a complete AT repository export.',
+                        'The public aid-post and directory-resource sections are Patchwork projections, not a complete AT repository export.',
                 },
                 {
                     category: 'moderation-casework',

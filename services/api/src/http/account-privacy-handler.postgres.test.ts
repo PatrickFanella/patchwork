@@ -105,6 +105,15 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 'utf8',
             ),
         );
+        await pool.query(
+            await readFile(
+                new URL(
+                    '../../../indexer/src/migrations/0004_directory_projection_store.sql',
+                    import.meta.url,
+                ),
+                'utf8',
+            ),
+        );
         for (const migration of [
             '001_create_moderation_tables.sql',
             '002_durable_moderation.sql',
@@ -130,7 +139,9 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                       moderation_queue_items,
                       indexer_projection_events,
                       indexer_projection_tombstones,
-                      indexer_aid_post_projections RESTART IDENTITY CASCADE`,
+                      indexer_aid_post_projections,
+                      indexer_directory_resource_projections
+                      RESTART IDENTITY CASCADE`,
         );
         await pool.query(
             `INSERT INTO at_oauth_sessions (
@@ -172,6 +183,26 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                  'app.patchwork.aid.post', $2, 'Other aid post', 'Do not export',
                  'food', 'low', 'open', 'other aid post do not export', 0, 0, 5,
                  NOW(), NOW(), 2, 'other-event')`,
+            [hash(viewerDid), hash(otherDid)],
+        );
+        await pool.query(
+            `INSERT INTO indexer_directory_resource_projections (
+                uri, collection, author_did_hash, name, service_area,
+                category, verification_status, contact, searchable_text,
+                latitude, longitude, precision_km, operational_status,
+                record_created_at, record_updated_at, source_cursor,
+                source_event_id
+             ) VALUES
+                ('at://did:plc:privacyviewer/app.patchwork.directory.resource/one',
+                 'app.patchwork.directory.resource', $1, 'My pantry',
+                 'Viewer district', 'food-bank', 'community-verified',
+                 '{"url":"https://viewer.example"}', 'my pantry viewer district',
+                 0, 0, 5, 'open', NOW(), NOW(), 3, 'privacy-directory-event'),
+                ('at://did:plc:privacyother/app.patchwork.directory.resource/two',
+                 'app.patchwork.directory.resource', $2, 'Other clinic',
+                 'Other district', 'clinic', 'partner-verified',
+                 '{"url":"https://other.example"}', 'other clinic other district',
+                 0, 0, 5, 'open', NOW(), NOW(), 4, 'other-directory-event')`,
             [hash(viewerDid), hash(otherDid)],
         );
         await pool.query(
@@ -234,6 +265,9 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 publicAidPosts: [
                     expect.objectContaining({ title: 'My aid post' }),
                 ],
+                publicDirectoryResources: [
+                    expect.objectContaining({ name: 'My pantry' }),
+                ],
                 workflows: [
                     expect.objectContaining({ currentStatus: 'open' }),
                 ],
@@ -247,6 +281,7 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         expect(serialized).not.toContain('encrypted-secret-payload');
         expect(serialized).not.toContain('private-session-hash');
         expect(serialized).not.toContain('Other aid post');
+        expect(serialized).not.toContain('Other clinic');
         expect(serialized).not.toContain(otherDid);
     });
 
@@ -280,7 +315,11 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         );
         expect(body).toMatchObject({
             status: 'deactivated',
-            removed: { publicAidPosts: 1, workflows: 1 },
+            removed: {
+                publicAidPosts: 1,
+                publicDirectoryResources: 1,
+                workflows: 1,
+            },
             revoked: { browserSessions: 1, oauthSessions: 1 },
             retained: expect.objectContaining({
                 deactivationReceipt: 1,
@@ -327,17 +366,27 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         const viewerExport = (await fetch(`${running.origin}/account/export`, {
             headers: { cookie: 'patchwork_session=privacy-session' },
         }).then(result => result.json())) as {
-            data: { publicAidPosts: unknown[]; workflows: unknown[] };
+            data: {
+                publicAidPosts: unknown[];
+                publicDirectoryResources: unknown[];
+                workflows: unknown[];
+            };
         };
         expect(viewerExport.data.publicAidPosts).toEqual([]);
+        expect(viewerExport.data.publicDirectoryResources).toEqual([]);
         expect(viewerExport.data.workflows).toEqual([]);
 
         const otherExport = (await fetch(`${running.origin}/account/export`, {
             headers: { cookie: 'patchwork_session=other-session' },
         }).then(result => result.json())) as {
-            data: { publicAidPosts: unknown[]; workflows: unknown[] };
+            data: {
+                publicAidPosts: unknown[];
+                publicDirectoryResources: unknown[];
+                workflows: unknown[];
+            };
         };
         expect(otherExport.data.publicAidPosts).toHaveLength(1);
+        expect(otherExport.data.publicDirectoryResources).toHaveLength(1);
         expect(otherExport.data.workflows).toHaveLength(1);
         await stopServer(running.server);
     });

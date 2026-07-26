@@ -10,17 +10,27 @@ describePostgres('PostgresProjectionQueryService', () => {
     const pool = new Pool({ connectionString: databaseUrl });
 
     beforeAll(async () => {
-        const schema = await pool.query<{ table_name: string | null }>(
-            `SELECT to_regclass('indexer_aid_post_projections')::TEXT AS table_name`,
+        const schema = await pool.query<{
+            aid_table: string | null;
+            directory_table: string | null;
+        }>(
+            `SELECT
+                to_regclass('indexer_aid_post_projections')::TEXT AS aid_table,
+                to_regclass('indexer_directory_resource_projections')::TEXT
+                    AS directory_table`,
         );
-        if (!schema.rows[0]?.table_name) {
+        if (!schema.rows[0]?.aid_table || !schema.rows[0]?.directory_table) {
             throw new Error('Indexer projection migrations are required.');
         }
     });
 
     beforeEach(async () => {
         await pool.query(
-            'TRUNCATE indexer_projection_events, indexer_projection_tombstones, indexer_aid_post_projections, indexer_dead_letters',
+            `TRUNCATE indexer_projection_events,
+                      indexer_projection_tombstones,
+                      indexer_aid_post_projections,
+                      indexer_directory_resource_projections,
+                      indexer_dead_letters`,
         );
         const now = new Date();
         await pool.query(
@@ -57,6 +67,38 @@ describePostgres('PostgresProjectionQueryService', () => {
                 'b'.repeat(64),
                 `at://did:plc:carol/${recordNsid.aidPost}/c`,
                 'c'.repeat(64),
+            ],
+        );
+        await pool.query(
+            `INSERT INTO indexer_directory_resource_projections (
+                uri, collection, cid, revision, author_did_hash, name,
+                service_area, category, verification_status, contact,
+                searchable_text, latitude, longitude, precision_km,
+                open_hours, eligibility_notes, operational_status,
+                record_created_at, record_updated_at, source_cursor,
+                source_event_id, projected_at
+             ) VALUES
+                ($1, $2, 'directory-cid-a', 'directory-rev-a', $3,
+                 'Northside Community Pantry', 'Near North Side', 'food-bank',
+                 'community-verified', '{"url":"https://pantry.example"}',
+                 'northside community pantry near north side food bank',
+                 41.90, -87.64, 2, 'Mon-Fri 09:00-17:00',
+                 'Open to local residents', 'open', $4, $4, 200,
+                 'directory-event-a', $4),
+                ($5, $2, 'directory-cid-b', 'directory-rev-b', $6,
+                 'Regional Legal Line', 'Illinois', 'legal-aid',
+                 'partner-verified', '{"phone":"+1-555-0100"}',
+                 'regional legal line illinois legal aid',
+                 NULL, NULL, NULL, 'Daily 08:00-20:00',
+                 'Call for intake', 'limited', $4, $4, 201,
+                 'directory-event-b', $4)`,
+            [
+                `at://did:plc:pantry/${recordNsid.directoryResource}/a`,
+                recordNsid.directoryResource,
+                'd'.repeat(64),
+                now,
+                `at://did:plc:legal/${recordNsid.directoryResource}/b`,
+                'e'.repeat(64),
             ],
         );
     });
@@ -153,5 +195,83 @@ describePostgres('PostgresProjectionQueryService', () => {
                 },
             ],
         });
+    });
+
+    it('queries durable directory projections with filters, geography, and freshness', async () => {
+        const service = new PostgresProjectionQueryService(pool);
+        const nearby = await service.queryDirectory(
+            new URLSearchParams({
+                latitude: '41.90',
+                longitude: '-87.64',
+                radiusKm: '5',
+                category: 'food-bank',
+                status: 'community-verified',
+                operationalStatus: 'open',
+                searchText: 'pantry',
+                freshnessHours: '1',
+                page: '1',
+                pageSize: '10',
+            }),
+        );
+
+        expect(nearby.statusCode).toBe(200);
+        expect(nearby.body).toMatchObject({
+            total: 1,
+            page: 1,
+            pageSize: 10,
+            hasNextPage: false,
+            results: [
+                {
+                    uri: `at://did:plc:pantry/${recordNsid.directoryResource}/a`,
+                    name: 'Northside Community Pantry',
+                    category: 'food-bank',
+                    status: 'community-verified',
+                    operationalStatus: 'open',
+                    contact: { url: 'https://pantry.example' },
+                    approximateGeo: {
+                        latitude: 41.9,
+                        longitude: -87.64,
+                        precisionKm: 2,
+                    },
+                },
+            ],
+            projectionFreshness: {
+                latestCursor: 102,
+                lagSeconds: expect.any(Number),
+            },
+        });
+
+        const all = await service.queryDirectory(
+            new URLSearchParams({ page: '1', pageSize: '10' }),
+        );
+        expect(all.body).toMatchObject({ total: 2 });
+        expect(
+            (all.body as { results: unknown[] }).results,
+        ).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'Northside Community Pantry',
+                    approximateGeo: {
+                        latitude: 41.9,
+                        longitude: -87.64,
+                        precisionKm: 2,
+                    },
+                }),
+                expect.objectContaining({
+                    name: 'Regional Legal Line',
+                }),
+            ]),
+        );
+        expect(
+            (
+                all.body as {
+                    results: Array<{
+                        name: string;
+                        approximateGeo?: unknown;
+                    }>;
+                }
+            ).results.find(row => row.name === 'Regional Legal Line')
+                ?.approximateGeo,
+        ).toBeUndefined();
     });
 });

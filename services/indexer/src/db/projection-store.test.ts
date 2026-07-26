@@ -43,6 +43,40 @@ const createEvent = (overrides: Partial<NormalizedFirehoseEvent> = {}): Normaliz
     ...overrides,
 });
 
+const createDirectoryEvent = (
+    overrides: Partial<NormalizedFirehoseEvent> = {},
+): NormalizedFirehoseEvent => ({
+    eventId: '200:directory-resource:create',
+    seq: 200,
+    action: 'create',
+    uri: `at://did:plc:resource-owner/${recordNsid.directoryResource}/resource-1`,
+    collection: recordNsid.directoryResource,
+    authorDid: 'did:plc:resource-owner',
+    receivedAt: '2026-07-11T12:00:00.000Z',
+    payload: {
+        kind: 'directory-resource',
+        name: 'Community Pantry',
+        serviceArea: 'Near North Side',
+        category: 'food-bank',
+        verificationStatus: 'community-verified',
+        contact: { url: 'https://pantry.example' },
+        approximateGeo: {
+            latitude: 41.9,
+            longitude: -87.64,
+            precisionKm: 2,
+        },
+        openHours: 'Mon-Fri 09:00-17:00',
+        eligibilityNotes: 'Open to local residents.',
+        operationalStatus: 'open',
+        createdAt: '2026-07-11T11:00:00.000Z',
+        updatedAt: '2026-07-11T11:00:00.000Z',
+        searchableText:
+            'community pantry near north side food bank community verified',
+        trustScore: 0.8,
+    },
+    ...overrides,
+});
+
 describePostgres('PostgresProjectionStore', () => {
     const pool = new Pool({ connectionString: databaseUrl });
 
@@ -52,7 +86,12 @@ describePostgres('PostgresProjectionStore', () => {
 
     beforeEach(async () => {
         await pool.query(
-            'TRUNCATE indexer_projection_events, indexer_projection_tombstones, indexer_aid_post_projections, indexer_dead_letters, account_deactivations',
+            `TRUNCATE indexer_projection_events,
+                      indexer_projection_tombstones,
+                      indexer_aid_post_projections,
+                      indexer_directory_resource_projections,
+                      indexer_dead_letters,
+                      account_deactivations`,
         );
     });
 
@@ -84,6 +123,65 @@ describePostgres('PostgresProjectionStore', () => {
         expect(projection).not.toHaveProperty('authorDid');
     });
 
+    it('persists, updates, and deletes durable directory-resource projections', async () => {
+        const store = new PostgresProjectionStore(pool);
+        const created = createDirectoryEvent();
+
+        await store.apply(created);
+        expect(await store.getDirectory(created.uri)).toMatchObject({
+            uri: created.uri,
+            collection: recordNsid.directoryResource,
+            name: 'Community Pantry',
+            category: 'food-bank',
+            verificationStatus: 'community-verified',
+            contact: { url: 'https://pantry.example' },
+            latitude: 41.9,
+            longitude: -87.64,
+            precisionKm: 2,
+            operationalStatus: 'open',
+            sourceCursor: 200,
+        });
+        expect((await store.getDirectory(created.uri))?.authorDidHash).toMatch(
+            /^[a-f0-9]{64}$/,
+        );
+
+        const payload = created.payload;
+        if (payload?.kind !== 'directory-resource') {
+            throw new Error('Expected directory-resource fixture payload.');
+        }
+        await store.apply(
+            createDirectoryEvent({
+                eventId: '210:directory-resource:update',
+                seq: 210,
+                action: 'update',
+                payload: {
+                    ...payload,
+                    approximateGeo: undefined,
+                    operationalStatus: 'limited',
+                    updatedAt: '2026-07-11T12:10:00.000Z',
+                },
+            }),
+        );
+        expect(await store.getDirectory(created.uri)).toMatchObject({
+            operationalStatus: 'limited',
+            latitude: null,
+            longitude: null,
+            precisionKm: null,
+            sourceCursor: 210,
+        });
+
+        await store.apply(
+            createDirectoryEvent({
+                eventId: '220:directory-resource:delete',
+                seq: 220,
+                action: 'delete',
+                payload: undefined,
+                deleteReason: 'deleted-upstream',
+            }),
+        );
+        expect(await store.getDirectory(created.uri)).toBeNull();
+    });
+
     it('suppresses future projections and rebuild replay for a deactivated account', async () => {
         const store = new PostgresProjectionStore(pool);
         const event = createEvent();
@@ -100,11 +198,23 @@ describePostgres('PostgresProjectionStore', () => {
         );
 
         await store.apply(event);
+        const directoryEvent = createDirectoryEvent({
+            uri: `at://did:plc:alice/${recordNsid.directoryResource}/resource-1`,
+            authorDid: 'did:plc:alice',
+        });
+        await store.apply(directoryEvent);
         expect(await store.get(event.uri)).toBeNull();
+        expect(await store.getDirectory(directoryEvent.uri)).toBeNull();
 
         await store.resetForRebuild();
         await store.apply({ ...event, eventId: '101:aid-post:rebuild', seq: 101 });
+        await store.apply({
+            ...directoryEvent,
+            eventId: '201:directory-resource:rebuild',
+            seq: 201,
+        });
         expect(await store.get(event.uri)).toBeNull();
+        expect(await store.getDirectory(directoryEvent.uri)).toBeNull();
     });
 
     it('applies a newer update once and ignores stale revisions', async () => {
@@ -232,6 +342,33 @@ describePostgres('PostgresProjectionStore', () => {
             sourceCursor: 140,
         });
         expect((await checkpointStore.load())?.cursor).toBe(140);
+    });
+
+    it('normalizes and persists a raw directory-resource event before checkpointing', async () => {
+        const projectionStore = new PostgresProjectionStore(pool);
+        const checkpointStore = new InMemoryCheckpointStore();
+        const pipeline = new IndexerPipeline({
+            checkpointStore,
+            checkpointInterval: 1,
+            projectionStore,
+            deadLetterStore: new PostgresDeadLetterStore(pool),
+        });
+        const raw: Record<string, unknown> = {
+            ...(buildPhase3FixtureFirehoseEvents()[2] as Record<string, unknown>),
+            seq: 141,
+        };
+
+        await pipeline.ingestAndCheckpoint([raw]);
+
+        const uri = String(raw.uri);
+        expect(await projectionStore.getDirectory(uri)).toMatchObject({
+            uri,
+            collection: recordNsid.directoryResource,
+            name: 'Downtown Community Pantry',
+            category: 'food-bank',
+            sourceCursor: 141,
+        });
+        expect((await checkpointStore.load())?.cursor).toBe(141);
     });
 
     it('dead-letters an invalid record and advances its durable cursor', async () => {
