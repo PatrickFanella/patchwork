@@ -4,7 +4,7 @@ test('API failure stays visible and never substitutes fixture discovery data', a
     page,
 }) => {
     let discoveryRequests = 0;
-    await page.route('http://localhost:4000/**', async route => {
+    await page.route('**/api/**', async route => {
         if (route.request().url().includes('/query/map')) discoveryRequests += 1;
         await route.abort('failed');
     });

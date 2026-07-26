@@ -108,12 +108,15 @@ jobs:
               run: |
                   jq -n \
                     --arg sha "$SOURCE_SHA" \
+                    --arg mapTileUrl '${{ vars.STAGING_VITE_MAP_TILE_URL }}' \
                     --arg api "$(cat digest-api.txt)" \
                     --arg indexer "$(cat digest-indexer.txt)" \
                     --arg moderation "$(cat digest-moderation.txt)" \
                     --arg web "$(cat digest-web.txt)" \
-                    '{gitSha:$sha,images:{api:$api,indexer:$indexer,moderation:$moderation,web:$web}}' \
+                    '{gitSha:$sha,mapTileUrl:$mapTileUrl,images:{api:$api,indexer:$indexer,moderation:$moderation,web:$web}}' \
                     > artifact-digests.json
+                  jq -e '.gitSha | test("^[0-9a-f]{40}$")' artifact-digests.json >/dev/null
+                  jq -e '.mapTileUrl | test("^/tiles/us\\.[0-9a-f]{64}\\.pmtiles$")' artifact-digests.json >/dev/null
                   jq -e '.images[] | test("@sha256:[0-9a-f]{64}$")' artifact-digests.json >/dev/null
             - uses: actions/upload-artifact@v4
               with:

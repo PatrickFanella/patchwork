@@ -75,7 +75,7 @@ describe('AT authentication flow', () => {
             authorizationUrl: 'https://pds.example/oauth/authorize?request=opaque',
         });
         expect(fetchMock).toHaveBeenCalledWith(
-            'http://localhost:4000/oauth/login',
+            '/api/oauth/login',
             expect.objectContaining({
                 method: 'POST',
                 credentials: 'include',
@@ -145,7 +145,7 @@ describe('AT authentication flow', () => {
             expiresAt: '2026-07-12T12:00:00.000Z',
         });
         expect(fetchMock).toHaveBeenCalledWith(
-            'http://localhost:4000/auth/session',
+            '/api/auth/session',
             expect.objectContaining({ method: 'GET', credentials: 'include' }),
         );
         expect(JSON.stringify(session)).not.toMatch(/access|refresh|token/i);
@@ -174,7 +174,7 @@ describe('AT authentication flow', () => {
 
         expect(session.did).toBe('did:plc:alice');
         expect(fetchMock).toHaveBeenCalledWith(
-            'http://localhost:4000/auth/refresh',
+            '/api/auth/refresh',
             expect.objectContaining({
                 method: 'POST',
                 credentials: 'include',
@@ -198,7 +198,7 @@ describe('AT authentication flow', () => {
         await logoutSession();
 
         expect(fetchMock).toHaveBeenCalledWith(
-            'http://localhost:4000/auth/session',
+            '/api/auth/session',
             expect.objectContaining({
                 method: 'DELETE',
                 credentials: 'include',
@@ -301,7 +301,7 @@ describe('AT authentication flow', () => {
 
         expect(result).toEqual({ did: 'did:plc:alice', handle: 'alice.subcult.tv' });
         expect(fetchMock).toHaveBeenCalledWith(
-            'http://localhost:4000/auth/signup',
+            '/api/auth/signup',
             expect.objectContaining({
                 method: 'POST',
                 credentials: 'include',
@@ -511,7 +511,7 @@ describe('AT authentication flow', () => {
 
         expect(fetchMock).toHaveBeenNthCalledWith(
             1,
-            'http://localhost:4000/auth/signup',
+            '/api/auth/signup',
             expect.objectContaining({
                 body: JSON.stringify({
                     handle: 'alice.subcult.tv',
@@ -523,7 +523,7 @@ describe('AT authentication flow', () => {
         );
         expect(fetchMock).toHaveBeenNthCalledWith(
             2,
-            'http://localhost:4000/oauth/login',
+            '/api/oauth/login',
             expect.objectContaining({
                 body: JSON.stringify({
                     handle: 'alice.subcult.tv',

@@ -70,7 +70,8 @@ export interface AidPostCreateApiInput {
     trustScore?: number;
 }
 
-const DEFAULT_API_BASE_URL = 'http://localhost:4000';
+const DEFAULT_API_BASE_URL = '/api';
+const DEFAULT_BROWSER_ORIGIN = 'http://localhost';
 const REQUEST_TIMEOUT_MS = 6_000;
 const DEFAULT_NEARBY_RADIUS_KM = 20;
 const DEFAULT_FEED_RADIUS_KM = 100;
@@ -277,7 +278,7 @@ const resolveApiUrl = (path: string, params: URLSearchParams): string => {
         const origin =
             typeof window !== 'undefined' ?
                 window.location.origin
-            :   DEFAULT_API_BASE_URL;
+            :   DEFAULT_BROWSER_ORIGIN;
         const parsedBase = new URL(
             baseUrl.startsWith('/') ? baseUrl : `/${baseUrl}`,
             origin,

@@ -354,7 +354,9 @@ const DiscoveryFiltersPanel = ({
             </label>
             <Input
                 id={`${idPrefix}-search`}
-                placeholder='Search title, description, or area'
+                name={`${idPrefix}-search`}
+                autoComplete='off'
+                placeholder='Search by title, description, or area…'
                 value={state.text ?? ''}
                 onChange={event => {
                     const nextValue = event.target.value.trim();
@@ -472,6 +474,8 @@ const DiscoveryFiltersPanel = ({
                         </label>
                         <Input
                             id={`${idPrefix}-radius`}
+                            name={`${idPrefix}-radius`}
+                            autoComplete='off'
                             type='number'
                             min={300}
                             max={100000}
@@ -498,6 +502,8 @@ const DiscoveryFiltersPanel = ({
                         </label>
                         <Input
                             id={`${idPrefix}-lat`}
+                            name={`${idPrefix}-lat`}
+                            autoComplete='off'
                             type='number'
                             step='0.0001'
                             value={latValue}
@@ -526,6 +532,8 @@ const DiscoveryFiltersPanel = ({
                         </label>
                         <Input
                             id={`${idPrefix}-lng`}
+                            name={`${idPrefix}-lng`}
+                            autoComplete='off'
                             type='number'
                             step='0.0001'
                             value={lngValue}
@@ -677,7 +685,9 @@ const DashboardRoute = ({
                         </label>
                         <Input
                             id='search-requests'
-                            placeholder='e.g. food, shelter, transport'
+                            name='searchRequests'
+                            autoComplete='off'
+                            placeholder='e.g., food, shelter, transport…'
                             value={discoveryState.text ?? ''}
                             onChange={event => {
                                 const nextValue = event.target.value.trim();
@@ -849,8 +859,8 @@ const MapRoute = ({
 
     return (
         <section className='space-y-6'>
-            <header className='border-b-2 border-mh-border pb-4'>
-                <h1 className='font-heading text-3xl font-black uppercase tracking-tight sm:text-4xl'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>
                     Map triage
                 </h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
@@ -911,7 +921,7 @@ const MapRoute = ({
                             {Array.from({ length: 3 }).map((_, index) => (
                                 <li
                                     key={`cluster-skeleton-${index}`}
-                                    className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'
+                                    className='mh-record-card'
                                 >
                                     <div className='mh-skeleton h-4 w-3/4' />
                                     <div className='mh-skeleton mt-2 h-3 w-1/2' />
@@ -928,7 +938,7 @@ const MapRoute = ({
                             {mapView.clusters.map(cluster => (
                                 <li
                                     key={cluster.id}
-                                    className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'
+                                    className='mh-record-card'
                                 >
                                     <p className='text-sm font-bold text-mh-text'>
                                         {cluster.label}
@@ -958,7 +968,7 @@ const MapRoute = ({
                             {Array.from({ length: 3 }).map((_, index) => (
                                 <li
                                     key={`marker-skeleton-${index}`}
-                                    className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'
+                                    className='mh-record-card'
                                 >
                                     <div className='mh-skeleton h-4 w-2/3' />
                                     <div className='mh-skeleton mt-2 h-3 w-full' />
@@ -976,7 +986,7 @@ const MapRoute = ({
                             {mapView.filteredCards.map(card => (
                                 <li
                                     key={card.id}
-                                    className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'
+                                    className='mh-record-card'
                                 >
                                     <div className='flex flex-wrap items-start justify-between gap-2'>
                                         <p className='text-sm font-bold text-mh-text'>
@@ -1306,6 +1316,8 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
                     <label className='block text-xs font-bold'>
                         Report reason
                         <select
+                            name='reportReason'
+                            autoComplete='off'
                             className='mt-1 block w-full border-2 border-mh-border bg-mh-surface p-2'
                             value={reason}
                             onChange={event =>
@@ -1323,6 +1335,8 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
                     <label className='block text-xs font-bold'>
                         Private report details
                         <textarea
+                            name='reportDetails'
+                            autoComplete='off'
                             className='mt-1 block min-h-24 w-full border-2 border-mh-border bg-mh-surface p-2'
                             maxLength={1000}
                             value={details}
@@ -1578,8 +1592,8 @@ const FeedRoute = ({
 
     return (
         <section className='space-y-6'>
-            <header className='border-b-2 border-mh-border pb-4'>
-                <h1 className='font-heading text-3xl font-black uppercase tracking-tight sm:text-4xl'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>
                     Feed operations
                 </h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
@@ -1643,7 +1657,7 @@ const FeedRoute = ({
                         {Array.from({ length: 3 }).map((_, index) => (
                             <li
                                 key={`feed-skeleton-${index}`}
-                                className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-4'
+                                className='mh-record-card p-4'
                             >
                                 <div className='mh-skeleton h-5 w-2/3' />
                                 <div className='mh-skeleton mt-2 h-3 w-full' />
@@ -1698,7 +1712,7 @@ const FeedRoute = ({
                             return (
                                 <li
                                     key={card.id}
-                                    className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-4'
+                                    className='mh-record-card p-4'
                                 >
                                     <div className='flex flex-wrap items-start justify-between gap-2'>
                                         <p className='text-base font-bold text-mh-text'>
@@ -2004,8 +2018,8 @@ const PostingRoute = ({
 
     return (
         <section className='space-y-6'>
-            <header className='border-b-2 border-mh-border pb-4'>
-                <h1 className='font-heading text-3xl font-black uppercase tracking-tight sm:text-4xl'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>
                     Create request
                 </h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
@@ -2025,6 +2039,8 @@ const PostingRoute = ({
                         </label>
                         <Input
                             id='posting-title'
+                            name='title'
+                            autoComplete='off'
                             value={title}
                             onChange={event => setTitle(event.target.value)}
                         />
@@ -2039,6 +2055,8 @@ const PostingRoute = ({
                         </label>
                         <textarea
                             id='posting-description'
+                            name='description'
+                            autoComplete='off'
                             className='mh-input min-h-35 w-full px-3 py-2 text-base'
                             value={description}
                             onChange={event =>
@@ -2057,6 +2075,8 @@ const PostingRoute = ({
                             </label>
                             <select
                                 id='posting-category'
+                                name='category'
+                                autoComplete='off'
                                 className='mh-input w-full px-3 py-2 text-base'
                                 value={category}
                                 onChange={event =>
@@ -2083,6 +2103,8 @@ const PostingRoute = ({
                             </label>
                             <Input
                                 id='posting-urgency'
+                                name='urgency'
+                                autoComplete='off'
                                 type='number'
                                 min={1}
                                 max={5}
@@ -2115,6 +2137,8 @@ const PostingRoute = ({
                         </label>
                         <Input
                             id='posting-tags'
+                            name='accessibilityTags'
+                            autoComplete='off'
                             value={tagsText}
                             onChange={event => setTagsText(event.target.value)}
                         />
@@ -2130,6 +2154,8 @@ const PostingRoute = ({
                             </label>
                             <Input
                                 id='posting-lat'
+                                name='latitude'
+                                autoComplete='off'
                                 type='number'
                                 step='0.0001'
                                 value={lat}
@@ -2145,6 +2171,8 @@ const PostingRoute = ({
                             </label>
                             <Input
                                 id='posting-lng'
+                                name='longitude'
+                                autoComplete='off'
                                 type='number'
                                 step='0.0001'
                                 value={lng}
@@ -2160,6 +2188,8 @@ const PostingRoute = ({
                             </label>
                             <Input
                                 id='posting-precision'
+                                name='precisionMeters'
+                                autoComplete='off'
                                 type='number'
                                 min={300}
                                 value={precisionMeters}
@@ -2180,6 +2210,8 @@ const PostingRoute = ({
                             </label>
                             <Input
                                 id='posting-start-at'
+                                name='startAt'
+                                autoComplete='off'
                                 type='datetime-local'
                                 value={startAt}
                                 onChange={event =>
@@ -2196,6 +2228,8 @@ const PostingRoute = ({
                             </label>
                             <Input
                                 id='posting-end-at'
+                                name='endAt'
+                                autoComplete='off'
                                 type='datetime-local'
                                 value={endAt}
                                 onChange={event => setEndAt(event.target.value)}
@@ -2317,8 +2351,8 @@ const ResourceRoute = ({
 
     return (
         <section className='space-y-6'>
-            <header className='border-b-2 border-mh-border pb-4'>
-                <h1 className='font-heading text-3xl font-black uppercase tracking-tight sm:text-4xl'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>
                     Resource directory
                 </h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
@@ -2397,7 +2431,7 @@ const ResourceRoute = ({
                         {Array.from({ length: 3 }).map((_, index) => (
                             <li
                                 key={`resource-skeleton-${index}`}
-                                className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'
+                                className='mh-record-card'
                             >
                                 <div className='mh-skeleton h-4 w-1/2' />
                                 <div className='mh-skeleton mt-2 h-3 w-2/3' />
@@ -2427,7 +2461,7 @@ const ResourceRoute = ({
                         {viewModel.cards.map(card => (
                             <li
                                 key={card.uri}
-                                className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'
+                                className='mh-record-card'
                             >
                                 <div className='flex flex-wrap items-start justify-between gap-2'>
                                     <p className='text-sm font-bold text-mh-text'>
@@ -2589,8 +2623,8 @@ const VolunteerRoute = ({ did }: { did: string }) => {
 
     return (
         <section className='space-y-6'>
-            <header className='border-b-2 border-mh-border pb-4'>
-                <h1 className='font-heading text-3xl font-black uppercase tracking-tight sm:text-4xl'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>
                     Volunteer onboarding
                 </h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
@@ -3042,8 +3076,8 @@ const ChatRoute = ({
 
     return (
         <section className='space-y-6'>
-            <header className='border-b-2 border-mh-border pb-4'>
-                <h1 className='font-heading text-3xl font-black uppercase tracking-tight sm:text-4xl'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>
                     Chat handoff
                 </h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
@@ -3271,8 +3305,8 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
 
     return (
         <section className='space-y-6'>
-            <header className='border-b-2 border-mh-border pb-4'>
-                <h1 className='font-heading text-3xl font-black uppercase tracking-tight sm:text-4xl'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>
                     Account settings
                 </h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
@@ -4386,7 +4420,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                     id='main-content'
                     ref={mainContentRef}
                     tabIndex={-1}
-                    className='outline-none'
+                    className='focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mh-accent'
                 >
                     {content}
                 </div>

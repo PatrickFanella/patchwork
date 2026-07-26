@@ -5,7 +5,10 @@ const localPort = Number(process.env['PATCHWORK_E2E_PORT'] ?? '41739');
 if (!Number.isInteger(localPort) || localPort < 1 || localPort > 65_535) {
     throw new Error('PATCHWORK_E2E_PORT must be an integer TCP port.');
 }
-const localBaseUrl = `http://127.0.0.1:${localPort}`;
+// Keep the development origin on the same loopback hostname as the API
+// default. Newer Chromium versions enforce private-network boundaries before
+// Playwright can fulfill mismatched localhost/127.0.0.1 routes.
+const localBaseUrl = `http://localhost:${localPort}`;
 
 export default defineConfig({
     testDir: './e2e',
@@ -28,7 +31,7 @@ export default defineConfig({
     ],
     webServer:
         externalBaseUrl ? undefined : {
-            command: `npm run dev -- --host 127.0.0.1 --port ${localPort} --strictPort`,
+            command: `npm run dev -- --host localhost --port ${localPort} --strictPort`,
             url: localBaseUrl,
             reuseExistingServer: false,
             timeout: 60_000,

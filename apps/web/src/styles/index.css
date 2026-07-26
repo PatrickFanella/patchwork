@@ -192,6 +192,32 @@ code {
     text-transform: uppercase;
 }
 
+.mh-route-header {
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1.5px solid var(--mh-border);
+    padding: 0 64px 20px 0;
+}
+
+.mh-route-header::after {
+    position: absolute;
+    right: 4px;
+    bottom: -6px;
+    width: 44px;
+    height: 44px;
+    border: 8px solid var(--mh-accent-3);
+    border-radius: 50%;
+    content: '';
+}
+
+.mh-route-title {
+    font-family: var(--mh-font-heading);
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    font-weight: 900;
+    line-height: 0.96;
+    letter-spacing: -0.045em;
+}
+
 .mh-footer {
     display: flex;
     align-items: center;
@@ -243,6 +269,34 @@ code {
 .mh-login-status,
 .mh-login-error {
     grid-column: 2;
+}
+
+.mh-auth-state-shell {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    background:
+        radial-gradient(
+            circle at 20% 20%,
+            rgb(242 193 78 / 18%),
+            transparent 30%
+        ),
+        radial-gradient(
+            circle at 82% 72%,
+            rgb(18 102 79 / 12%),
+            transparent 34%
+        ),
+        var(--mh-bg);
+    padding: 24px;
+}
+
+.mh-auth-state-card {
+    width: min(100%, 560px);
+    border: 1.5px solid var(--mh-border);
+    border-radius: 2px 20px 2px 20px;
+    background: var(--mh-surface);
+    box-shadow: 6px 6px 0 rgb(23 32 25 / 16%);
+    padding: clamp(24px, 6vw, 48px);
 }
 
 @media (max-width: 760px) {
@@ -299,6 +353,17 @@ code {
     .mh-footer {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .mh-route-header {
+        padding-right: 48px;
+    }
+
+    .mh-route-header::after {
+        right: -4px;
+        width: 36px;
+        height: 36px;
+        border-width: 7px;
     }
 }
 
@@ -479,7 +544,7 @@ code {
     border-top: 1px solid var(--mh-border-subtle);
     font-style: italic;
     font-size: 0.7rem;
-    color: var(--mh-text-soft);
+    color: var(--mh-text-muted);
 }
 
 /* Responsive adjustments */

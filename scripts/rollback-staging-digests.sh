@@ -10,6 +10,19 @@ manifest="$state_dir/previous-artifact-digests.json"
     echo 'No previous-artifact-digests.json is available.' >&2
     exit 1
 }
+git_sha=$(jq -er '.gitSha' "$manifest")
+[[ "$git_sha" =~ ^[0-9a-f]{40}$ ]] || {
+    echo 'Refusing rollback manifest without a full Git SHA.' >&2
+    exit 1
+}
+map_tile_url=$(jq -er '.mapTileUrl' "$manifest")
+[[ "$map_tile_url" =~ ^/tiles/us\.[0-9a-f]{64}\.pmtiles$ ]] || {
+    echo 'Refusing rollback manifest without a content-addressed map tile URL.' >&2
+    exit 1
+}
+export STAGING_VITE_MAP_TILE_URL="$map_tile_url"
+export STAGING_PATCHWORK_PM_TILES_FILENAME="${map_tile_url##*/}"
+
 for service in api indexer moderation web; do
     image=$(jq -er ".images.${service}" "$manifest")
     [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || exit 1
@@ -25,6 +38,23 @@ compose=(docker compose --env-file "$env_file" -f "$compose_file")
 "${compose[@]}" pull
 "${compose[@]}" up -d --no-build --no-deps \
     patchwork-spool patchwork-thimble patchwork-api patchwork-web
+
+for service in \
+    patchwork-spool \
+    patchwork-thimble \
+    patchwork-api \
+    patchwork-web; do
+    container_id=$("${compose[@]}" ps -q "$service")
+    [[ -n "$container_id" ]]
+    revision=$(docker inspect --format \
+        '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+        "$container_id")
+    [[ "$revision" == "$git_sha" ]] || {
+        echo "Revision mismatch for ${service}: ${revision} != ${git_sha}." >&2
+        exit 1
+    }
+done
+
 for probe in 'patchwork-spool:4100' 'patchwork-thimble:4200' 'patchwork-api:4000'; do
     service=${probe%%:*}; port=${probe##*:}
     for attempt in {1..30}; do
@@ -36,5 +66,22 @@ for probe in 'patchwork-spool:4100' 'patchwork-thimble:4200' 'patchwork-api:4000
         sleep 2
     done
 done
+
+"${compose[@]}" exec -T patchwork-web sh -ceu \
+    'grep -R -F -- "$1" /usr/share/nginx/html/assets >/dev/null' \
+    _ "$map_tile_url"
+tile_bytes=$("${compose[@]}" exec -T patchwork-web sh -ceu \
+    'wget --header="Range: bytes=0-1023" -qO- "http://127.0.0.1$1" | wc -c' \
+    _ "$map_tile_url")
+[[ "$tile_bytes" -eq 1024 ]] || {
+    echo "Map tile range probe returned ${tile_bytes} bytes instead of 1024." >&2
+    exit 1
+}
+if "${compose[@]}" exec -T patchwork-web \
+    wget -qO- http://127.0.0.1/tiles/us.pmtiles >/dev/null 2>&1; then
+    echo 'Unversioned map tile URL must return 404.' >&2
+    exit 1
+fi
+
 cp "$manifest" "$state_dir/current-artifact-digests.json"
-echo "Rolled staging back to $(jq -r '.gitSha' "$manifest")."
+echo "Rolled staging back to ${git_sha}."

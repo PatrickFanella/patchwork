@@ -12,9 +12,10 @@ test.beforeEach(async ({ page, baseURL }) => {
             url: baseURL,
         },
     ]);
-    await page.route('http://localhost:4000/**', async route => {
+    await page.route('**/api/**', async route => {
         const url = new URL(route.request().url());
-        if (url.pathname === '/auth/session') {
+        const apiPath = url.pathname.replace(/^\/api/, '');
+        if (apiPath === '/auth/session') {
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
@@ -27,7 +28,7 @@ test.beforeEach(async ({ page, baseURL }) => {
             });
             return;
         }
-        if (url.pathname === '/query/feed') {
+        if (apiPath === '/query/feed') {
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
@@ -56,7 +57,7 @@ test('authenticated user reports a discovered request with private details', asy
     page,
 }) => {
     let reportBody: Record<string, unknown> | undefined;
-    await page.route('http://localhost:4000/reports', async route => {
+    await page.route('**/api/reports', async route => {
         reportBody = route.request().postDataJSON() as Record<string, unknown>;
         await route.fulfill({
             status: 201,
@@ -89,7 +90,7 @@ test('authenticated user confirms a private block against the record author', as
 }) => {
     let blockBody: Record<string, unknown> | undefined;
     let csrfHeader: string | undefined;
-    await page.route('http://localhost:4000/blocks', async route => {
+    await page.route('**/api/blocks', async route => {
         blockBody = route.request().postDataJSON() as Record<string, unknown>;
         csrfHeader = route.request().headers()['x-csrf-token'];
         await route.fulfill({
@@ -122,11 +123,12 @@ test('authenticated user confirms a private block against the record author', as
 test('record owner closes with compare-and-swap then deletes the AT record', async ({
     page,
 }) => {
-    await page.unroute('http://localhost:4000/**');
+    await page.unroute('**/api/**');
     const mutationBodies: Record<string, unknown>[] = [];
-    await page.route('http://localhost:4000/**', async route => {
+    await page.route('**/api/**', async route => {
         const url = new URL(route.request().url());
-        if (url.pathname === '/auth/session') {
+        const apiPath = url.pathname.replace(/^\/api/, '');
+        if (apiPath === '/auth/session') {
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
@@ -139,7 +141,7 @@ test('record owner closes with compare-and-swap then deletes the AT record', asy
             });
             return;
         }
-        if (url.pathname === '/query/feed') {
+        if (apiPath === '/query/feed') {
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
@@ -161,7 +163,7 @@ test('record owner closes with compare-and-swap then deletes the AT record', asy
             });
             return;
         }
-        if (url.pathname === '/at/aid-posts/close') {
+        if (apiPath === '/at/aid-posts/close') {
             mutationBodies.push(route.request().postDataJSON());
             await route.fulfill({
                 status: 200,
@@ -189,7 +191,10 @@ test('record owner closes with compare-and-swap then deletes the AT record', asy
             });
             return;
         }
-        if (url.pathname === '/at/aid-posts' && route.request().method() === 'DELETE') {
+        if (
+            apiPath === '/at/aid-posts' &&
+            route.request().method() === 'DELETE'
+        ) {
             mutationBodies.push(route.request().postDataJSON());
             await route.fulfill({ status: 204, body: '' });
             return;
@@ -217,13 +222,14 @@ test('record owner closes with compare-and-swap then deletes the AT record', asy
 test('owner can recover when private lifecycle transition outpaces public AT sync', async ({
     page,
 }) => {
-    await page.unroute('http://localhost:4000/**');
+    await page.unroute('**/api/**');
     const postUri =
         'at://did:plc:viewer/app.patchwork.aid.post/sync-recovery-1';
     let syncAttempts = 0;
-    await page.route('http://localhost:4000/**', async route => {
+    await page.route('**/api/**', async route => {
         const url = new URL(route.request().url());
-        if (url.pathname === '/auth/session') {
+        const apiPath = url.pathname.replace(/^\/api/, '');
+        if (apiPath === '/auth/session') {
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
@@ -236,7 +242,7 @@ test('owner can recover when private lifecycle transition outpaces public AT syn
             });
             return;
         }
-        if (url.pathname === '/query/feed') {
+        if (apiPath === '/query/feed') {
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
@@ -258,7 +264,7 @@ test('owner can recover when private lifecycle transition outpaces public AT syn
             });
             return;
         }
-        if (url.pathname === '/aid/post/lifecycle') {
+        if (apiPath === '/aid/post/lifecycle') {
             await route.fulfill({
                 status: 404,
                 contentType: 'application/json',
@@ -271,7 +277,7 @@ test('owner can recover when private lifecycle transition outpaces public AT syn
             });
             return;
         }
-        if (url.pathname === '/aid/post/transition') {
+        if (apiPath === '/aid/post/transition') {
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
@@ -292,7 +298,7 @@ test('owner can recover when private lifecycle transition outpaces public AT syn
             });
             return;
         }
-        if (url.pathname === '/at/aid-posts/status/reconcile') {
+        if (apiPath === '/at/aid-posts/status/reconcile') {
             syncAttempts += 1;
             if (syncAttempts === 1) {
                 await route.fulfill({

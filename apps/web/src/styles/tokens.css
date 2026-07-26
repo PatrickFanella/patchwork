@@ -145,13 +145,12 @@
 }
 
 .mh-button--secondary {
-    background: var(--mh-cta);
+    background: var(--mh-danger);
     color: #fffdf7;
-    color: var(--mh-text);
 }
 
 .mh-button--secondary:hover {
-    background: var(--mh-accent-3);
+    background: #922f24;
 }
 
 .mh-button--neutral {
@@ -327,7 +326,29 @@
     box-shadow: 2px 2px 0 rgb(23 32 25 / 14%);
 }
 
-:where(a, button, input, textarea, select, [role='button']):focus-visible {
+.mh-record-card {
+    border: 1px solid var(--mh-border-soft);
+    border-radius: 2px 12px 2px 12px;
+    background: var(--mh-surface-elev);
+    padding: var(--mh-space-3);
+    transition:
+        border-color var(--mh-transition-standard),
+        box-shadow var(--mh-transition-standard),
+        transform var(--mh-transition-standard);
+}
+
+.mh-record-card:hover {
+    border-color: var(--mh-border);
+    box-shadow: 2px 2px 0 rgb(23 32 25 / 12%);
+    transform: translateY(-1px);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+    accent-color: var(--mh-accent);
+}
+
+:where(a, button, input, textarea, select, summary, [role='button']):focus-visible {
     outline: 2px solid var(--mh-focus);
     outline-offset: 2px;
     box-shadow: 0 0 0 2px var(--mh-focus-offset);

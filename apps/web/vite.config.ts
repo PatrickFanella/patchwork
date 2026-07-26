@@ -21,6 +21,13 @@ export default defineConfig(({ command, mode }) => {
         },
         server: {
             port: 5173,
+            proxy: {
+                '/api': {
+                    target: 'http://localhost:4000',
+                    changeOrigin: false,
+                    rewrite: path => path.replace(/^\/api/, ''),
+                },
+            },
         },
         test: {
             exclude: ['e2e/**', 'node_modules/**'],

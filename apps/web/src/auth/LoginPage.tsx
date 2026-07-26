@@ -77,6 +77,7 @@ export const LoginPage = () => {
                     id='at-handle'
                     name='handle'
                     autoComplete='username'
+                    spellCheck={false}
                     required
                     value={handle}
                     onChange={event => setHandle(event.target.value)}
