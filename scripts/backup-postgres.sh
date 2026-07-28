@@ -2,6 +2,7 @@
 # Create, validate, checksum, and atomically publish a Patchwork PostgreSQL backup.
 
 set -Eeuo pipefail
+umask 077
 
 PGHOST="${PGHOST:-localhost}"
 PGPORT="${PGPORT:-5432}"

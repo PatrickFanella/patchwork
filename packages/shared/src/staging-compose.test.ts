@@ -100,11 +100,26 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
             const api = services['patchwork-api']?.environment;
             expect(api).toMatchObject({
                 API_DATA_SOURCE: 'postgres',
+                PATCHWORK_ENV:
+                    filename === 'docker-compose.yml' ?
+                        'production'
+                    :   'staging',
                 ATPROTO_ACCOUNT_PDS_URL: 'http://pds.internal.test:3000',
                 ATPROTO_OAUTH_CLIENT_ID: expect.stringMatching(/^https:/),
                 ATPROTO_OAUTH_REDIRECT_URI: expect.stringMatching(/^https:/),
                 ATPROTO_SESSION_ENCRYPTION_KEY: expect.any(String),
             });
+            for (const runtime of [
+                'patchwork-api',
+                'patchwork-spool',
+                'patchwork-thimble',
+            ]) {
+                expect(services[runtime]?.environment?.PATCHWORK_ENV).toBe(
+                    filename === 'docker-compose.yml' ?
+                        'production'
+                    :   'staging',
+                );
+            }
         });
     },
 );

@@ -22,7 +22,7 @@ exceptions to the launch criteria in this decision.
 | Live ingestion and discovery | Phase 5 cursor, reconnect, projection, tombstone, dead-letter, rebuild, query, and automatic lifecycle-reconciliation evidence plus controlled live aid and directory lifecycles | Home-network external gate passes; protected staging repetition remains |
 | Web journey | Local browser evidence passes 50 Chromium cases; the controlled two-account OAuth case passed separately in 12.2 seconds | Phase 6 exit gate satisfied |
 | Staging topology and delivery | Phase 7 topology and digest-deployment mechanism evidence | No signed registry digest or staging deployment/rollback run |
-| Recovery and alerting | Phase 7 isolated PostgreSQL 16 restore and eleven validated alert rules | No staging restore, notification delivery, or incident exercise |
+| Recovery and alerting | NUC indexer-disconnect alert/recovery plus live PostgreSQL 17 backup and empty-target restore with measured RTO/RPO | Mechanisms pass; independent backup durability and human acknowledgment remain |
 | Security | `npm audit --omit=dev --audit-level=high`: zero vulnerabilities on 2026-07-28; delivery workflow is configured to reject high/critical Trivy findings | Dependency gate green; deployed-image scan has not run |
 | Data retention | API migration 0012 and moderation migration 003 drive hourly non-overlapping cleanup for all alpha-private state. Active moderation cases and sessions are preserved; failure/staleness metrics alert for both runtimes. | Formal privacy/backup-deletion approval and deployed scheduler observations remain incomplete |
 | Data subject access and deactivation | Authenticated versioned export covers Patchwork-held alpha data without credentials or cross-subject projections. Durable deactivation removes Patchwork state, revokes login, sanitizes bounded retained exceptions, and suppresses future commands/projections. | Independent AT-repository deletion, controlled casework review, real staging exercise, and formal privacy approval remain incomplete |
@@ -53,8 +53,8 @@ These local results are necessary but do not substitute for external proof.
 | `AT-BROWSER` | Satisfied 2026-07-28: two disposable users completed OAuth, create, ingest, discover, report, block, close, and delete with no fixture fallback | Engineering | Complete |
 | `IMMUTABLE-STAGING` | Four scanned and signed digests deploy through the protected workflow and pass deep readiness | Infrastructure | 2026-08-11 |
 | `ROLLBACK` | Deployed staging returns to the prior four-digest manifest without incompatible down migration | Infrastructure | 2026-08-11 |
-| `RECOVERY` | A staging backup restores into an empty database, invalidates sessions, preserves required state, and meets measured RTO/RPO | Infrastructure + Engineering | 2026-08-11 |
-| `ALERT-GAMEDAY` | Indexer disconnect and database-loss drills deliver, acknowledge, and resolve actionable alerts | Infrastructure + Incident Commander | 2026-08-11 |
+| `RECOVERY` | Satisfied 2026-07-28: a live staging backup restored into an empty database, invalidated sessions, preserved required state, and recorded 1-second RTO/22-second RPO | Infrastructure + Engineering | Complete |
+| `ALERT-GAMEDAY` | Mechanism satisfied 2026-07-28: indexer disconnect fired through Alertmanager and recovered; human acknowledgment remains part of `OWNERSHIP` | Infrastructure + Incident Commander | Complete |
 | `RETENTION` | Scheduled private-data expiry and deactivation are implemented and tested; backup, retained-exception, suppression-marker, and AT-repository-boundary policy is formally approved | Privacy + Engineering | 2026-08-11 |
 | `ACCESSIBILITY` | Independent WCAG/assistive-technology review has no unresolved launch-blocking finding | Accessibility + Product | 2026-08-11 |
 | `CAPACITY` | Staging load test records safe request, ingestion, queue, and database headroom | Engineering + Infrastructure | 2026-08-11 |

@@ -1,6 +1,74 @@
 # Phase 7 recovery and alerting evidence
 
-Status: **local mechanism proven; real staging exercise pending**
+Status: **NUC staging recovery and indexer-disconnect exercises complete;
+protected immutable deployment and human acknowledgment remain pending**
+
+## NUC staging exercises — 2026-07-28 UTC
+
+The home-network NUC runtime supplied the previously absent Prometheus,
+Alertmanager, PostgreSQL, API, indexer, moderation, web, PDS, and local
+Jetstream boundaries. The exercises remained isolated to Patchwork.
+
+### Alert wiring correction
+
+Prometheus was already scraping the API, indexer, and moderation worker, but
+the runtime metrics were labeled `environment="development"` while every rule
+selected `environment="staging"`. Production Compose also omitted the explicit
+environment label. A failing Compose contract test now requires `production`
+for the production manifest and `staging` for the staging manifest. The
+NUC-owned override selects staging.
+
+The 11-rule `patchwork-staging-critical` group is now loaded into the existing
+Prometheus/Alertmanager stack. Six required source families are present:
+API errors, event-source connection and lag, moderation queue age, PostgreSQL
+availability, and backup status. A dedicated pinned PostgreSQL exporter
+provides `up{job="patchwork-postgres",environment="staging"}`; node-exporter
+ingests the backup textfile.
+
+### Indexer-disconnect game day
+
+| Event | UTC timestamp | Observation |
+| --- | --- | --- |
+| Local Patchwork Jetstream stopped | 18:12:54 | Indexer remained healthy and reported source connection `0` |
+| Alert pending | 18:13:10 | Prometheus honored the configured two-minute hold |
+| Alert firing | 18:15:10 | Alertmanager reported the alert active and routed it to `ntfy` |
+| Jetstream restarted | 18:15:26 | Indexer reconnected with source connection `1`; alert resolved |
+
+Alertmanager reported zero webhook notification failures. Human receipt and
+acknowledgment were not independently observed, so that organizational proof
+is not claimed.
+
+### Live backup and empty-target restore game day
+
+The first attempt deliberately exposed operational drift: the live server is
+PostgreSQL 17.10, while the old drill text assumed PostgreSQL 16. A v16
+`pg_dump` correctly refused the major-version mismatch and published no
+archive. The rerun pinned PostgreSQL 17 tooling.
+
+- validated custom archive: 127,174 bytes;
+- backup publication: 2026-07-28 18:17:58 UTC;
+- empty PostgreSQL 17 target: `127.0.0.1:55440`;
+- restore duration/RTO: 1 second;
+- measured recovery-point age/RPO: 22 seconds;
+- recovered aid projections: 360 of 360;
+- recovered reports/audits/deactivations/idempotency rows: exact source match;
+- restored OAuth sessions removed: 2;
+- restored OAuth-state rows removed: 1;
+- remaining browser/OAuth state after restore: 0.
+
+The drill also found that final archives inherited `0644` despite the private
+temporary directory. `backup-postgres.sh` now sets `umask 077`; the regression
+test and a second live backup proved all published archive, checksum, metadata,
+and metric files are `0600`.
+
+Commands exercised:
+
+```text
+docker compose stop/start patchwork-jetstream
+promtool check config /etc/prometheus/prometheus.yml
+scripts/backup-postgres.sh
+scripts/restore-postgres.sh <validated archive>
+```
 
 ## Isolated recovery drill
 
@@ -48,17 +116,11 @@ The committed rules cover API 5xx ratio, AT event-source disconnect and lag,
 oldest moderation queue item, PostgreSQL target loss, failed backup, and stale
 backup. API and moderation runtime emitters were completed in the same slice.
 
-## Remaining authorized-staging gate
+## Remaining Phase 7 boundary
 
-These roadmap items remain open until an authorized staging URL and alert
-receiver exist:
-
-- restore an actual staging backup into a separate empty staging database;
-- observe and acknowledge every alert through the real notification route;
-- execute the indexer-disconnect game day against the deployed source;
-- execute the database-restore game day and pass the OAuth/browser smoke test;
-- record staging RTO/RPO, alert timestamps, operator decisions, and resolution.
-
-Local evidence proves the mechanism and failure guards, not the Phase 7 exit
-gate. No deployment, DNS change, registry publication, or external message was
-performed.
+The NUC exercises prove the deployed alert, disconnect, backup, restore,
+session-invalidation, and recovery mechanisms. Phase 7 is still not closed:
+images have not been scanned, signed, pushed, and deployed by digest through
+the protected workflow; rollback has not run from a prior four-digest
+manifest; and no human has acknowledged the notification or accepted incident
+ownership. No DNS change or registry publication was performed.

@@ -161,9 +161,12 @@ Tests for contract-only or fixture-only expansion systems were removed from the 
 
 `packages/shared/src/recovery-operations.test.ts` ties the recovery scripts,
 runtime metric emitters, and executable alert rules to the Task 7.3 contract.
-The committed Phase 7 evidence separately records the disposable PostgreSQL
-restore and negative-path drills. These local checks prove mechanism behavior;
-they do not replace alert delivery or browser validation on real staging.
+The committed Phase 7 evidence records both the earlier disposable PostgreSQL
+drill and the 2026-07-28 NUC exercises: live PostgreSQL 17 backup/restore,
+session invalidation, source/private-state count comparison, restrictive
+archive permissions, loaded Prometheus sources, and a routed
+indexer-disconnect alert. Human acknowledgment and immutable signed-digest
+deployment remain external.
 
 ## Private-data retention
 

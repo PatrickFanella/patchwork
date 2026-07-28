@@ -37,6 +37,7 @@ services:
                 condition: service_healthy
         environment:
             NODE_ENV: production
+            PATCHWORK_ENV: production
             LOG_LEVEL: ${LOG_LEVEL:-info}
             ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
@@ -87,6 +88,7 @@ services:
                 condition: service_completed_successfully
         environment:
             NODE_ENV: production
+            PATCHWORK_ENV: production
             LOG_LEVEL: ${LOG_LEVEL:-info}
             ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
@@ -127,6 +129,7 @@ services:
         restart: unless-stopped
         environment:
             NODE_ENV: production
+            PATCHWORK_ENV: production
             LOG_LEVEL: ${LOG_LEVEL:-info}
             ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}

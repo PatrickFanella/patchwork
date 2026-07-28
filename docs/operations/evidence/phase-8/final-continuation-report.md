@@ -14,10 +14,10 @@ Recommended decision: **NO-GO**
 | 4. Secure HTTP surface | 18/18 (100%) | Complete locally |
 | 5. Live indexer | 17/17 (100%) | Runtime plus controlled live aid and directory lifecycles complete |
 | 6. Integrated web journey | 16/16 (100%) | Real two-account OAuth journey passed against the NUC runtime |
-| 7. Real staging operations | 9/18 (50%) | Mechanisms complete; deployment and game days unexecuted |
+| 7. Real staging operations | 15/18 (83%) | Recovery and alert game days complete; immutable signed-digest deployment remains |
 | 8. Evaluation and scope control | 11/14 (79%) | `NO-GO`, expansion frozen, closure prepared; approvals pending |
 
-Raw roadmap completion is 124/136 items (91%). This is not a launch score: the
+Raw roadmap completion is 130/136 items (96%). This is not a launch score: the
 remaining items are high-weight external gates, so the project is `NO-GO`.
 
 The roadmap's narrow core paths are implemented locally: authentication
@@ -65,27 +65,28 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 
 The current prerequisite-by-prerequisite verification is recorded in
 `external-gate-audit.md`. The browser inputs were supplied for one controlled
-run and then destroyed; registry, protected-staging, alert, and operator inputs
+run and then destroyed; registry, protected-environment, and operator inputs
 remain absent.
 
-1. Authorized staging host, URL, registry, protected environment, and secrets.
+1. Protected registry/environment authentication, workflow secret routing,
+   and pinned SSH configuration for the authorized NUC staging host.
 2. Signed image publication, four-digest deployment, and rollback execution.
-3. Restore of a staging backup with measured staging RTO/RPO.
-4. Delivered and resolved alerts during indexer and database game days.
-5. Formal approval of the implemented backup-aware retention and deactivation
+3. Formal approval of the implemented backup-aware retention and deactivation
    policy, including the AT-repository deletion boundary.
-6. Independent WCAG/assistive-technology review and sustained deployed
+4. Independent WCAG/assistive-technology review and sustained deployed
    capacity test; the bounded local PostgreSQL read probe is green.
-7. Named product, engineering, infrastructure, privacy, trust-and-safety, and
+5. Named product, engineering, infrastructure, privacy, trust-and-safety, and
    on-call owners.
-8. Approval of `project-closure.md` or a replacement go decision.
+6. Approval of `project-closure.md` or a replacement go decision.
 
 ## Residual risks and next decision
 
-Local tests cannot prove OAuth metadata, PDS behavior, registry signing, host
-configuration, alert delivery, or human response. Single-region/single-replica
-staging capacity remains unmeasured, and fixture-only expansion code remains
-frozen but present outside the alpha surface.
+The controlled home runtime proves OAuth/PDS behavior, host configuration,
+restore, and alert routing, but not registry signing, protected deployment,
+four-image rollback, independent backup durability, or human response.
+Single-region/single-replica staging capacity remains only partially measured,
+and fixture-only expansion code remains frozen but present outside the alpha
+surface.
 
 Do not launch or recruit participants. Either supply the authorized staging,
 OAuth, and ownership inputs and execute the remaining gates, or approve and

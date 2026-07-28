@@ -2,7 +2,7 @@
 
 Audit date: 2026-07-28 (America/Chicago)
 
-Result: **the Phase 6 controlled browser gate is complete; 12
+Result: **the Phase 6 browser and Phase 7 recovery/alerting gates are complete; 6
 roadmap checklist items remain unproven because their required external state
 or human authorization is absent**.
 
@@ -25,7 +25,6 @@ retained safety report was redacted according to policy.
 | Remaining gate | Local mechanism and evidence | Missing authoritative proof | Current prerequisite state |
 | --- | --- | --- | --- |
 | Phase 7 immutable publication/deployment (3 items) | Protected workflow builds four images once, scans, pushes, resolves digests, keyless-signs, deploys exact digests, migrates, waits for readiness, runs the browser gate, and invokes four-image rollback on failure. Local workflow, script, Compose, build, audit, and contract gates pass. | Registry push/signature records, protected-environment deployment logs, exact four-digest manifest, staging readiness, and post-deploy browser result. | GitHub CLI's configured token is invalid; staging host/user/path variables are unset; staging environment files and current/previous digest manifests are absent. |
-| Phase 7 staging recovery/alert game days (6 items) | Isolated PostgreSQL restore proved empty-target enforcement, session invalidation, state recovery, and local RTO/RPO measurement. Eleven Prometheus rules validate and incident runbooks exist. | Restore of an actual staging backup, delivered/acknowledged alerts, indexer-disconnect and database-restore drills, operator decisions, timestamps, and follow-up fixes. | No authorized staging host, database, backup, alert receiver, or named incident operator is configured locally. |
 | Phase 8 pilot or closure decision (3 items) | `NO-GO` review, expansion freeze, pilot requirements, and a complete closure plan are committed. The NUC runtime remains a controlled pre-pilot environment, not an approved public launch. | Written product, engineering, trust-and-safety, privacy/legal-hold, and operator approval for either a bounded pilot or closure execution. | Approvers remain unassigned. Patchwork state and services are deliberately not destroyed or opened to a pilot without approval. |
 
 ## Current local authority boundary
@@ -34,17 +33,19 @@ retained safety report was redacted according to policy.
   and isolated local Jetstream services alongside unrelated workloads.
 - The controlled exercise touched only Patchwork and its disposable PDS
   accounts; unrelated services were not changed.
-- No registry publication, protected staging deploy, DNS change, OAuth-account
-  persistence, alert delivery, or external contact was performed.
+- No registry publication, protected staging deploy, DNS change,
+  OAuth-account persistence, or external contact was performed. The scoped
+  disconnect alert used the existing `ntfy` receiver.
 - `.codex/` remains user-owned and untouched.
 
 ## Unblocking sequence
 
-1. Provide an authorized staging host, protected registry/environment access,
-   valid GitHub authentication, pinned SSH identity, and the staging secret
-   file through the documented secret process.
-2. Execute immutable deployment, the real browser journey, rollback, staging
-   restore, and both alert game days, preserving only redacted evidence.
+1. Provide protected registry/environment access, valid GitHub
+   authentication, a pinned SSH identity, and the staging secret-file routing
+   needed by the workflow. The NUC itself is already the authorized
+   home-network staging host.
+2. Execute immutable signed-digest deployment and four-image rollback,
+   preserving only redacted evidence.
 3. Obtain formal retention/accessibility/capacity/ownership review and record a
    fresh go/no-go decision.
 4. If those inputs will not be supplied, approve the prepared closure plan and

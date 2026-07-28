@@ -503,22 +503,24 @@ until GHCR publication and an authorized staging deployment actually run.
 - Modify: `docs/operations/incident-response.md`
 - Create: `docs/operations/evidence/phase-7/staging-readiness.md`
 
-- [ ] Restore a staging backup into an empty database and verify sessions are invalidated safely while projections and private operational state recover as designed.
-- [ ] Record measured recovery time and recovery point results.
-- [ ] Alert on API error rate, indexer disconnect/lag, moderation queue age, database unavailability, and failed backup.
-- [ ] Execute one indexer-disconnect game day and one database-restore game day.
-- [ ] Record commands, timestamps, observed alerts, recovery decisions, and follow-up fixes in the phase evidence document.
-- [ ] Commit as `ops: prove staging recovery and alerting`.
+- [x] Restore a staging backup into an empty database and verify sessions are invalidated safely while projections and private operational state recover as designed.
+- [x] Record measured recovery time and recovery point results.
+- [x] Alert on API error rate, indexer disconnect/lag, moderation queue age, database unavailability, and failed backup.
+- [x] Execute one indexer-disconnect game day and one database-restore game day.
+- [x] Record commands, timestamps, observed alerts, recovery decisions, and follow-up fixes in the phase evidence document.
+- [x] Commit as `ops: prove staging recovery and alerting`.
 
-Local progress: backup publication is now archive-validated, checksummed, and
-atomic; restore is empty-target-only, invalidates all restored sessions, runs
-operator-defined invariants, and reports RTO/RPO measurements. Eleven executable
-Prometheus rules validate with `promtool`, and the API, indexer, moderation, and
-backup paths emit their required source metrics. An isolated PostgreSQL 16
-drill recovered workflow, projection, and moderation state while removing all
-sessions. Evidence: `docs/operations/evidence/phase-7/staging-readiness.md`.
-The staging checkboxes remain open until the same restore and both incident
-exercises run through the authorized staging alert receiver and browser path.
+Backup publication is archive-validated, checksummed, atomic, and restricted
+to `0600`; restore is empty-target-only, invalidates all restored sessions,
+runs operator-defined invariants, and reports RTO/RPO measurements. Eleven
+Prometheus rules are loaded on the NUC with all required source series. The
+deployed indexer-disconnect drill fired through Alertmanager and recovered.
+A live PostgreSQL 17 backup restored into an empty target in one second with a
+22-second recovery point, exact projection/private-state counts, and zero
+restored sessions. Evidence:
+`docs/operations/evidence/phase-7/staging-readiness.md`. Human notification
+acknowledgment and the immutable signed-digest deployment/rollback gate remain
+open.
 
 **Phase 7 exit gate:** A real staging URL runs immutable artifacts, passes the browser journey, restores from backup, rolls back safely, and emits actionable alerts during documented failure drills.
 

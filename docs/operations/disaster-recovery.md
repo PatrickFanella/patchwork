@@ -12,7 +12,12 @@ Run `scripts/backup-postgres.sh` at least every six hours and copy its `.dump`,
 Prometheus textfile at `PATCHWORK_BACKUP_METRICS_FILE`. The alert threshold of
 7.5 hours allows one delayed six-hour run before paging.
 
-The backup is written to a private temporary directory, checked with
+Use backup tooling from the same PostgreSQL major version as the source. The
+script intentionally lets `pg_dump` reject a major-version mismatch rather
+than producing ambiguous recovery evidence.
+
+The backup is written with a restrictive `077` umask to a private temporary
+directory, checked with
 `pg_restore --list`, checksummed, and only then atomically published. A failed
 attempt publishes no archive and changes `patchwork_backup_last_attempt_success`
 to zero without erasing the last-success timestamp.

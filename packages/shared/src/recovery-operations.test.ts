@@ -10,6 +10,7 @@ describe('staging recovery and alerting contract', () => {
         const script = read('scripts/backup-postgres.sh');
 
         expect(script).toContain('set -Eeuo pipefail');
+        expect(script).toContain('umask 077');
         expect(script).toContain('mktemp');
         expect(script).toContain('pg_restore --list');
         expect(script).toContain('sha256');
