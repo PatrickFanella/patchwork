@@ -29,6 +29,9 @@ paths without fixture fallback. Authenticated account export and durable
 Patchwork account deactivation now include session revocation, retained-data
 exceptions, and suppression of future login/projection resurrection. Independent
 AT-repository deletion and formal privacy approval remain external boundaries.
+The hourly API and moderation schedulers have also removed representative
+expired rows on their natural immutable-staging cadence with successful
+metrics, zero alerts, and zero restarts.
 
 ## Verification baseline
 
@@ -63,6 +66,8 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 - `e522e5f`, `c013eb6` — production digest deployment and map readiness;
 - `995338c` — unique domain/HTTP Prometheus series and current immutable release;
 - `83f08c1` — fail-closed mixed staging-capacity evidence gate;
+- `3905cda` — bounded five-minute NUC staging-capacity proof;
+- `a932ac6` — natural-interval deployed retention scheduler proof;
 - `e744aea` — persistent staging topology;
 - `1892d0b` — durable browser safety and owner actions;
 - `49cf598`, `4287596`, `90289f1` — ingestion, projections, discovery.

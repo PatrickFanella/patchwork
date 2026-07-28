@@ -34,6 +34,11 @@ accepted. A five-minute mixed workload against that release established a
 bounded 40-RPS aggregate home-staging envelope with zero read errors, three
 real lifecycle journeys, three durable moderation resolutions, safe measured
 resource headroom, clean recovery, and verified disposable-data cleanup.
+The same immutable runtime's API and moderation retention schedulers then
+removed representative expired synthetic rows on their next natural hourly
+pass. Both success timestamps advanced by exactly one configured interval,
+last-attempt gauges remained successful, restart counts stayed zero, and no
+retention alert fired.
 
 ## Requirement audit
 
