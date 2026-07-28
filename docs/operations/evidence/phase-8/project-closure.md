@@ -12,10 +12,12 @@ operator before execution.
 ## Current inventory
 
 - The NUC home-staging host runs the four Patchwork runtime services from the
-  signed `995338c` four-digest manifest. The deployment remains pre-pilot and
+  signed `40f06b6` four-digest manifest. The deployment remains pre-pilot and
   must not accept public traffic.
-- NUC PostgreSQL, release manifests, registry artifacts, signing material,
-  monitoring state, and backup evidence remain live and have not been deleted.
+- Patchwork's PostgreSQL 17 database is hosted on Almaz at the configured
+  private database endpoint. NUC release manifests, registry artifacts,
+  signing material, monitoring state, and backup evidence remain live and have
+  not been deleted.
 - The local disposable PostgreSQL verification stack is stopped; its test
   volume is retained and has not been deleted.
 - Local `main` and `origin/main` were synchronized at the 2026-07-28 review.
@@ -25,6 +27,10 @@ operator before execution.
   unproven.
 - Running Action Network and Roberts Rules databases are unrelated and must not
   be stopped or removed during Patchwork closure.
+- The shared Almaz PostgreSQL service and its other databases are unrelated
+  infrastructure. Closure may remove only Patchwork's database and
+  Patchwork-specific credentials after the required backup/legal-hold window;
+  it must not stop or delete the shared PostgreSQL service.
 
 The approved operator must refresh this inventory immediately before any
 closure action and independently verify the staging host, registry, DNS, OAuth
@@ -98,3 +104,18 @@ traffic, or credential use.
 
 Until all required approvals exist, Patchwork remains `NO-GO` and dormant, but
 not formally closed. Expansion work remains prohibited.
+
+## Decision requested
+
+Approvers must record one of two outcomes:
+
+1. **Approve closure.** Complete every approval row above, name the closure
+   operator, record the legal-hold outcome and destruction windows, then execute
+   this plan with a fresh inventory.
+2. **Reject closure and pursue a pilot.** Do not execute this plan. First close
+   the retention, independent accessibility, and named-ownership gates; record
+   a new `GO` or `CONDITIONAL-GO`; then create the roadmap-required pilot
+   charter with participant count, geography, support hours, escalation owner,
+   consent language, retention window, success metrics, and shutdown triggers.
+
+Silence or incomplete rows authorize neither path.

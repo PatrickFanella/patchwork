@@ -1,7 +1,7 @@
 {
-  "reviewDate": "2026-07-11",
+  "reviewDate": "2026-07-28",
   "verdict": "conditional-pass-repository-fail-launch",
-  "summary": { "p0": 0, "p1": 10, "p2": 16, "p3": 4, "pending": 3, "total": 33 },
+  "summary": { "p0": 0, "p1": 12, "p2": 16, "p3": 4, "pending": 3, "total": 35 },
   "issues": [
     { "id": 1, "severity": "P1", "status": "fixed", "topic": "matrix moderation retention" },
     { "id": 2, "severity": "P1", "status": "fixed", "topic": "traceability moderation runtime" },
@@ -30,11 +30,13 @@
     { "id": 25, "severity": "P3", "status": "historical", "topic": "legacy phase naming" },
     { "id": 26, "severity": "P3", "status": "accepted", "topic": "component aliases" },
     { "id": 27, "severity": "P3", "status": "historical", "topic": "dated counts" },
-    { "id": 28, "severity": "Pending Evidence", "status": "launch-blocking", "topic": "account deletion promise" },
-    { "id": 29, "severity": "Pending Evidence", "status": "runtime-fixed-approval-blocking", "topic": "data export and deactivation promise" },
-    { "id": 30, "severity": "Pending Evidence", "status": "external", "topic": "external resource inventory" },
+    { "id": 28, "severity": "Pending Evidence", "status": "runtime-deployed-approval-blocking", "topic": "account deletion promise" },
+    { "id": 29, "severity": "Pending Evidence", "status": "runtime-deployed-approval-blocking", "topic": "data export and deactivation promise" },
+    { "id": 30, "severity": "Pending Evidence", "status": "home-inventory-verified-protected-promotion-and-ownership-missing", "topic": "external resource inventory" },
     { "id": 31, "severity": "P1", "status": "fixed", "topic": "browser server ownership" },
     { "id": 32, "severity": "P1", "status": "fixed", "topic": "nonexistent capacity tests" },
-    { "id": 33, "severity": "P1", "status": "fixed", "topic": "stale ingestion scope and integration claims" }
+    { "id": 33, "severity": "P1", "status": "fixed", "topic": "stale ingestion scope and integration claims" },
+    { "id": 34, "severity": "P1", "status": "fixed", "topic": "stale closure deployment inventory" },
+    { "id": 35, "severity": "P1", "status": "fixed", "topic": "current release and database placement" }
   ]
 }

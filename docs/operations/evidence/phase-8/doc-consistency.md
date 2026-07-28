@@ -2,7 +2,7 @@
 
 Review date: 2026-07-28
 
-Scope: `README.md`, 81 Markdown files under `docs/`, runtime configuration,
+Scope: `README.md`, 84 Markdown files under `docs/`, runtime configuration,
 package scripts, HTTP routes, migrations, Compose, and CI workflows.
 
 ## Issue list
@@ -37,12 +37,13 @@ package scripts, HTTP routes, migrations, Compose, and CI workflows.
 | 25 | P3 | Historical phase documents use legacy component phase naming | Current roadmap supersedes phase sequencing | Retained for provenance |
 | 26 | P3 | Some docs use “Spool/Quilt/Thimble,” others service directory names | Compose aliases deliberately preserve both names | Accepted terminology mapping |
 | 27 | P3 | Dated evidence test counts differ from current report | Evidence is immutable by date | Current authority links added elsewhere |
-| 28 | Pending evidence | Terms promise account deletion through Settings | Settings remains fixture-runtime in matrix | Must be reviewed by product/legal before any launch |
-| 29 | Pending evidence | Privacy policy describes data access and deactivation rights in UI | Authenticated export and durable deactivation are implemented locally | Runtime fixed; formal policy approval and real staging exercise remain launch-blocking |
-| 30 | Pending evidence | Staging host, DNS, registry, and OAuth docs describe intended resources | No authorized external inventory is available | Verify during staging or closure approval |
+| 28 | Pending evidence | Terms describe Patchwork account deactivation through Settings | Production Settings calls the durable session-derived deactivation path; independently hosted AT records remain outside Patchwork's deletion authority | Runtime deployed; product/legal approval remains launch-blocking |
+| 29 | Pending evidence | Privacy policy describes data access and deactivation rights in UI | Authenticated export and durable deactivation are deployed and browser-tested | Runtime deployed; formal policy approval remains launch-blocking |
+| 30 | Pending evidence | Staging host, DNS, registry, OAuth, and ownership docs describe intended resources | The authorized home inventory, registry, OAuth journey, and current release are verified | Protected promotion and named ownership remain launch-blocking |
 | 32 | P1 | Capacity documentation names three repeatable test files | None of the named test files exists | Fixed with tested `capacity:probe` and corrected runbook |
 | 33 | P1 | Current docs said ingestion/tombstone integration was absent and production subscribed to every planned NSID | Durable projection/tombstone paths exist; alpha scope is aid-post only | Fixed with current reconciliation evidence and narrowed runtime subscription |
 | 34 | P1 | Prepared closure inventory said no staging deployment or pushed continuation existed | NUC runs the signed four-digest release and local `main` matches `origin/main` | Fixed with a current non-destructive inventory |
+| 35 | P1 | Phase 8 records named the former release as current and placed PostgreSQL on the NUC | Live manifest is `40f06b6`; all three runtime database URLs resolve to Almaz `10.0.0.200` | Fixed in current roadmap, closure, external-gate, browser, and final-report records |
 
 ## Review conclusion
 
@@ -51,13 +52,13 @@ Verdict: **Conditional pass** for repository handoff; **fail for launch**.
 | Level | Count |
 | --- | ---: |
 | P0 blocker | 0 |
-| P1 major | 11 |
+| P1 major | 12 |
 | P2 minor/historical | 16 |
 | P3 nit/accepted | 4 |
 | Pending evidence | 3 |
-| **Total** | **34** |
+| **Total** | **35** |
 
-All eleven P1 documentation inconsistencies were fixed or converted to explicit
+All twelve P1 documentation inconsistencies were fixed or converted to explicit
 unassigned placeholders in this pass. Pending issues 28–30 still require human
 or external evidence and are represented as `NO-GO` conditions; draft legal
 documents are now conspicuously marked not in force. Historical evidence is
@@ -65,6 +66,7 @@ intentionally not rewritten because
 its dated values describe what was actually observed then.
 
 Change impact: README, matrix, traceability, incident documentation, closure
-plan, final status report, and later indexer evidence changed. The subsequent
-runtime reconciliation slices did not deploy, notify externally, or perform a
-destructive external action.
+plan, final status report, and later indexer evidence changed. The current
+`40f06b6` release was separately deployed through the authorized immutable NUC
+workflow. This consistency refresh did not notify external users or perform a
+destructive action.

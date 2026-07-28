@@ -4,8 +4,9 @@ Date: 2026-07-28
 
 This evidence records the completed Task 6.3 implementation and controlled
 home-network execution. The Phase 6 exit gate is satisfied by two disposable
-OAuth/PDS accounts against the NUC-hosted PostgreSQL, API, local Jetstream,
-indexer, moderation worker, and production web build.
+OAuth/PDS accounts against the Almaz-hosted PostgreSQL 17 database and the
+NUC-hosted API, local Jetstream, indexer, moderation worker, and production web
+build.
 
 ## Production paths completed
 

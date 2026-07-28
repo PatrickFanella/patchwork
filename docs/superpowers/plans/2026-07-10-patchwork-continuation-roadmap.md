@@ -434,8 +434,9 @@ server-derived roles, reconcile the result to the AT record, and receive a
 retry control when public sync fails after private state commits. Authenticated
 discovery also enforces durable blocks without accepting browser identity or
 removing anonymous public access. The real two-account spec completed against
-the NUC-hosted PostgreSQL, PDS, local Jetstream, API, and web runtime on
-2026-07-28. The first red execution exposed an IP-shared auth-session
+the Almaz-hosted PostgreSQL 17 database plus the home-network PDS, NUC-local
+Jetstream, API, and web runtime on 2026-07-28. The first red execution exposed
+an IP-shared auth-session
 rate-limit lockout; the fixed runtime assigns read-only session restoration to
 the ordinary read budget while retaining strict login/callback limits. A
 second harness correction waits for discovery network idle instead of
@@ -594,10 +595,12 @@ any future selected slice must receive.
 **Phase 8 exit gate:** Patchwork either enters a bounded, supported pilot with explicit safety constraints or is closed with no live infrastructure or ambiguous roadmap commitments.
 
 External-gate audit: `docs/operations/evidence/phase-8/external-gate-audit.md`.
-All 15 remaining checklist items were checked against current runtime and tool
-state. Their browser accounts, staging/registry credentials, digest manifests,
-alert receiver, and human approvals are absent; no additional local runtime
-prerequisite was found. The items remain open and the decision remains `NO-GO`.
+The real browser accounts, home-staging registry, signed digest manifests,
+alert receiver, recovery, capacity, and deployed-retention prerequisites have
+all been exercised. Exactly three checklist items remain open because product,
+engineering, trust-and-safety, privacy/legal-hold, and operator approval for a
+pilot or closure has not been supplied. The decision therefore remains
+`NO-GO`.
 
 ## Global acceptance suite
 

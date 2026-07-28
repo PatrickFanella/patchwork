@@ -40,6 +40,14 @@ pass. Both success timestamps advanced by exactly one configured interval,
 last-attempt gauges remained successful, restart counts stayed zero, and no
 retention alert fired.
 
+The current `40f06b6` immutable release removed misleading production-shell
+claims and exposed the durable account Settings path. Its four images retained
+the production launcher after pruning, reported zero HIGH/CRITICAL Trivy
+findings, verified against the retained Cosign key, replayed migrations at
+13/4/3, and passed readiness, route, map, log, restart, and deployed semantic
+browser acceptance. `995338c` remains the signed rollback manifest and the
+authoritative capacity/retention workload evidence.
+
 ## Requirement audit
 
 | Remaining gate | Local mechanism and evidence | Missing authoritative proof | Current prerequisite state |
@@ -48,8 +56,9 @@ retention alert fired.
 
 ## Current local authority boundary
 
-- The home NUC now runs Patchwork's PostgreSQL, API, web, indexer, moderation,
-  and isolated local Jetstream services alongside unrelated workloads.
+- Almaz hosts Patchwork's PostgreSQL 17 database at the private configured
+  endpoint. The home NUC runs the API, web, indexer, moderation, and isolated
+  local Jetstream services alongside unrelated workloads.
 - The controlled exercise touched only Patchwork and its disposable PDS
   accounts; unrelated services were not changed.
 - The NUC loopback registry now retains signed current/rollback artifacts and

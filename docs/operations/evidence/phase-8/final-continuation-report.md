@@ -65,14 +65,15 @@ metrics, zero alerts, and zero restarts.
 - `edf2448` — NUC recovery and alerting game days;
 - `55b337e` — hardened zero-HIGH/CRITICAL runtime artifact source;
 - `e522e5f`, `c013eb6` — production digest deployment and map readiness;
-- `995338c` — unique domain/HTTP Prometheus series and current immutable release;
+- `995338c` — unique domain/HTTP Prometheus series and retained
+  capacity-tested rollback release;
 - `83f08c1` — fail-closed mixed staging-capacity evidence gate;
 - `3905cda` — bounded five-minute NUC staging-capacity proof;
 - `a932ac6` — natural-interval deployed retention scheduler proof;
 - `0e20927` — truthful production alpha scope, durable account Settings, and
   expanded accessibility coverage;
 - `2dfc9a0`, `40f06b6` — zero-advisory dependency refresh with the production
-  runtime launcher retained;
+  runtime launcher retained; `40f06b6` is the current immutable release;
 - `e744aea` — persistent staging topology;
 - `1892d0b` — durable browser safety and owner actions;
 - `49cf598`, `4287596`, `90289f1` — ingestion, projections, discovery.
