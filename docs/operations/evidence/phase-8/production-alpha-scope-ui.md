@@ -2,8 +2,7 @@
 
 Date: 2026-07-28
 
-Result: **confirmed defects corrected locally; immutable staging deployment
-acceptance pending**.
+Result: **confirmed defects corrected and accepted on immutable NUC staging**.
 
 ## Deployed observation
 
@@ -51,6 +50,25 @@ local design work.
 - The complete local Chromium gate passes 56 runnable cases with one controlled
   external OAuth/PDS case skipped.
 - The final built shell passed semantic and visual browser inspection locally.
+- A release built from
+  `40f06b65059c3d6f67520c7874458a3ba29a29c9` retained the production `tsx`
+  launcher after dependency pruning and all four images passed Trivy with zero
+  HIGH/CRITICAL findings before publication.
+- Every published digest verified against the retained NUC Cosign public key.
+  The exact-digest deployment replayed API/indexer/moderation migrations at
+  13/4/3, reached healthy state with zero restarts, passed the API, contracts,
+  directory, and content-addressed map probes, and retained
+  `995338c584524a84c2365c6a5658a6242399fd10` as the rollback manifest.
+- A post-deploy in-app browser inspection confirmed the pre-alpha label,
+  capability posture, operating boundary, Settings navigation, and anonymous
+  Settings authentication boundary. It found none of the former fake activity
+  values, primary Volunteer/Chat links, localhost display, or online claim.
 
-This evidence is not a substitute for the post-deploy immutable acceptance
-check or an independent accessibility review.
+The four deployed digest references are retained in the NUC release manifest
+at
+`/home/onnwee/.local/share/patchwork/releases/40f06b65059c3d6f67520c7874458a3ba29a29c9/artifact-digests.json`.
+A validated 133,707-byte PostgreSQL backup was captured immediately before
+deployment with SHA-256
+`ab2ed9b39556e4d2f9e4bd9d84874e9fd698ae50fa6c194ff3b90ce149674722`.
+
+This home-staging acceptance is not an independent accessibility review.

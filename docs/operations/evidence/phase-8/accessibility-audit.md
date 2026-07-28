@@ -54,7 +54,7 @@ The deployed-browser review also found a product-scope defect rather than a
 WCAG rule failure: the public home screen advertised fabricated activity
 metrics, localhost service addresses, and deferred chat/volunteer routes, while
 the durable export/deactivation UI was hidden behind the fixture settings
-route. The corrected production build now presents only implemented alpha
+route. The corrected immutable NUC deployment now presents only implemented alpha
 capabilities, labels itself as a pre-alpha environment, keeps deferred routes
 behind explicit scope notices, and exposes the durable account controls on
 Settings. Behavioral coverage prevents those misleading claims and fixture
