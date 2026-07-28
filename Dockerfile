@@ -20,6 +20,16 @@ RUN apk upgrade --no-cache \
     && rm -rf /usr/local/lib/node_modules/npm \
     && mv /tmp/npm/package /usr/local/lib/node_modules/npm \
     && rm -rf /tmp/npm /tmp/npm.tgz \
+    && wget -qO /tmp/brace-expansion.tgz \
+        https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.8.tgz \
+    && echo 'a03b06e66d862d0278b1ff45b66427f245f99c665800dc9bd790c0c13d2247fe  /tmp/brace-expansion.tgz' \
+        | sha256sum -c - \
+    && mkdir /tmp/brace-expansion \
+    && tar -xzf /tmp/brace-expansion.tgz -C /tmp/brace-expansion \
+    && rm -rf /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
+    && mv /tmp/brace-expansion/package \
+        /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
+    && rm -rf /tmp/brace-expansion /tmp/brace-expansion.tgz \
     && npm --version
 
 COPY package.json package-lock.json ./
