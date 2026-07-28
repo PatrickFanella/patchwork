@@ -5,15 +5,19 @@ import {
     blockUserViaApi,
     createAidPostViaApi,
     createAtAidPostViaApi,
+    createAtDirectoryResourceViaApi,
     deactivateAccountViaApi,
+    deleteAtDirectoryResourceViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     exportDataViaApi,
     initiateChatViaApi,
+    getAtDirectoryResourceViaApi,
     queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
     reconcileAidPostStatusViaApi,
     transitionAidPostViaApi,
+    updateAtDirectoryResourceViaApi,
 } from './api-client.js';
 import type { DiscoveryFilterState } from '../discovery-filters.js';
 
@@ -231,6 +235,8 @@ describe('api client', () => {
                 results: [
                     {
                         uri: 'at://did:plc:pantry/app.patchwork.directory.resource/main',
+                        cid: 'bafy-directory',
+                        authorDid: 'did:plc:pantry',
                         name: 'Northside Community Pantry',
                         category: 'food-bank',
                         serviceArea: 'Near North Side',
@@ -259,6 +265,8 @@ describe('api client', () => {
             data: [
                 {
                     id: 'main',
+                    cid: 'bafy-directory',
+                    authorDid: 'did:plc:pantry',
                     name: 'Northside Community Pantry',
                     category: 'food-bank',
                     location: {
@@ -275,6 +283,74 @@ describe('api client', () => {
             fetchMock.mock.calls as unknown as Array<[unknown]>
         )[0];
         expect(String(firstCall?.[0])).toContain('/query/directory');
+    });
+
+    it('creates, reads, updates, and deletes directory AT records through authenticated routes', async () => {
+        const record = {
+            $type: 'app.patchwork.directory.resource' as const,
+            version: '1.1.0' as const,
+            name: 'Northside Community Pantry',
+            category: 'food-bank' as const,
+            serviceArea: 'Near North Side',
+            contact: { phone: '312-555-0100' },
+            verificationStatus: 'unverified' as const,
+            location: {
+                latitude: 41.9,
+                longitude: -87.64,
+                precisionKm: 2,
+            },
+            operationalStatus: 'open' as const,
+            createdAt: '2026-07-28T12:00:00.000Z',
+        };
+        const response = {
+            uri: 'at://did:plc:alice/app.patchwork.directory.resource/main',
+            cid: 'bafy-directory',
+            record,
+        };
+        const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) =>
+            init?.method === 'DELETE' ?
+                ({
+                    ok: true,
+                    status: 204,
+                    json: async () => undefined,
+                } as Response)
+            :   createJsonResponse(response),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await expect(createAtDirectoryResourceViaApi(record)).resolves.toEqual({
+            ok: true,
+            data: response,
+        });
+        await expect(
+            getAtDirectoryResourceViaApi(response.uri),
+        ).resolves.toMatchObject({ ok: true, data: response });
+        await expect(
+            updateAtDirectoryResourceViaApi({
+                uri: response.uri,
+                expectedCid: response.cid,
+                record,
+            }),
+        ).resolves.toMatchObject({ ok: true, data: response });
+        await expect(
+            deleteAtDirectoryResourceViaApi({
+                uri: response.uri,
+                expectedCid: response.cid,
+            }),
+        ).resolves.toEqual({ ok: true, data: undefined });
+
+        const calls = fetchMock.mock.calls as unknown as Array<
+            [string, RequestInit]
+        >;
+        expect(calls.map(([, init]) => init.method)).toEqual([
+            'POST',
+            'GET',
+            'PUT',
+            'DELETE',
+        ]);
+        expect(calls.every(([url]) => url.includes('/at/directory-resources'))).toBe(
+            true,
+        );
     });
 
     it.each([

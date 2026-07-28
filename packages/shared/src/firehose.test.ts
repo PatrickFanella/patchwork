@@ -7,6 +7,43 @@ import {
 import { recordNsid } from '@patchwork/at-lexicons';
 
 describe('P3.1 firehose consumer + normalization', () => {
+    it('decodes AT integer locations before normalizing live directory events', () => {
+        const result = normalizeFirehoseEvent({
+            seq: 120,
+            receivedAt: '2026-07-28T12:00:00.000Z',
+            action: 'create',
+            uri: 'at://did:example:org/app.patchwork.directory.resource/live',
+            collection: recordNsid.directoryResource,
+            cid: 'bafy-live-directory',
+            record: {
+                $type: recordNsid.directoryResource,
+                version: '1.1.0',
+                name: 'Live Community Pantry',
+                category: 'food-bank',
+                serviceArea: 'North Side',
+                contact: { phone: '312-555-0100' },
+                verificationStatus: 'unverified',
+                location: {
+                    latitudeE6: 41_900_000,
+                    longitudeE6: -87_640_000,
+                    precisionMeters: 2_000,
+                    areaLabel: 'North Side',
+                },
+                createdAt: '2026-07-28T12:00:00.000Z',
+            },
+        });
+
+        expect(result).toMatchObject({
+            success: true,
+            event: {
+                payload: {
+                    kind: 'directory-resource',
+                    approximateGeo: { precisionKm: 2 },
+                },
+            },
+        });
+    });
+
     it('ingests fixture streams with deterministic normalized output', () => {
         const consumer = new FirehoseConsumer();
         const fixtures = buildPhase3FixtureFirehoseEvents();

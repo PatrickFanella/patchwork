@@ -21,6 +21,7 @@ import { AtClientError } from '@patchwork/at-client';
 import { createAtAuthRuntime } from './auth/runtime.js';
 import { serializeSessionCookie } from './auth/at-auth-service.js';
 import { AidPostCommandService } from './records/aid-post-command-service.js';
+import { DirectoryResourceCommandService } from './records/directory-resource-command-service.js';
 import { ZodError } from 'zod';
 import { createLifecycleService } from './lifecycle-service.js';
 import { getCorsHeaders } from './cors.js';
@@ -223,6 +224,12 @@ const aidPostCommandService =
             sessionToken => atAuthRuntime.aidPostClient(sessionToken),
             lifecycleRepository,
             lifecycleRepository,
+        )
+    :   undefined;
+const directoryResourceCommandService =
+    atAuthRuntime ?
+        new DirectoryResourceCommandService(sessionToken =>
+            atAuthRuntime.directoryResourceClient(sessionToken),
         )
     :   undefined;
 
@@ -681,6 +688,38 @@ const writeAidPostCommandError = (
     });
 };
 
+const writeDirectoryResourceCommandError = (
+    response: ServerResponse,
+    error: unknown,
+): void => {
+    if (
+        error instanceof IdempotencyError ||
+        error instanceof PublicHttpError
+    ) {
+        writeRouteError(response, error);
+        return;
+    }
+    if (error instanceof AtClientError) {
+        writeAtAuthError(response, error);
+        return;
+    }
+    if (error instanceof ZodError) {
+        writeJson(response, 400, {
+            error: {
+                code: 'INVALID_COMMAND',
+                message: 'The directory-resource command payload is invalid.',
+            },
+        });
+        return;
+    }
+    writeJson(response, 500, {
+        error: {
+            code: 'DIRECTORY_RESOURCE_COMMAND_ERROR',
+            message: 'The directory-resource command failed.',
+        },
+    });
+};
+
 const handleDurableSafetyRoute = (
     request: IncomingMessage,
     response: ServerResponse,
@@ -854,6 +893,108 @@ const handleAidPostCommandRoute = (
     return true;
 };
 
+const handleDirectoryResourceCommandRoute = (
+    request: IncomingMessage,
+    response: ServerResponse,
+    requestUrl: URL,
+): boolean => {
+    if (!directoryResourceCommandService) return false;
+    if (requestUrl.pathname !== '/at/directory-resources') return false;
+
+    void (async () => {
+        try {
+            const authenticated = await authenticateApiRequest!(request);
+            const sessionToken = authenticated.sessionToken;
+
+            if (request.method === 'GET') {
+                const uri = requestUrl.searchParams.get('uri');
+                if (!uri) {
+                    writeJson(response, 400, {
+                        error: {
+                            code: 'INVALID_COMMAND',
+                            message: 'uri is required.',
+                        },
+                    });
+                    return;
+                }
+                const result = await directoryResourceCommandService.get(
+                    sessionToken,
+                    uri,
+                );
+                writeJson(response, 200, result);
+                return;
+            }
+
+            if (request.method === 'POST') {
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    authenticated.principal.did,
+                    body,
+                    async (commandBody, idempotencyKey) => ({
+                        statusCode: 201,
+                        body: await directoryResourceCommandService.create(
+                            sessionToken,
+                            commandBody,
+                            idempotencyKey,
+                        ),
+                    }),
+                    null,
+                );
+                writeJson(response, result.statusCode, result.body);
+                return;
+            }
+
+            if (request.method === 'PUT') {
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    authenticated.principal.did,
+                    body,
+                    async commandBody => ({
+                        statusCode: 200,
+                        body: await directoryResourceCommandService.update(
+                            sessionToken,
+                            commandBody,
+                        ),
+                    }),
+                    null,
+                );
+                writeJson(response, result.statusCode, result.body);
+                return;
+            }
+
+            if (request.method === 'DELETE') {
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    authenticated.principal.did,
+                    body,
+                    async commandBody => {
+                        await directoryResourceCommandService.delete(
+                            sessionToken,
+                            commandBody,
+                        );
+                        return { statusCode: 204, body: null };
+                    },
+                    null,
+                );
+                response.writeHead(result.statusCode);
+                response.end();
+                return;
+            }
+
+            response.writeHead(405, {
+                allow: 'GET, POST, PUT, DELETE',
+            });
+            response.end();
+        } catch (error) {
+            writeDirectoryResourceCommandError(response, error);
+        }
+    })();
+    return true;
+};
+
 const moderationApiRoutes = new Map<string, 'GET' | 'POST'>([
     ['/moderation/queue', 'GET'],
     ['/moderation/policy/apply', 'POST'],
@@ -946,6 +1087,7 @@ const contractRoutes = [
     '/at/aid-posts',
     '/at/aid-posts/close',
     '/at/aid-posts/status/reconcile',
+    '/at/directory-resources',
     '/query/map',
     '/query/feed',
     '/query/directory',
@@ -1126,6 +1268,12 @@ export const createApiServer = () => {
         }
 
         if (handleAidPostCommandRoute(request, response, requestUrl)) {
+            return;
+        }
+
+        if (
+            handleDirectoryResourceCommandRoute(request, response, requestUrl)
+        ) {
             return;
         }
 

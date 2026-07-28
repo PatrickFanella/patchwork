@@ -5,7 +5,8 @@ This document defines the target boundaries for the continuation alpha. ADR 0003
 ## `apps/web`
 
 - Initiates AT OAuth through `services/api`; it does not handle refresh tokens.
-- Sends authenticated aid-post commands and renders map/feed queries.
+- Sends authenticated aid-post and directory-resource commands and renders
+  map/feed/directory queries.
 - Collects public approximate location separately from optional private fulfillment location.
 - Never talks directly to the indexer, moderation worker, database, or Jetstream.
 - Does not fall back to fixtures in staging or production.
@@ -14,7 +15,8 @@ This document defines the target boundaries for the continuation alpha. ADR 0003
 
 - Terminates the Patchwork HTTP boundary and derives principals from real AT sessions.
 - Owns encrypted session persistence and authenticated command authorization.
-- Writes aid-post records to the user’s PDS through `packages/at-client`.
+- Writes aid-post and directory-resource records to the user’s PDS through
+  `packages/at-client`.
 - Reads rebuildable discovery projections but does not edit them as record authority.
 - Owns private lifecycle, block, report, exact-location, idempotency, and audit repositories.
 - Sends durable moderation work through a PostgreSQL-backed queue.
@@ -22,7 +24,9 @@ This document defines the target boundaries for the continuation alpha. ADR 0003
 
 ## `services/indexer`
 
-- Consumes filtered `app.patchwork.aid.post` operations from Jetstream through a provider-neutral event-source interface.
+- Consumes filtered `app.patchwork.aid.post` and
+  `app.patchwork.directory.resource` operations from Jetstream through a
+  provider-neutral event-source interface.
 - Reconciles/backfills repository state rather than treating a stream cursor as complete authority.
 - Validates lexicons and geoprivacy policy before writing projections.
 - Transactionally stores normalized projections, delete state, dead letters, and cursor progress.
@@ -38,14 +42,16 @@ This document defines the target boundaries for the continuation alpha. ADR 0003
 ## `packages/at-client`
 
 - Wraps the official AT OAuth and repository clients.
-- Resolves session/PDS operations and performs aid-post create, get, update, and delete.
+- Resolves session/PDS operations and performs aid-post and directory-resource
+  create, get, update, and delete.
 - Returns Patchwork-owned result and error types so AT SDK types do not leak across the codebase.
 - Contains no product workflow, projection, moderation, or UI logic.
 
 ## `packages/at-lexicons`
 
 - Stores canonical public record definitions and validators.
-- Enforces the alpha aid-post public-location constraints.
+- Enforces the alpha public-location constraints and the integer
+  microdegree/metre wire codec for aid-post and directory-resource records.
 - Retains deferred schemas for compatibility/design history without enabling runtime writes.
 
 ## `packages/shared`

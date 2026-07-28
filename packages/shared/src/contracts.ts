@@ -101,6 +101,7 @@ export interface ApiQueryDirectoryRequest {
 export interface DirectoryRecordSummary {
     uri: string;
     authorDid: string;
+    cid?: string;
     name: string;
     category: string;
     serviceArea: string;

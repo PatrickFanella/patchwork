@@ -21,7 +21,9 @@ import type {
 } from '@patchwork/shared';
 import {
     aidPostSchema,
+    directoryResourceSchema,
     type AidPostRecord,
+    type DirectoryResourceRecord,
 } from '@patchwork/at-lexicons';
 import { enforceMinimumGeoPrecisionKm } from '@patchwork/shared';
 
@@ -621,6 +623,83 @@ export const deleteAtAidPostViaApi = async (
     return result.ok ? { ok: true, data: undefined } : result;
 };
 
+export interface AtDirectoryResourceResult {
+    uri: string;
+    cid: string;
+    record: DirectoryResourceRecord;
+}
+
+const parseAtDirectoryResourceResult = (
+    payload: unknown,
+): ApiClientResult<AtDirectoryResourceResult> => {
+    if (!isRecord(payload)) {
+        return invalidResponseFailure(
+            'Directory-resource response was malformed.',
+        );
+    }
+    const uri = readString(payload, 'uri');
+    const cid = readString(payload, 'cid');
+    const record = directoryResourceSchema.safeParse(payload['record']);
+    if (!uri || !cid || !record.success) {
+        return invalidResponseFailure(
+            'Directory-resource response was malformed.',
+        );
+    }
+    return { ok: true, data: { uri, cid, record: record.data } };
+};
+
+export const getAtDirectoryResourceViaApi = async (
+    uri: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtDirectoryResourceResult>> => {
+    const result = await requestJson(
+        '/at/directory-resources',
+        new URLSearchParams({ uri }),
+        signal,
+    );
+    return result.ok ? parseAtDirectoryResourceResult(result.data) : result;
+};
+
+export const createAtDirectoryResourceViaApi = async (
+    record: DirectoryResourceRecord,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtDirectoryResourceResult>> => {
+    const result = await requestJsonPost(
+        '/at/directory-resources',
+        record,
+        signal,
+    );
+    return result.ok ? parseAtDirectoryResourceResult(result.data) : result;
+};
+
+export const updateAtDirectoryResourceViaApi = async (
+    input: {
+        uri: string;
+        expectedCid: string;
+        record: DirectoryResourceRecord;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtDirectoryResourceResult>> => {
+    const result = await requestJsonPut(
+        '/at/directory-resources',
+        input,
+        signal,
+    );
+    return result.ok ? parseAtDirectoryResourceResult(result.data) : result;
+};
+
+export const deleteAtDirectoryResourceViaApi = async (
+    input: { uri: string; expectedCid: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<void>> => {
+    const result = await requestJsonDelete(
+        '/at/directory-resources',
+        input,
+        signal,
+    );
+    return result.ok ? { ok: true, data: undefined } : result;
+};
+
 // ---------------------------------------------------------------------------
 // Settings API
 // ---------------------------------------------------------------------------
@@ -861,6 +940,24 @@ const parseDirectoryCategory = (
     return 'other';
 };
 
+const parseDirectoryVerificationStatus = (
+    value: string | undefined,
+): ResourceDirectoryCard['verificationStatus'] => {
+    return value === 'unverified' ||
+        value === 'community-verified' ||
+        value === 'partner-verified'
+        ? value
+        : undefined;
+};
+
+const parseDirectoryOperationalStatus = (
+    value: string | undefined,
+): ResourceDirectoryCard['operationalStatus'] => {
+    return value === 'open' || value === 'limited' || value === 'closed'
+        ? value
+        : undefined;
+};
+
 const mapAidPayloadToRecords = (
     payload: unknown,
 ): FeedRecordEnvelope[] | undefined => {
@@ -1011,9 +1108,20 @@ const mapDirectoryPayloadToCards = (
 
         cards.push({
             uri,
+            authorDid: readString(row, 'authorDid'),
+            cid: readString(row, 'cid'),
             id: parseRecordIdFromUri(uri, `remote-${index}`),
             name,
             category: parseDirectoryCategory(readString(row, 'category')),
+            serviceArea: readString(row, 'serviceArea'),
+            verificationStatus: parseDirectoryVerificationStatus(
+                readString(row, 'status'),
+            ),
+            operationalStatus: parseDirectoryOperationalStatus(
+                readString(row, 'operationalStatus'),
+            ),
+            createdAt: readString(row, 'createdAt'),
+            updatedAt: readString(row, 'updatedAt'),
             location: {
                 lat,
                 lng,

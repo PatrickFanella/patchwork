@@ -50,6 +50,13 @@ import {
     type ResourceDirectoryCard,
 } from '../resource-directory-ux';
 import {
+    buildDirectoryResourceRecord,
+    directoryOperationalStatuses,
+    directoryResourceCategories,
+    draftFromDirectoryResource,
+    type DirectoryResourceDraft,
+} from '../directory-resource-form';
+import {
     buildVolunteerProfileCreatePayload,
     isVolunteerFullyVerified,
     summarizeCheckpoints,
@@ -76,22 +83,27 @@ import {
     type AidPostReportReason,
     type ApiDataOrigin,
     type AtAidPostResult,
+    type AtDirectoryResourceResult,
     blockUserViaApi,
     closeAtAidPostViaApi,
     createAidPostViaApi,
+    createAtDirectoryResourceViaApi,
     deactivateAccountViaApi,
+    deleteAtDirectoryResourceViaApi,
     deleteAtAidPostViaApi,
     exportDataViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     fetchSettingsAuditFromApi,
     fetchSettingsFromApi,
+    getAtDirectoryResourceViaApi,
     initiateChatViaApi,
     queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
     reconcileAidPostStatusViaApi,
     updateSettingsViaApi,
     transitionAidPostViaApi,
+    updateAtDirectoryResourceViaApi,
 } from './api-client';
 import {
     type SettingsPatch,
@@ -2280,6 +2292,551 @@ const PostingRoute = ({
     );
 };
 
+const defaultDirectoryDraft = (center: {
+    lat: number;
+    lng: number;
+}): DirectoryResourceDraft => ({
+    name: '',
+    category: 'food-bank',
+    serviceArea: '',
+    contactUrl: '',
+    contactPhone: '',
+    latitude: center.lat.toFixed(4),
+    longitude: center.lng.toFixed(4),
+    precisionKm: '1',
+    openHours: '',
+    eligibilityNotes: '',
+    operationalStatus: 'open',
+});
+
+interface DirectoryResourceManagerProps {
+    currentUserDid: string;
+    center: { lat: number; lng: number };
+    onChanged: () => void;
+    editUri?: string;
+    onEditHandled: () => void;
+}
+
+const DirectoryResourceManager = ({
+    currentUserDid,
+    center,
+    onChanged,
+    editUri,
+    onEditHandled,
+}: DirectoryResourceManagerProps) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [draft, setDraft] = useState<DirectoryResourceDraft>(() =>
+        defaultDirectoryDraft(center),
+    );
+    const [editing, setEditing] = useState<AtDirectoryResourceResult>();
+    const [issues, setIssues] = useState<string[]>([]);
+    const [notice, setNotice] = useState<string>();
+    const [error, setError] = useState<string>();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [confirmDelete, setConfirmDelete] = useState(false);
+
+    const reset = () => {
+        setDraft(defaultDirectoryDraft(center));
+        setEditing(undefined);
+        setIssues([]);
+        setError(undefined);
+        setConfirmDelete(false);
+    };
+
+    const beginCreate = () => {
+        reset();
+        setNotice(undefined);
+        setIsOpen(true);
+    };
+
+    useEffect(() => {
+        if (!editUri) return undefined;
+        let active = true;
+        setError(undefined);
+        setNotice(undefined);
+        void getAtDirectoryResourceViaApi(editUri)
+            .then(result => {
+                if (!active) return;
+                if (!result.ok) {
+                    setError(`${result.code}: ${result.error}`);
+                    setIsOpen(true);
+                    return;
+                }
+                setEditing(result.data);
+                setDraft(draftFromDirectoryResource(result.data.record));
+                setIssues([]);
+                setConfirmDelete(false);
+                setIsOpen(true);
+            })
+            .finally(() => {
+                if (active) onEditHandled();
+            });
+        return () => {
+            active = false;
+        };
+    }, [editUri]);
+
+    const submit = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setError(undefined);
+        setNotice(undefined);
+        const built = buildDirectoryResourceRecord(
+            draft,
+            nowIso(),
+            editing?.record,
+        );
+        setIssues(built.issues);
+        if (!built.ok || !built.record) return;
+
+        setIsSubmitting(true);
+        try {
+            const result =
+                editing ?
+                    await updateAtDirectoryResourceViaApi({
+                        uri: editing.uri,
+                        expectedCid: editing.cid,
+                        record: built.record,
+                    })
+                :   await createAtDirectoryResourceViaApi(built.record);
+            if (!result.ok) {
+                setError(`${result.code}: ${result.error}`);
+                return;
+            }
+            setEditing(result.data);
+            setDraft(draftFromDirectoryResource(result.data.record));
+            setNotice(
+                editing ?
+                    'Resource updated. Directory ingestion may take a moment.'
+                :   'Resource published. It will appear after directory ingestion.',
+            );
+            onChanged();
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const remove = async () => {
+        if (!editing) return;
+        setIsSubmitting(true);
+        setError(undefined);
+        try {
+            const result = await deleteAtDirectoryResourceViaApi({
+                uri: editing.uri,
+                expectedCid: editing.cid,
+            });
+            if (!result.ok) {
+                setError(`${result.code}: ${result.error}`);
+                return;
+            }
+            reset();
+            setIsOpen(false);
+            setNotice('Resource deleted from your AT repository.');
+            onChanged();
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <Card title='Publish and manage'>
+            {currentUserDid ?
+                <>
+                    <div className='flex flex-wrap items-center justify-between gap-3'>
+                        <div>
+                            <p className='text-sm font-bold text-mh-text'>
+                                Community directory steward
+                            </p>
+                            <p className='mt-1 max-w-2xl text-xs text-mh-textMuted'>
+                                Publish public service details from your AT
+                                identity. New listings begin unverified; trusted
+                                verification is a separate review.
+                            </p>
+                        </div>
+                        <Button
+                            type='button'
+                            variant='secondary'
+                            className='px-3 py-2 text-xs'
+                            onClick={beginCreate}
+                        >
+                            Add a resource
+                        </Button>
+                    </div>
+                    {notice ?
+                        <p
+                            role='status'
+                            className='mh-alert mt-4 text-xs font-bold'
+                        >
+                            {notice}
+                        </p>
+                    :   null}
+                    {error ?
+                        <p
+                            role='alert'
+                            className='mh-alert mt-4 text-xs font-bold'
+                        >
+                            {error}
+                        </p>
+                    :   null}
+                    {isOpen ?
+                        <form
+                            className='mt-5 space-y-4 border-t-2 border-mh-borderSoft pt-5'
+                            onSubmit={submit}
+                        >
+                            <div className='flex flex-wrap items-center justify-between gap-2'>
+                                <h2 className='text-lg font-bold text-mh-text'>
+                                    {editing ?
+                                        'Edit directory resource'
+                                    :   'New directory resource'}
+                                </h2>
+                                <Badge tone='info'>
+                                    {editing?.record.verificationStatus ??
+                                        'unverified'}
+                                </Badge>
+                            </div>
+                            <div className='grid gap-4 md:grid-cols-2'>
+                                <div>
+                                    <label
+                                        htmlFor='directory-name'
+                                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                    >
+                                        Resource name
+                                    </label>
+                                    <Input
+                                        id='directory-name'
+                                        value={draft.name}
+                                        onChange={event =>
+                                            setDraft(current => ({
+                                                ...current,
+                                                name: event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label
+                                        htmlFor='directory-category'
+                                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                    >
+                                        Category
+                                    </label>
+                                    <select
+                                        id='directory-category'
+                                        className='mh-input w-full px-3 py-2 text-base'
+                                        value={draft.category}
+                                        onChange={event =>
+                                            setDraft(current => ({
+                                                ...current,
+                                                category: event.target
+                                                    .value as DirectoryResourceDraft['category'],
+                                            }))
+                                        }
+                                    >
+                                        {directoryResourceCategories.map(
+                                            category => (
+                                                <option
+                                                    key={category}
+                                                    value={category}
+                                                >
+                                                    {formatCategoryLabel(
+                                                        category,
+                                                    )}
+                                                </option>
+                                            ),
+                                        )}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label
+                                    htmlFor='directory-service-area'
+                                    className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                >
+                                    Public service area
+                                </label>
+                                <Input
+                                    id='directory-service-area'
+                                    value={draft.serviceArea}
+                                    onChange={event =>
+                                        setDraft(current => ({
+                                            ...current,
+                                            serviceArea: event.target.value,
+                                        }))
+                                    }
+                                />
+                            </div>
+                            <div className='grid gap-4 md:grid-cols-2'>
+                                <div>
+                                    <label
+                                        htmlFor='directory-url'
+                                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                    >
+                                        Public website
+                                    </label>
+                                    <Input
+                                        id='directory-url'
+                                        type='url'
+                                        value={draft.contactUrl}
+                                        onChange={event =>
+                                            setDraft(current => ({
+                                                ...current,
+                                                contactUrl: event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label
+                                        htmlFor='directory-phone'
+                                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                    >
+                                        Public phone
+                                    </label>
+                                    <Input
+                                        id='directory-phone'
+                                        type='tel'
+                                        value={draft.contactPhone}
+                                        onChange={event =>
+                                            setDraft(current => ({
+                                                ...current,
+                                                contactPhone:
+                                                    event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            <div className='grid gap-4 sm:grid-cols-3'>
+                                <div>
+                                    <label
+                                        htmlFor='directory-latitude'
+                                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                    >
+                                        Latitude
+                                    </label>
+                                    <Input
+                                        id='directory-latitude'
+                                        type='number'
+                                        step='0.0001'
+                                        value={draft.latitude}
+                                        onChange={event =>
+                                            setDraft(current => ({
+                                                ...current,
+                                                latitude: event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label
+                                        htmlFor='directory-longitude'
+                                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                    >
+                                        Longitude
+                                    </label>
+                                    <Input
+                                        id='directory-longitude'
+                                        type='number'
+                                        step='0.0001'
+                                        value={draft.longitude}
+                                        onChange={event =>
+                                            setDraft(current => ({
+                                                ...current,
+                                                longitude: event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label
+                                        htmlFor='directory-precision'
+                                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                    >
+                                        Precision km
+                                    </label>
+                                    <Input
+                                        id='directory-precision'
+                                        type='number'
+                                        min='1'
+                                        max='50'
+                                        step='0.5'
+                                        value={draft.precisionKm}
+                                        onChange={event =>
+                                            setDraft(current => ({
+                                                ...current,
+                                                precisionKm:
+                                                    event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            <p className='text-xs text-mh-textSoft'>
+                                Coordinates are published only at a precision
+                                of one kilometre or broader.
+                            </p>
+                            <div className='grid gap-4 md:grid-cols-2'>
+                                <div>
+                                    <label
+                                        htmlFor='directory-hours'
+                                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                    >
+                                        Open hours
+                                    </label>
+                                    <textarea
+                                        id='directory-hours'
+                                        className='mh-input min-h-24 w-full px-3 py-2'
+                                        value={draft.openHours}
+                                        onChange={event =>
+                                            setDraft(current => ({
+                                                ...current,
+                                                openHours: event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <label
+                                        htmlFor='directory-eligibility'
+                                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                    >
+                                        Eligibility notes
+                                    </label>
+                                    <textarea
+                                        id='directory-eligibility'
+                                        className='mh-input min-h-24 w-full px-3 py-2'
+                                        value={draft.eligibilityNotes}
+                                        onChange={event =>
+                                            setDraft(current => ({
+                                                ...current,
+                                                eligibilityNotes:
+                                                    event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label
+                                    htmlFor='directory-operational-status'
+                                    className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
+                                >
+                                    Operational status
+                                </label>
+                                <select
+                                    id='directory-operational-status'
+                                    className='mh-input w-full px-3 py-2 text-base md:max-w-xs'
+                                    value={draft.operationalStatus}
+                                    onChange={event =>
+                                        setDraft(current => ({
+                                            ...current,
+                                            operationalStatus: event.target
+                                                .value as DirectoryResourceDraft['operationalStatus'],
+                                        }))
+                                    }
+                                >
+                                    {directoryOperationalStatuses.map(
+                                        status => (
+                                            <option key={status} value={status}>
+                                                {formatCategoryLabel(status)}
+                                            </option>
+                                        ),
+                                    )}
+                                </select>
+                            </div>
+                            {issues.length > 0 ?
+                                <div role='alert' className='mh-alert text-xs'>
+                                    <p className='font-bold'>
+                                        Check the public listing:
+                                    </p>
+                                    <ul className='mt-2 list-disc space-y-1 pl-5'>
+                                        {issues.map(issue => (
+                                            <li key={issue}>{issue}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            :   null}
+                            <div className='flex flex-wrap gap-2'>
+                                <Button
+                                    type='submit'
+                                    variant='primary'
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ?
+                                        'Saving…'
+                                    : editing ?
+                                        'Save resource'
+                                    :   'Publish resource'}
+                                </Button>
+                                <Button
+                                    type='button'
+                                    variant='neutral'
+                                    disabled={isSubmitting}
+                                    onClick={() => {
+                                        reset();
+                                        setIsOpen(false);
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                                {editing && !confirmDelete ?
+                                    <Button
+                                        type='button'
+                                        variant='neutral'
+                                        disabled={isSubmitting}
+                                        onClick={() => setConfirmDelete(true)}
+                                    >
+                                        Delete resource
+                                    </Button>
+                                :   null}
+                            </div>
+                            {editing && confirmDelete ?
+                                <div
+                                    role='alert'
+                                    className='mh-alert flex flex-wrap items-center gap-3 text-xs'
+                                >
+                                    <p className='font-bold'>
+                                        Delete this public AT record?
+                                    </p>
+                                    <Button
+                                        type='button'
+                                        variant='primary'
+                                        disabled={isSubmitting}
+                                        onClick={() => void remove()}
+                                    >
+                                        Confirm delete
+                                    </Button>
+                                    <Button
+                                        type='button'
+                                        variant='neutral'
+                                        onClick={() =>
+                                            setConfirmDelete(false)
+                                        }
+                                    >
+                                        Keep resource
+                                    </Button>
+                                </div>
+                            :   null}
+                        </form>
+                    :   null}
+                    <span className='sr-only' data-directory-manager='ready'>
+                        Directory manager ready
+                    </span>
+                </>
+            :   <p className='text-sm text-mh-textMuted'>
+                    Directory browsing is public.{' '}
+                    <a
+                        className='font-bold underline'
+                        href='/login?returnTo=%2Fresources'
+                    >
+                        Sign in
+                    </a>{' '}
+                    to publish or manage a resource.
+                </p>
+            }
+        </Card>
+    );
+};
+
 interface ResourceRouteProps {
     discoveryState: DiscoveryFilterState;
     onPatchDiscovery: (patch: Partial<DiscoveryFilterState>) => void;
@@ -2289,6 +2846,7 @@ interface ResourceRouteProps {
     dataOrigin: ApiDataOrigin;
     onRetry: () => void;
     resourceCards: readonly ResourceDirectoryCard[];
+    currentUserDid: string;
 }
 
 const ResourceRoute = ({
@@ -2300,10 +2858,12 @@ const ResourceRoute = ({
     dataOrigin,
     onRetry,
     resourceCards,
+    currentUserDid,
 }: ResourceRouteProps) => {
     const [activeCategory, setActiveCategory] =
         useState<DirectoryResourceCategory>();
     const [selectedUri, setSelectedUri] = useState<string>();
+    const [manageUri, setManageUri] = useState<string>();
 
     useEffect(() => {
         if (!selectedUri) {
@@ -2381,6 +2941,14 @@ const ResourceRoute = ({
                     </div>
                 :   null}
             </header>
+
+            <DirectoryResourceManager
+                currentUserDid={currentUserDid}
+                center={discoveryState.center ?? defaultDiscoveryCenter}
+                onChanged={onRetry}
+                editUri={manageUri}
+                onEditHandled={() => setManageUri(undefined)}
+            />
 
             <DiscoveryFiltersPanel
                 idPrefix='resources'
@@ -2494,6 +3062,19 @@ const ResourceRoute = ({
                                     >
                                         Start intake
                                     </Button>
+                                    {currentUserDid &&
+                                    (card.authorDid === currentUserDid ||
+                                        card.uri.startsWith(
+                                            `at://${currentUserDid}/`,
+                                        )) ?
+                                        <Button
+                                            variant='neutral'
+                                            className='px-3 py-1 text-xs'
+                                            onClick={() => setManageUri(card.uri)}
+                                        >
+                                            Manage listing
+                                        </Button>
+                                    :   null}
                                 </div>
                             </li>
                         ))}
@@ -4279,6 +4860,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 dataOrigin={directoryDataOrigin}
                 onRetry={() => setDirectoryReload(value => value + 1)}
                 resourceCards={resourceCards}
+                currentUserDid={currentUserDid}
             />
         : currentRoute === '/volunteer' ?
             <VolunteerRoute did={currentUserDid} />

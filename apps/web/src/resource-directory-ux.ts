@@ -17,9 +17,19 @@ export type DirectoryResourceCategory =
 
 export interface ResourceDirectoryCard {
     uri: string;
+    authorDid?: string;
+    cid?: string;
     id: string;
     name: string;
     category: DirectoryResourceCategory;
+    serviceArea?: string;
+    verificationStatus?:
+        | 'unverified'
+        | 'community-verified'
+        | 'partner-verified';
+    operationalStatus?: 'open' | 'limited' | 'closed';
+    createdAt?: string;
+    updatedAt?: string;
     location: {
         lat: number;
         lng: number;

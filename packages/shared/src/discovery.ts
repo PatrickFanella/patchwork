@@ -21,6 +21,7 @@ export interface IndexedAidRecord extends NormalizedAidPost {
 export interface IndexedDirectoryRecord extends NormalizedDirectoryResource {
     uri: string;
     authorDid: string;
+    cid?: string;
 }
 
 export interface PaginationInput {
@@ -79,6 +80,7 @@ export interface RankedAidCard {
 export interface DirectoryCard {
     uri: string;
     authorDid: string;
+    cid?: string;
     name: string;
     category: string;
     serviceArea: string;
@@ -224,7 +226,12 @@ export class DiscoveryIndexStore {
         }
 
         if (event.payload.kind === 'directory-resource') {
-            this.upsertDirectory(event.uri, event.authorDid, event.payload);
+            this.upsertDirectory(
+                event.uri,
+                event.authorDid,
+                event.payload,
+                event.cid,
+            );
         }
     }
 
@@ -299,6 +306,7 @@ export class DiscoveryIndexStore {
             .map(record => ({
                 uri: record.uri,
                 authorDid: record.authorDid,
+                ...(record.cid ? { cid: record.cid } : {}),
                 name: record.name,
                 category: record.category,
                 serviceArea: record.serviceArea,
@@ -570,6 +578,7 @@ export class DiscoveryIndexStore {
         uri: string,
         authorDid: string,
         record: NormalizedDirectoryResource,
+        cid?: string,
     ): void {
         const existing = this.directoryRecords.get(uri);
         if (existing) {
@@ -580,6 +589,7 @@ export class DiscoveryIndexStore {
             ...record,
             uri,
             authorDid,
+            ...(cid ? { cid } : {}),
         };
 
         this.directoryRecords.set(uri, indexed);

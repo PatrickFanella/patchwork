@@ -1,77 +1,87 @@
 import { Agent } from '@atproto/api';
 import {
-    aidPostSchema,
-    decodeAidPostFromAt,
-    encodeAidPostForAt,
+    decodeDirectoryResourceFromAt,
+    directoryResourceSchema,
+    encodeDirectoryResourceForAt,
     recordNsid,
-    type AidPostRecord,
+    type DirectoryResourceRecord,
 } from '@patchwork/at-lexicons';
 import { AtClientError, toAtClientError } from './errors.js';
 import type { OAuthSessionHandle } from './oauth-client.js';
 
-export { decodeAidPostFromAt, encodeAidPostForAt } from '@patchwork/at-lexicons';
-
-const COLLECTION = recordNsid.aidPost;
+const COLLECTION = recordNsid.directoryResource;
 const ALPHA_MINIMUM_PRECISION_KM = 1;
-export interface CreateRecordInput {
+
+export interface DirectoryCreateRecordInput {
     repo: string;
     collection: typeof COLLECTION;
-    record: AidPostRecord;
+    record: DirectoryResourceRecord;
 }
 
-export interface GetRecordInput {
+export interface DirectoryGetRecordInput {
     repo: string;
     collection: typeof COLLECTION;
     rkey: string;
 }
 
-export interface PutRecordInput extends CreateRecordInput {
+export interface DirectoryPutRecordInput extends DirectoryCreateRecordInput {
     rkey: string;
     swapRecord?: string;
 }
 
-export interface DeleteRecordInput {
+export interface DirectoryDeleteRecordInput {
     repo: string;
     collection: typeof COLLECTION;
     rkey: string;
     swapRecord: string;
 }
 
-export interface AtRecordTransport {
+export interface AtDirectoryRecordTransport {
     did: string;
-    createRecord(input: CreateRecordInput): Promise<{ uri: string; cid: string }>;
+    createRecord(
+        input: DirectoryCreateRecordInput,
+    ): Promise<{ uri: string; cid: string }>;
     getRecord(
-        input: GetRecordInput,
+        input: DirectoryGetRecordInput,
     ): Promise<{ uri: string; cid?: string; value: unknown }>;
-    putRecord(input: PutRecordInput): Promise<{ uri: string; cid: string }>;
-    deleteRecord(input: DeleteRecordInput): Promise<void>;
+    putRecord(
+        input: DirectoryPutRecordInput,
+    ): Promise<{ uri: string; cid: string }>;
+    deleteRecord(input: DirectoryDeleteRecordInput): Promise<void>;
 }
 
-export interface AidPostRecordResult {
+export interface DirectoryResourceRecordResult {
     uri: string;
     cid: string;
-    record: AidPostRecord;
+    record: DirectoryResourceRecord;
 }
 
-const validateAidPost = (input: unknown): AidPostRecord => {
-    const record = aidPostSchema.parse(input);
-    if (record.location.precisionKm < ALPHA_MINIMUM_PRECISION_KM) {
+const validateDirectoryResource = (
+    input: unknown,
+): DirectoryResourceRecord => {
+    const record = directoryResourceSchema.parse(input);
+    if (
+        record.location &&
+        record.location.precisionKm < ALPHA_MINIMUM_PRECISION_KM
+    ) {
         throw new AtClientError(
             'INVALID_RECORD',
-            'Public aid-post location precision must be at least one kilometre.',
+            'Public directory location precision must be at least one kilometre.',
         );
     }
     return record;
 };
 
-const parseAidPostUri = (
+const parseDirectoryResourceUri = (
     uri: string,
-): { repo: string; collection: typeof COLLECTION; rkey: string } => {
+): DirectoryGetRecordInput => {
     const match = /^at:\/\/(did:[^/]+)\/([^/]+)\/([^/?#]+)$/.exec(uri);
     if (!match) {
-        throw new AtClientError('INVALID_URI', 'Expected a complete AT record URI.');
+        throw new AtClientError(
+            'INVALID_URI',
+            'Expected a complete AT record URI.',
+        );
     }
-
     const [, repo, collection, rkey] = match;
     if (!repo || collection !== COLLECTION || !rkey) {
         throw new AtClientError(
@@ -79,16 +89,18 @@ const parseAidPostUri = (
             `Expected an ${COLLECTION} AT record URI.`,
         );
     }
-
     return { repo, collection: COLLECTION, rkey };
 };
 
-export class AidPostRecordClient {
-    constructor(private readonly transport: AtRecordTransport) {}
+export class DirectoryResourceRecordClient {
+    constructor(private readonly transport: AtDirectoryRecordTransport) {}
 
-    async create(input: unknown, rkey?: string): Promise<AidPostRecordResult> {
+    async create(
+        input: unknown,
+        rkey?: string,
+    ): Promise<DirectoryResourceRecordResult> {
         try {
-            const record = validateAidPost(input);
+            const record = validateDirectoryResource(input);
             const createInput = {
                 repo: this.transport.did,
                 collection: COLLECTION,
@@ -100,15 +112,18 @@ export class AidPostRecordClient {
                 :   await this.transport.createRecord(createInput);
             return { ...result, record };
         } catch (error) {
-            throw toAtClientError(error, 'Unable to create the AT aid-post record.');
+            throw toAtClientError(
+                error,
+                'Unable to create the AT directory-resource record.',
+            );
         }
     }
 
-    async get(uri: string): Promise<AidPostRecordResult> {
+    async get(uri: string): Promise<DirectoryResourceRecordResult> {
         try {
             const parsed = this.parseOwnedUri(uri);
             const result = await this.transport.getRecord(parsed);
-            const record = validateAidPost(result.value);
+            const record = validateDirectoryResource(result.value);
             if (!result.cid) {
                 throw new AtClientError(
                     'UPSTREAM_ERROR',
@@ -117,7 +132,10 @@ export class AidPostRecordClient {
             }
             return { uri: result.uri, cid: result.cid, record };
         } catch (error) {
-            throw toAtClientError(error, 'Unable to read the AT aid-post record.');
+            throw toAtClientError(
+                error,
+                'Unable to read the AT directory-resource record.',
+            );
         }
     }
 
@@ -125,10 +143,10 @@ export class AidPostRecordClient {
         uri: string,
         expectedCid: string,
         input: unknown,
-    ): Promise<AidPostRecordResult> {
+    ): Promise<DirectoryResourceRecordResult> {
         try {
             const parsed = this.parseOwnedUri(uri);
-            const record = validateAidPost(input);
+            const record = validateDirectoryResource(input);
             const result = await this.transport.putRecord({
                 ...parsed,
                 record,
@@ -136,7 +154,10 @@ export class AidPostRecordClient {
             });
             return { ...result, record };
         } catch (error) {
-            throw toAtClientError(error, 'Unable to update the AT aid-post record.');
+            throw toAtClientError(
+                error,
+                'Unable to update the AT directory-resource record.',
+            );
         }
     }
 
@@ -148,33 +169,35 @@ export class AidPostRecordClient {
                 swapRecord: expectedCid,
             });
         } catch (error) {
-            throw toAtClientError(error, 'Unable to delete the AT aid-post record.');
+            throw toAtClientError(
+                error,
+                'Unable to delete the AT directory-resource record.',
+            );
         }
     }
 
-    private parseOwnedUri(uri: string): GetRecordInput {
-        const parsed = parseAidPostUri(uri);
+    private parseOwnedUri(uri: string): DirectoryGetRecordInput {
+        const parsed = parseDirectoryResourceUri(uri);
         if (parsed.repo !== this.transport.did) {
             throw new AtClientError(
                 'UNAUTHORIZED',
-                'The authenticated DID does not own this aid-post record.',
+                'The authenticated DID does not own this directory-resource record.',
             );
         }
         return parsed;
     }
 }
 
-export const createAgentRecordTransport = (
+export const createAgentDirectoryRecordTransport = (
     session: OAuthSessionHandle,
-): AtRecordTransport => {
+): AtDirectoryRecordTransport => {
     const agent = new Agent(session.fetch);
-
     return {
         did: session.did,
         createRecord: async input => {
             const response = await agent.com.atproto.repo.createRecord({
                 ...input,
-                record: encodeAidPostForAt(input.record),
+                record: encodeDirectoryResourceForAt(input.record),
                 validate: false,
             });
             return response.data;
@@ -183,13 +206,13 @@ export const createAgentRecordTransport = (
             const response = await agent.com.atproto.repo.getRecord(input);
             return {
                 ...response.data,
-                value: decodeAidPostFromAt(response.data.value),
+                value: decodeDirectoryResourceFromAt(response.data.value),
             };
         },
         putRecord: async input => {
             const response = await agent.com.atproto.repo.putRecord({
                 ...input,
-                record: encodeAidPostForAt(input.record),
+                record: encodeDirectoryResourceForAt(input.record),
                 validate: false,
             });
             return response.data;

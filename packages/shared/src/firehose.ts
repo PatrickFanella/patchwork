@@ -5,6 +5,7 @@ import {
     type RecordByNsid,
     recordNsid,
     type RecordNsid,
+    decodeRecordFromAt,
     validateRecordPayload,
 } from '@patchwork/at-lexicons';
 import {
@@ -231,7 +232,10 @@ const normalizeRecordPayload = (
     record: unknown,
     trustScore: number,
 ): NormalizedRecordPayload => {
-    const validated = validateRecordPayload(collection, record);
+    const validated = validateRecordPayload(
+        collection,
+        decodeRecordFromAt(collection, record),
+    );
 
     if (collection === recordNsid.aidPost) {
         const aidRecord = validated as AidPostRecord;

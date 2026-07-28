@@ -136,6 +136,7 @@ export const directoryResourceSchema = z.object({
             url: z.string().url().optional(),
             phone: z.string().min(7).max(32).optional(),
         })
+        .strict()
         .refine(value => value.url !== undefined || value.phone !== undefined, {
             message: 'At least one contact method is required.',
         }),
@@ -151,19 +152,137 @@ export const directoryResourceSchema = z.object({
             precisionKm: z.number().min(0.1).max(50),
             areaLabel: z.string().min(1).max(120).optional(),
         })
+        .strict()
         .optional(),
     openHours: z.string().min(1).max(200).optional(),
     eligibilityNotes: z.string().min(1).max(500).optional(),
     operationalStatus: z.enum(['open', 'limited', 'closed']).optional(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema.optional(),
-});
+}).strict();
 
 export type AidPostRecord = z.infer<typeof aidPostSchema>;
 export type VolunteerProfileRecord = z.infer<typeof volunteerProfileSchema>;
 export type ConversationMetaRecord = z.infer<typeof conversationMetaSchema>;
 export type ModerationReportRecord = z.infer<typeof moderationReportSchema>;
 export type DirectoryResourceRecord = z.infer<typeof directoryResourceSchema>;
+
+const MICRODEGREES_PER_DEGREE = 1_000_000;
+const METRES_PER_KILOMETRE = 1_000;
+
+interface AtLocation {
+    latitudeE6: number;
+    longitudeE6: number;
+    precisionMeters: number;
+    areaLabel?: string;
+}
+
+type AtAidPostRecord = Omit<AidPostRecord, 'location'> & {
+    location: AtLocation;
+};
+
+type AtDirectoryResourceRecord = Omit<DirectoryResourceRecord, 'location'> & {
+    location?: AtLocation;
+};
+
+const encodeLocation = (
+    location: AidPostRecord['location'],
+): AtLocation => ({
+    latitudeE6: Math.round(
+        location.latitude * MICRODEGREES_PER_DEGREE,
+    ),
+    longitudeE6: Math.round(
+        location.longitude * MICRODEGREES_PER_DEGREE,
+    ),
+    precisionMeters: Math.round(
+        location.precisionKm * METRES_PER_KILOMETRE,
+    ),
+    ...(location.areaLabel === undefined
+        ? {}
+        : { areaLabel: location.areaLabel }),
+});
+
+const decodeLocation = (input: unknown): AidPostRecord['location'] | unknown => {
+    if (typeof input !== 'object' || input === null) return input;
+    const encoded = input as Record<string, unknown>;
+    const latitudeE6 = encoded['latitudeE6'];
+    const longitudeE6 = encoded['longitudeE6'];
+    const precisionMeters = encoded['precisionMeters'];
+    if (
+        typeof latitudeE6 !== 'number' ||
+        !Number.isInteger(latitudeE6) ||
+        typeof longitudeE6 !== 'number' ||
+        !Number.isInteger(longitudeE6) ||
+        typeof precisionMeters !== 'number' ||
+        !Number.isInteger(precisionMeters)
+    ) {
+        return input;
+    }
+    return {
+        latitude: latitudeE6 / MICRODEGREES_PER_DEGREE,
+        longitude: longitudeE6 / MICRODEGREES_PER_DEGREE,
+        precisionKm: precisionMeters / METRES_PER_KILOMETRE,
+        ...(typeof encoded['areaLabel'] === 'string'
+            ? { areaLabel: encoded['areaLabel'] }
+            : {}),
+    };
+};
+
+export const encodeAidPostForAt = (
+    record: AidPostRecord,
+): AtAidPostRecord => ({
+    ...record,
+    location: encodeLocation(record.location),
+});
+
+export const decodeAidPostFromAt = (input: unknown): AidPostRecord => {
+    if (typeof input !== 'object' || input === null) {
+        return aidPostSchema.parse(input);
+    }
+    const record = input as Record<string, unknown>;
+    return aidPostSchema.parse({
+        ...record,
+        location: decodeLocation(record['location']),
+    });
+};
+
+export const encodeDirectoryResourceForAt = (
+    record: DirectoryResourceRecord,
+): AtDirectoryResourceRecord => {
+    const { location, ...rest } = record;
+    return {
+        ...rest,
+        ...(location ? { location: encodeLocation(location) } : {}),
+    };
+};
+
+export const decodeDirectoryResourceFromAt = (
+    input: unknown,
+): DirectoryResourceRecord => {
+    if (typeof input !== 'object' || input === null) {
+        return directoryResourceSchema.parse(input);
+    }
+    const record = input as Record<string, unknown>;
+    return directoryResourceSchema.parse({
+        ...record,
+        ...(record['location'] === undefined
+            ? {}
+            : { location: decodeLocation(record['location']) }),
+    });
+};
+
+export const decodeRecordFromAt = (
+    collection: RecordNsid,
+    input: unknown,
+): unknown => {
+    if (collection === recordNsid.aidPost) {
+        return decodeAidPostFromAt(input);
+    }
+    if (collection === recordNsid.directoryResource) {
+        return decodeDirectoryResourceFromAt(input);
+    }
+    return input;
+};
 
 export type RecordByNsid = {
     'app.patchwork.aid.post': AidPostRecord;

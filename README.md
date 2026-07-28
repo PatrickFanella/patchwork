@@ -100,6 +100,7 @@ The web client now calls API routes directly for discovery + posting surfaces:
 - `GET /query/feed`
 - `GET /query/directory`
 - `POST /at/aid-posts`
+- `POST /at/directory-resources`
 
 Authenticated AT repository commands are exposed separately:
 
@@ -108,6 +109,10 @@ Authenticated AT repository commands are exposed separately:
 - `PUT /at/aid-posts`
 - `POST /at/aid-posts/close`
 - `DELETE /at/aid-posts`
+- `POST /at/directory-resources`
+- `GET /at/directory-resources?uri=...`
+- `PUT /at/directory-resources`
+- `DELETE /at/directory-resources`
 
 The API runtime exposes no fixture-backed compatibility commands. Deferred chat,
 settings, organization, verification, inbox, feedback, reputation, and
@@ -135,6 +140,9 @@ Posting behavior in DB mode:
   PDS write; exact draft coordinates are not sent
 - Live discovery follows the Phase 5 ingestion/projection path and must not
   claim immediate visibility until that runtime is connected
+- Signed-in directory stewards publish records as `unverified`, edit/delete
+  owned records with CID compare-and-swap, and receive explicit
+  eventual-consistency notices while Jetstream updates the projection
 
 Additional seed scripts (API workspace):
 

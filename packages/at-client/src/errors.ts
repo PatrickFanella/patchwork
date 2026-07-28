@@ -58,7 +58,7 @@ export const toAtClientError = (
     }
 
     if (error instanceof ZodError) {
-        return new AtClientError('INVALID_RECORD', 'Aid-post validation failed.', {
+        return new AtClientError('INVALID_RECORD', 'AT record validation failed.', {
             cause: error,
         });
     }

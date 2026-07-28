@@ -1,6 +1,8 @@
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import {
     AidPostRecordClient,
+    DirectoryResourceRecordClient,
+    createAgentDirectoryRecordTransport,
     createAgentRecordTransport,
     createNodeOAuthAdapter,
 } from '@patchwork/at-client';
@@ -19,6 +21,9 @@ export interface AtAuthRuntime {
     service: AtAuthService;
     clientMetadata: NodeOAuthClient['clientMetadata'];
     aidPostClient(sessionToken: string): Promise<AidPostRecordClient>;
+    directoryResourceClient(
+        sessionToken: string,
+    ): Promise<DirectoryResourceRecordClient>;
 }
 
 export const createAtAuthRuntime = (
@@ -64,6 +69,12 @@ export const createAtAuthRuntime = (
         aidPostClient: async sessionToken => {
             const session = await service.restoreSession(sessionToken);
             return new AidPostRecordClient(createAgentRecordTransport(session));
+        },
+        directoryResourceClient: async sessionToken => {
+            const session = await service.restoreSession(sessionToken);
+            return new DirectoryResourceRecordClient(
+                createAgentDirectoryRecordTransport(session),
+            );
         },
     };
 };
