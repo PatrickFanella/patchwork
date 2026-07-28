@@ -15,9 +15,10 @@ Current authority:
 
 The refreshed 2026-07-28 review records **NO-GO**. Local implementation and verification
 continue, but public deployment and pilot recruitment remain prohibited until
-retention, accessibility, capacity, and ownership gates have current evidence.
-The real two-account browser, signed-digest staging/rollback, staging restore,
-and alert-game-day gates are complete.
+formal retention approval, independent accessibility review, and ownership
+gates have current evidence. The real two-account browser, signed-digest
+staging/rollback, staging restore, alert-game-day, deployed retention, and
+bounded capacity gates are complete.
 
 An issue being represented by code or tests does not mean its subsystem is externally integrated, durable, or production-ready. Use the maturity matrix for that determination.
 
@@ -27,7 +28,7 @@ An issue being represented by code or tests does not mean its subsystem is exter
 | --- | --- | --- |
 | Program governance | #94, #95 | Historical planning artifacts; Phase 1 of the continuation roadmap replaces their status model. |
 | Runtime completeness | #96, #97, #98, #99 | Some contracts, guards, checkpoints, and tests landed; durable moderation, live ingestion, and real integration remain continuation work. |
-| Security and privacy | #100, #101, #102, #103 | The authenticated HTTP perimeter, privacy redaction, and scheduled API/moderation retention are implemented locally. Formal privacy approval and deployed scheduler evidence remain incomplete. |
+| Security and privacy | #100, #101, #102, #103 | The authenticated HTTP perimeter, privacy redaction, and scheduled API/moderation retention are implemented and the immutable NUC schedulers enforced representative expired rows on their normal cadence. Formal privacy approval remains incomplete. |
 | Reliability and observability | #104, #105, #106, #107 | NUC alert, restore, rollback, and game-day evidence is current; independent durability and human acknowledgment remain absent. |
 | Release engineering | #108, #109, #110, #111 | Four zero-HIGH/CRITICAL signed digests are deployed and rollback-tested on NUC staging; protected GHCR/OIDC promotion remains unproven. |
 | Trust, safety, and launch | #112, #113, #114, #115 | Console models, policies, and documents exist; durable casework and pilot/GA evidence do not. |
