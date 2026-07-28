@@ -161,7 +161,6 @@ const appRoutes = [
 const deferredFixtureRoutes = new Set<AppRoute>([
     '/volunteer',
     '/chat',
-    '/settings',
     '/moderation',
     '/inbox',
     '/notifications',
@@ -205,6 +204,7 @@ const primaryRoutes: readonly AppRoute[] = [
 ];
 
 const accountRoutes: readonly AppRoute[] = ['/volunteer', '/chat', '/settings'];
+const productionAccountRoutes: readonly AppRoute[] = ['/settings'];
 
 const secondaryRoutes = appRoutes.filter(
     route =>
@@ -641,40 +641,42 @@ const DashboardRoute = ({
                             >
                                 Open posting form
                             </Button>
-                            <Button
-                                variant='neutral'
-                                onClick={() => onNavigate('/chat')}
-                            >
-                                Open chat handoff
-                            </Button>
+                            {webDataMode === 'fixture' ?
+                                <Button
+                                    variant='neutral'
+                                    onClick={() => onNavigate('/chat')}
+                                >
+                                    Open chat handoff
+                                </Button>
+                            :   null}
                         </div>
                     </div>
 
                     <aside className='mh-card p-4 sm:p-5'>
-                        <p className='mh-kicker'>Today in the network</p>
+                        <p className='mh-kicker'>Current service posture</p>
                         <ul className='mt-3 grid gap-2'>
                             <li className='mh-stat-tile'>
                                 <p className='text-xs uppercase tracking-widest text-mh-textSoft'>
-                                    Requests triaged (24h)
+                                    Discovery source
                                 </p>
-                                <p className='mt-1 font-heading text-3xl font-black leading-none text-mh-text'>
-                                    127
-                                </p>
-                            </li>
-                            <li className='mh-stat-tile'>
-                                <p className='text-xs uppercase tracking-widest text-mh-textSoft'>
-                                    Median response
-                                </p>
-                                <p className='mt-1 font-heading text-3xl font-black leading-none text-mh-text'>
-                                    11m
+                                <p className='mt-1 text-sm font-black text-mh-text'>
+                                    Durable projections
                                 </p>
                             </li>
                             <li className='mh-stat-tile'>
                                 <p className='text-xs uppercase tracking-widest text-mh-textSoft'>
-                                    Verified volunteers
+                                    Safety controls
                                 </p>
-                                <p className='mt-1 font-heading text-3xl font-black leading-none text-mh-text'>
-                                    42
+                                <p className='mt-1 text-sm font-black text-mh-text'>
+                                    Reports and blocks
+                                </p>
+                            </li>
+                            <li className='mh-stat-tile'>
+                                <p className='text-xs uppercase tracking-widest text-mh-textSoft'>
+                                    Account controls
+                                </p>
+                                <p className='mt-1 text-sm font-black text-mh-text'>
+                                    Export and deactivation
                                 </p>
                             </li>
                         </ul>
@@ -737,22 +739,21 @@ const DashboardRoute = ({
                 </section>
 
                 <section className='space-y-6 lg:col-span-2'>
-                    <Card title='Service boundaries online'>
+                    <Card title='Pre-alpha operating boundary'>
                         <ul className='list-disc space-y-1 pl-5 text-sm'>
+                            <li>Patchwork is not an emergency service.</li>
+                            <li>Discovery uses approximate public locations.</li>
                             <li>
-                                API shell at <code>localhost:4000</code>
-                            </li>
-                            <li>
-                                Indexer shell at <code>localhost:4100</code>
-                            </li>
-                            <li>
-                                Moderation worker shell at{' '}
-                                <code>localhost:4200</code>
+                                Sign in before posting or using private safety
+                                and account controls.
                             </li>
                         </ul>
                         <p className='mt-3'>
-                            See <TextLink href='/'>architecture docs</TextLink>{' '}
-                            for bounded contexts and ADR rationale.
+                            Read the{' '}
+                            <TextLink href='/legal/community-guidelines'>
+                                community guidelines
+                            </TextLink>{' '}
+                            before participating.
                         </p>
                     </Card>
 
@@ -764,7 +765,11 @@ const DashboardRoute = ({
                                         primaryRoutes.includes(
                                             section.route as AppRoute,
                                         ) ||
-                                        accountRoutes.includes(
+                                        (
+                                            webDataMode === 'fixture' ?
+                                                accountRoutes
+                                            :   productionAccountRoutes
+                                        ).includes(
                                             section.route as AppRoute,
                                         ),
                                 )
@@ -3748,6 +3753,164 @@ interface SettingsRouteProps {
     currentUserDid: string;
 }
 
+interface AccountPrivacyRouteProps {
+    onDeactivated: () => Promise<void>;
+}
+
+const AccountPrivacyRoute = ({
+    onDeactivated,
+}: AccountPrivacyRouteProps) => {
+    const [accountActionResult, setAccountActionResult] = useState<string>();
+    const [confirmDeactivation, setConfirmDeactivation] = useState(false);
+    const [pendingAction, setPendingAction] = useState<
+        'export' | 'deactivate'
+    >();
+
+    const handleExport = async () => {
+        setPendingAction('export');
+        setAccountActionResult(undefined);
+        const result = await exportDataViaApi();
+        setPendingAction(undefined);
+
+        if (!result.ok) {
+            setAccountActionResult(`Error: ${result.error}`);
+            return;
+        }
+
+        const blob = new Blob([JSON.stringify(result.data, null, 2)], {
+            type: 'application/json',
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'patchwork-account-export.json';
+        anchor.click();
+        URL.revokeObjectURL(url);
+        setAccountActionResult('Your Patchwork data export is ready.');
+    };
+
+    const handleDeactivate = async () => {
+        setPendingAction('deactivate');
+        setAccountActionResult(undefined);
+        const result = await deactivateAccountViaApi();
+        setPendingAction(undefined);
+
+        if (!result.ok) {
+            setAccountActionResult(`Error: ${result.error}`);
+            return;
+        }
+
+        setConfirmDeactivation(false);
+        await onDeactivated();
+    };
+
+    return (
+        <section className='space-y-6'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>Account privacy</h1>
+                <p className='mt-2 text-sm text-mh-textMuted'>
+                    Export the data Patchwork holds or deactivate this
+                    authenticated Patchwork account.
+                </p>
+            </header>
+
+            <Panel title='Account controls'>
+                <div className='space-y-4'>
+                    <Card title='Data export'>
+                        <p className='text-sm text-mh-textMuted'>
+                            Download a versioned snapshot of Patchwork-held
+                            account data. Credentials, third-party casework,
+                            and a complete copy of your independent AT
+                            repository are excluded.
+                        </p>
+                        <div className='mt-3'>
+                            <Button
+                                variant='secondary'
+                                className='px-3 py-1 text-xs'
+                                disabled={pendingAction !== undefined}
+                                onClick={() => void handleExport()}
+                            >
+                                {pendingAction === 'export' ?
+                                    'Preparing export…'
+                                :   'Download data export'}
+                            </Button>
+                        </div>
+                    </Card>
+
+                    <Card title='Account deactivation'>
+                        <p className='text-sm text-mh-textMuted'>
+                            Deactivation revokes Patchwork sessions and removes
+                            your records from Patchwork discovery. It does not
+                            delete records held independently by your AT
+                            Protocol repository.
+                        </p>
+                        <div className='mt-3'>
+                            <Button
+                                variant='neutral'
+                                className='px-3 py-1 text-xs'
+                                disabled={pendingAction !== undefined}
+                                onClick={() => setConfirmDeactivation(true)}
+                            >
+                                Deactivate account
+                            </Button>
+                        </div>
+                        {confirmDeactivation ?
+                            <div
+                                role='alertdialog'
+                                aria-label='Confirm account deactivation'
+                                className='mh-alert mt-3'
+                            >
+                                <p className='text-sm font-bold'>
+                                    Deactivate this Patchwork account?
+                                </p>
+                                <p className='mt-1 text-xs'>
+                                    You will be signed out immediately.
+                                    Reactivation requires a controlled support
+                                    review.
+                                </p>
+                                <div className='mt-2 flex flex-wrap gap-2'>
+                                    <Button
+                                        type='button'
+                                        disabled={pendingAction !== undefined}
+                                        onClick={() => void handleDeactivate()}
+                                    >
+                                        {pendingAction === 'deactivate' ?
+                                            'Deactivating…'
+                                        :   'Confirm deactivation'}
+                                    </Button>
+                                    <Button
+                                        type='button'
+                                        variant='neutral'
+                                        disabled={pendingAction !== undefined}
+                                        onClick={() =>
+                                            setConfirmDeactivation(false)
+                                        }
+                                    >
+                                        Keep account active
+                                    </Button>
+                                </div>
+                            </div>
+                        :   null}
+                    </Card>
+
+                    {accountActionResult ?
+                        <p
+                            role={
+                                accountActionResult.startsWith('Error:') ?
+                                    'alert'
+                                :   'status'
+                            }
+                            className='rounded-none border-2 border-mh-border bg-mh-surfaceElev px-3 py-2 text-xs font-bold'
+                        >
+                            {accountActionResult}
+                        </p>
+                    :   null}
+                </div>
+            </Panel>
+        </section>
+    );
+};
+
 const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
     const [settings, setSettings] = useState<UserSettings>(
         defaultSettingsViewModel.settings,
@@ -4699,6 +4862,12 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         currentRoute === '/settings';
     const isDeferredFixtureRoute =
         webDataMode !== 'fixture' && deferredFixtureRoutes.has(currentRoute);
+    const visibleAccountRoutes =
+        webDataMode === 'fixture' ? accountRoutes : productionAccountRoutes;
+    const visibleSecondaryRoutes =
+        webDataMode === 'fixture' ?
+            secondaryRoutes
+        :   [...secondaryRoutes, '/volunteer', '/chat'] as const;
 
     const content =
         isDeferredFixtureRoute ?
@@ -4878,7 +5047,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 onReset={resetChat}
             />
         : currentRoute === '/settings' ?
-            <SettingsRoute currentUserDid={currentUserDid} />
+            webDataMode === 'fixture' ?
+                <SettingsRoute currentUserDid={currentUserDid} />
+            :   <AccountPrivacyRoute onDeactivated={auth.restore} />
         :   <DashboardRoute
                 appTitle={appTitle}
                 onNavigate={navigate}
@@ -4910,7 +5081,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                         </span>
                     </a>
                     <div className='mh-network-status' role='status'>
-                        <span aria-hidden='true' /> Community network online
+                        <span aria-hidden='true' /> Pre-alpha environment
                     </div>
                 </header>
 
@@ -4933,7 +5104,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                         ))}
                     </div>
                     <div className='mh-nav-tools'>
-                        {accountRoutes.map(route => (
+                        {visibleAccountRoutes.map(route => (
                             <a
                                 key={route}
                                 href={route}
@@ -4953,7 +5124,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                 More <span aria-hidden='true'>+</span>
                             </summary>
                             <div className='mh-more-menu-panel'>
-                                {secondaryRoutes.map(route => (
+                                {visibleSecondaryRoutes.map(route => (
                                     <a
                                         key={route}
                                         href={route}

@@ -36,11 +36,12 @@ metrics, zero alerts, and zero restarts.
 ## Verification baseline
 
 - repository unit/contract suite: 897 tests;
-- PostgreSQL/HTTP integration: 33 tests;
-- indexer suite with PostgreSQL enabled: 50 tests;
-- moderation suite with PostgreSQL enabled: 63 tests;
+- API suite with PostgreSQL enabled: 301 tests;
+- indexer suite with PostgreSQL enabled: 51 tests;
+- moderation suite with PostgreSQL enabled: 64 tests;
 - direct service integration: 9 tests;
-- Chromium: 50 local cases passed, 1 controlled external case passed separately;
+- Chromium: 56 local cases passed, 1 controlled external case passed separately
+  against the prior immutable release;
 - migrations: API 13, indexer 4, moderation 3; clean application and replay;
 - database-enabled coverage: 65.38% statements, 51.91% branches, 59.29%
   functions, 66.54% lines;

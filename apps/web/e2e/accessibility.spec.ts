@@ -29,6 +29,7 @@ const A11Y_ROUTES = [
     { path: '/resources', label: 'resources' },
     { path: '/volunteer', label: 'volunteer' },
     { path: '/chat', label: 'chat' },
+    { path: '/settings', label: 'settings' },
     { path: '/login', label: 'login' },
 ] as const;
 
@@ -354,5 +355,44 @@ test('critical routes reflow at 320 CSS pixels without page-level horizontal scr
             content: document.documentElement.scrollWidth,
         }));
         expect(dimensions, route.label).toEqual({ viewport: 320, content: 320 });
+    }
+});
+
+test('critical routes support 200% text sizing with reduced motion', async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+
+    for (const route of A11Y_ROUTES) {
+        await page.goto(route.path);
+        await page.waitForLoadState('networkidle');
+        const result = await page.evaluate(() => {
+            document.documentElement.style.fontSize = '200%';
+            const durations = [...document.querySelectorAll('*')].flatMap(
+                element => {
+                    const style = getComputedStyle(element);
+                    return [
+                        ...style.animationDuration.split(','),
+                        ...style.transitionDuration.split(','),
+                    ].map(value => {
+                        const duration = Number.parseFloat(value);
+                        return value.trim().endsWith('ms') ?
+                                duration
+                            :   duration * 1000;
+                    });
+                },
+            );
+            return {
+                viewport: document.documentElement.clientWidth,
+                content: document.documentElement.scrollWidth,
+                maximumMotionMs: Math.max(0, ...durations),
+            };
+        });
+
+        expect(result.content, route.label).toBeLessThanOrEqual(
+            result.viewport,
+        );
+        expect(result.maximumMotionMs, route.label).toBeLessThanOrEqual(0.1);
     }
 });

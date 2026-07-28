@@ -1,35 +1,40 @@
 # Local WCAG 2.2 AA accessibility audit
 
-Date: 2026-07-11
+Date: 2026-07-28
 
-Scope: home, map, feed, posting, resources, volunteer, chat, and login routes in
-the local production-data-mode web application.
+Scope: home, map, feed, posting, resources, volunteer, chat, settings, and
+login routes in the local production-data-mode web application, plus a manual
+public-route review of the deployed home-staging web application.
 
 Result: **no locally detected launch-blocking violation; independent review
 still required**.
 
 ## Automated evidence
 
-`@axe-core/playwright` is now a committed browser dependency. Each critical
-route is scanned without exclusions or impact filtering using WCAG 2 A/AA,
-2.1 A/AA, and 2.2 AA rule tags. All eight route scans report zero violations.
+`@axe-core/playwright` is a committed browser dependency. Each critical route
+is scanned without exclusions or impact filtering using WCAG 2 A/AA, 2.1
+A/AA, and 2.2 AA rule tags. All nine route scans report zero violations.
 
 One cross-route reflow case renders every route at 320 CSS pixels and proves
-that document content does not create page-level horizontal scrolling. The
-full Chromium suite now passes 48 cases with only the authorized real OAuth/PDS
-journey skipped.
+that document content does not create page-level horizontal scrolling. A
+second cross-route case applies 200% root text sizing with
+`prefers-reduced-motion: reduce`, proves that page-level horizontal overflow
+does not appear, and verifies that animation and transition duration collapse
+to the reduced-motion budget. The full Chromium suite now passes 56 runnable
+cases with only the authorized real OAuth/PDS journey skipped.
 
 Playwright now starts Patchwork on the dedicated strict port `41739` with
 server reuse disabled. During this audit, the former port-5173 configuration
 reused an unrelated Roberts Rules development server; a failure screenshot
-exposed the mismatch. Results from that run were discarded, and the isolated
-48-pass rerun is the authoritative browser evidence.
+exposed the mismatch. Results from that run were discarded. The isolated
+56-pass runnable suite reported above is the current authoritative browser
+evidence.
 
-The database-enabled coverage gate also passes all 848 tests. Coverage-file
-parallelism is disabled because the PostgreSQL suites intentionally share one
-disposable database and concurrent migration/TRUNCATE setup can deadlock.
-Current diagnostic coverage is 64.50% statements, 51.20% branches, 58.46%
-functions, and 65.71% lines.
+The repository unit/contract gate passes all 897 tests. The disposable
+PostgreSQL gate separately passes all 301 API, 51 indexer, and 64 moderation
+cases plus 9 direct-service integration cases. Current database-free diagnostic
+coverage is 57.49% statements, 46.48% branches, 50.98% functions, and 58.60%
+lines.
 
 ## Manual repository/browser review
 
@@ -41,16 +46,27 @@ functions, and 65.71% lines.
 | Structure | Main/navigation landmarks, articles, named regions, route headings | Pass locally |
 | Dynamic state | Polite/assertive announcers, status and alert roles, loading live regions | Pass locally |
 | Contrast | axe route scans include applicable WCAG contrast rules | No detected violation |
-| Motion | `prefers-reduced-motion` disables animation and transition duration | Pass by source inspection |
-| Reflow | Eight routes at 320 CSS pixels | Pass in Chromium |
+| Motion | `prefers-reduced-motion` disables animation and transition duration | Pass in Chromium |
+| Reflow | Nine routes at 320 CSS pixels and at 200% text sizing | Pass in Chromium |
+| Account controls | Export and deactivation have named controls, busy/error status, and an explicit confirmation dialog | Pass in Chromium |
+
+The deployed-browser review also found a product-scope defect rather than a
+WCAG rule failure: the public home screen advertised fabricated activity
+metrics, localhost service addresses, and deferred chat/volunteer routes, while
+the durable export/deactivation UI was hidden behind the fixture settings
+route. The corrected production build now presents only implemented alpha
+capabilities, labels itself as a pre-alpha environment, keeps deferred routes
+behind explicit scope notices, and exposes the durable account controls on
+Settings. Behavioral coverage prevents those misleading claims and fixture
+controls from returning.
 
 ## Residual risk
 
 Automated tools cannot prove usability with VoiceOver, NVDA, JAWS, switch
-control, speech input, cognitive accessibility needs, 200% text-only resizing,
-or real user workflows. No independent auditor has reviewed Patchwork. The
-authenticated two-account flow is now executable, but it has not received a
-screen-reader, switch-control, speech-input, or cognitive-accessibility review.
+control, speech input, cognitive accessibility needs, or real user workflows.
+No independent auditor has reviewed Patchwork. The authenticated two-account
+flow is executable, but it has not received a screen-reader, switch-control,
+speech-input, or cognitive-accessibility review.
 
 The `ACCESSIBILITY` go/no-go condition therefore remains open until an
 independent WCAG 2.2/assistive-technology review covers the deployed alpha and

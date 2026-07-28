@@ -1,6 +1,6 @@
 # Patchwork layered test traceability
 
-Updated: 2026-07-10
+Updated: 2026-07-28
 
 This document describes what each test layer actually executes. Test counts are reported by layer because fixture-heavy unit coverage is not equivalent to PostgreSQL, HTTP, browser, or live AT Protocol evidence.
 
@@ -24,10 +24,11 @@ This document describes what each test layer actually executes. Test counts are 
 | --- | --- |
 | Repository unit/contract suite | 897 passed |
 | Direct lifecycle service integration | 9 passed |
-| PostgreSQL integration, including HTTP boundary | 26 passed |
-| Indexer PostgreSQL projection/reconciliation | 13 passed |
-| Browser Chromium suite | 50 local cases passed; 1 controlled external case passed separately |
-| Diagnostic coverage without database suites | 58.22% statements, 45.95% branches, 51.44% functions, 59.44% lines |
+| API suite with PostgreSQL and HTTP boundary enabled | 301 passed |
+| Indexer suite with PostgreSQL projection/reconciliation enabled | 51 passed |
+| Moderation suite with PostgreSQL enabled | 64 passed |
+| Browser Chromium suite | 56 local cases passed; 1 controlled external case passed separately against the prior immutable release |
+| Diagnostic coverage without database suites | 57.49% statements, 46.48% branches, 50.98% functions, 58.60% lines |
 | External AT protocol | Aid two-account OAuth/create/discover/report/block/resolve/close/delete passed in Chromium; directory create/update/discover/delete passed in a controlled browser exercise |
 | Local PostgreSQL capacity probe | 1,150 requests, 0 errors; four modeled read budgets passed over 1,000 generated projections |
 
@@ -45,7 +46,7 @@ Counts can change as tests are consolidated. Readiness depends on covered bounda
 | Discovery | Firehose, ranking, discovery rule, data-mode, and typed API failure tests | Local demo fixtures require explicit fixture mode | Cursor, heartbeat, normalized aid-post projections, tombstones, and dead letters persist | Real PostgreSQL projection filters, pagination, freshness, and startup lag rejection | Map/feed UI, accessibility, API-unavailable visibility, and idempotent retry with no fixture substitution | Aid and directory records traversed the home PDS, local Jetstream, PostgreSQL, and browser | Protected staging repetition and partner verification administration |
 | Moderation | Policy and queue state tests | Worker fixture services are test-only | Concurrent PostgreSQL queue, lease, audit, policy, and retention stores back production | Authenticated API-to-worker commands derive the actor from the session | Console UX remains deferred | No public external dependency | Staging alert/game-day execution and operator workflow |
 | Privacy | Geo floor and redaction tests | Fixture response checks | Audit payload redaction and scheduled retention | HTTP boundary avoids actor override | Accessibility and artifact redaction | Redacted lifecycle evidence | Formal policy approval and staging observation |
-| Account access/deactivation | Response schema, browser client, durable account suppression | Deferred settings preferences remain fixtures | Subject-owned export; deactivation removes Patchwork state and suppresses replay/login | Cookie-derived DID; export GET and deactivation POST carry no body identity | JSON export; immediate deactivation receipt and cookie clearing | Full AT repository remains portable outside Patchwork | Controlled reactivation, AT-repository deletion, casework review, and formal privacy approval |
+| Account access/deactivation | Response schema, browser client, durable account suppression | Deferred preference controls remain fixture-development only | Subject-owned export; deactivation removes Patchwork state and suppresses replay/login | Cookie-derived DID; export GET and deactivation POST carry no body identity | Production Settings JSON export; explicit confirm/cancel; CSRF-protected empty-body deactivation; revoked-session state | Full AT repository remains portable outside Patchwork | Controlled reactivation, AT-repository deletion, casework review, and formal privacy approval |
 
 ## Suite ownership and classification
 
@@ -114,7 +115,13 @@ record key, and the web API-client test asserts mutation header generation.
 
 ### Browser E2E
 
-`apps/web/e2e/accessibility.spec.ts` starts the Vite web application and runs in Chromium. It verifies skip links, landmarks, keyboard operation, Escape behavior, labels, ARIA semantics, focus management, route announcements, and image alternatives.
+`apps/web/e2e/accessibility.spec.ts` starts the Vite web application and runs in
+Chromium. It verifies skip links, landmarks, keyboard operation, Escape
+behavior, labels, ARIA semantics, focus management, route announcements, image
+alternatives, 320-pixel reflow, 200% text sizing, and reduced-motion behavior.
+`production-data-mode.spec.ts` separately rejects fixture content and
+unsupported capability claims in the production shell and exercises the
+durable account Settings path.
 
 ### External protocol evidence
 
