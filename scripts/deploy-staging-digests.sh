@@ -93,7 +93,7 @@ done
     'grep -R -F -- "$1" /usr/share/nginx/html/assets >/dev/null' \
     _ "$map_tile_url"
 tile_bytes=$("${compose[@]}" exec -T patchwork-web sh -ceu \
-    'wget --header="Range: bytes=0-1023" -qO- "http://127.0.0.1$1" | wc -c' \
+    'curl -fsS --range 0-1023 "http://127.0.0.1$1" | wc -c' \
     _ "$map_tile_url")
 [[ "$tile_bytes" -eq 1024 ]] || {
     echo "Map tile range probe returned ${tile_bytes} bytes instead of 1024." >&2

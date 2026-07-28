@@ -40,7 +40,7 @@ describe('immutable staging deployment contract', () => {
         expect(deploy).toContain('previous-artifact-digests.json');
         expect(deploy).toContain('org.opencontainers.image.revision');
         expect(deploy).toContain('/usr/share/nginx/html/assets');
-        expect(deploy).toContain('Range: bytes=0-1023');
+        expect(deploy).toContain('curl -fsS --range 0-1023');
         expect(deploy).toContain('PATCHWORK_DEPLOY_EXTERNAL_POSTGRES');
         expect(deploy).toContain('export VITE_MAP_TILE_URL=');
         expect(deploy).toContain('export PATCHWORK_PM_TILES_FILENAME=');
@@ -48,7 +48,7 @@ describe('immutable staging deployment contract', () => {
         expect(rollback).toContain('--no-build');
         expect(rollback).toContain('org.opencontainers.image.revision');
         expect(rollback).toContain('/usr/share/nginx/html/assets');
-        expect(rollback).toContain('Range: bytes=0-1023');
+        expect(rollback).toContain('curl -fsS --range 0-1023');
         expect(rollback).toContain('export VITE_MAP_TILE_URL=');
         expect(rollback).toContain('export PATCHWORK_PM_TILES_FILENAME=');
     });
