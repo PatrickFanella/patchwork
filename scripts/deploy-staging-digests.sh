@@ -21,6 +21,8 @@ map_tile_url=$(jq -er '.mapTileUrl' "$manifest")
 }
 export STAGING_VITE_MAP_TILE_URL="$map_tile_url"
 export STAGING_PATCHWORK_PM_TILES_FILENAME="${map_tile_url##*/}"
+export VITE_MAP_TILE_URL="$map_tile_url"
+export PATCHWORK_PM_TILES_FILENAME="${map_tile_url##*/}"
 
 for service in api indexer moderation web; do
     image=$(jq -er ".images.${service}" "$manifest")
@@ -43,8 +45,18 @@ if [[ -f "$state_dir/current-artifact-digests.json" ]]; then
 fi
 
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
-"${compose[@]}" pull
-"${compose[@]}" up -d --wait postgres
+if [[ -n "${PATCHWORK_COMPOSE_OVERRIDE_FILE:-}" ]]; then
+    [[ -r "$PATCHWORK_COMPOSE_OVERRIDE_FILE" ]]
+    compose+=(-f "$PATCHWORK_COMPOSE_OVERRIDE_FILE")
+fi
+"${compose[@]}" pull \
+    patchwork-api patchwork-api-migrations \
+    patchwork-spool patchwork-indexer-migrations \
+    patchwork-thimble patchwork-moderation-migrations \
+    patchwork-web
+if [[ "${PATCHWORK_DEPLOY_EXTERNAL_POSTGRES:-false}" != 'true' ]]; then
+    "${compose[@]}" up -d --wait postgres
+fi
 "${compose[@]}" run --rm --no-deps patchwork-api-migrations
 "${compose[@]}" run --rm --no-deps patchwork-indexer-migrations
 "${compose[@]}" run --rm --no-deps patchwork-moderation-migrations

@@ -64,6 +64,14 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
                     'API_TRUSTED_PROXIES: ${API_TRUSTED_PROXIES:?' :
                     'API_TRUSTED_PROXIES: ${STAGING_API_TRUSTED_PROXIES:?',
             );
+            for (const imageVariable of [
+                'PATCHWORK_API_IMAGE',
+                'PATCHWORK_INDEXER_IMAGE',
+                'PATCHWORK_MODERATION_IMAGE',
+                'PATCHWORK_WEB_IMAGE',
+            ]) {
+                expect(raw).toContain(`image: \${${imageVariable}:-`);
+            }
 
             const { services } = renderCompose(filename);
             for (const migration of [

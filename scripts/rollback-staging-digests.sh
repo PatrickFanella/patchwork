@@ -22,6 +22,8 @@ map_tile_url=$(jq -er '.mapTileUrl' "$manifest")
 }
 export STAGING_VITE_MAP_TILE_URL="$map_tile_url"
 export STAGING_PATCHWORK_PM_TILES_FILENAME="${map_tile_url##*/}"
+export VITE_MAP_TILE_URL="$map_tile_url"
+export PATCHWORK_PM_TILES_FILENAME="${map_tile_url##*/}"
 
 for service in api indexer moderation web; do
     image=$(jq -er ".images.${service}" "$manifest")
@@ -35,6 +37,10 @@ for service in api indexer moderation web; do
 done
 
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
+if [[ -n "${PATCHWORK_COMPOSE_OVERRIDE_FILE:-}" ]]; then
+    [[ -r "$PATCHWORK_COMPOSE_OVERRIDE_FILE" ]]
+    compose+=(-f "$PATCHWORK_COMPOSE_OVERRIDE_FILE")
+fi
 "${compose[@]}" pull
 "${compose[@]}" up -d --no-build --no-deps \
     patchwork-spool patchwork-thimble patchwork-api patchwork-web
