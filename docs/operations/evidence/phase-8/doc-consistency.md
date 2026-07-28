@@ -1,8 +1,8 @@
 # Documentation consistency review
 
-Review date: 2026-07-11
+Review date: 2026-07-28
 
-Scope: `README.md`, 72 Markdown files under `docs/`, runtime configuration,
+Scope: `README.md`, 81 Markdown files under `docs/`, runtime configuration,
 package scripts, HTTP routes, migrations, Compose, and CI workflows.
 
 ## Issue list
@@ -24,7 +24,7 @@ package scripts, HTTP routes, migrations, Compose, and CI workflows.
 | 12 | P2 | Production issue plan defines future production-ready conditions | Current authority is continuation roadmap and matrix | Historical plan; superseded |
 | 13 | P2 | ADR 0003 introduction says runtime is fixture-heavy | ADR records decision-time context, not current status | Historical context retained |
 | 14 | P2 | Earlier phase evidence records older migration counts | Current counts are 13/4/3 | Dated evidence retained; current reports corrected |
-| 15 | P2 | Phase 7 immutable-delivery evidence records 836 tests | Current repository suite has 891 tests | Dated evidence retained |
+| 15 | P2 | Earlier Phase 7 immutable-delivery evidence recorded 836 tests | Current repository suite has 892 tests | Immutable-delivery evidence refreshed after NUC execution |
 | 16 | P2 | Phase 7 staging-readiness records seven alert rules | Current rule file has eleven | Dated drill evidence retained |
 | 17 | P2 | Legal changelog references `MODERATION_LOG_RETENTION_DAYS` | Runtime uses explicit seven-day migration and scheduler policy | Historical changelog retained; current policy corrected |
 | 18 | P2 | README “Fallback dataset” label can imply runtime fallback | Production code forbids fixture mode and never silently falls back | Wording already says test/demo only |
@@ -42,6 +42,7 @@ package scripts, HTTP routes, migrations, Compose, and CI workflows.
 | 30 | Pending evidence | Staging host, DNS, registry, and OAuth docs describe intended resources | No authorized external inventory is available | Verify during staging or closure approval |
 | 32 | P1 | Capacity documentation names three repeatable test files | None of the named test files exists | Fixed with tested `capacity:probe` and corrected runbook |
 | 33 | P1 | Current docs said ingestion/tombstone integration was absent and production subscribed to every planned NSID | Durable projection/tombstone paths exist; alpha scope is aid-post only | Fixed with current reconciliation evidence and narrowed runtime subscription |
+| 34 | P1 | Prepared closure inventory said no staging deployment or pushed continuation existed | NUC runs the signed four-digest release and local `main` matches `origin/main` | Fixed with a current non-destructive inventory |
 
 ## Review conclusion
 
@@ -50,13 +51,13 @@ Verdict: **Conditional pass** for repository handoff; **fail for launch**.
 | Level | Count |
 | --- | ---: |
 | P0 blocker | 0 |
-| P1 major | 10 |
+| P1 major | 11 |
 | P2 minor/historical | 16 |
 | P3 nit/accepted | 4 |
 | Pending evidence | 3 |
-| **Total** | **33** |
+| **Total** | **34** |
 
-All ten P1 documentation inconsistencies were fixed or converted to explicit
+All eleven P1 documentation inconsistencies were fixed or converted to explicit
 unassigned placeholders in this pass. Pending issues 28–30 still require human
 or external evidence and are represented as `NO-GO` conditions; draft legal
 documents are now conspicuously marked not in force. Historical evidence is

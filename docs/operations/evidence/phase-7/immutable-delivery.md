@@ -1,59 +1,98 @@
-# Phase 7 immutable delivery: local evidence
+# Phase 7 immutable delivery evidence
 
-Date: 2026-07-11
+Date: 2026-07-28
 
-This evidence covers the locally verifiable Task 7.2 delivery mechanism. It
-does not claim that images were published, signed in the GitHub OIDC context,
-or deployed to the staging host.
+Task 7.2 is complete for the authorized home-network staging environment. Four
+runtime images were built from commit
+`55b337e26cd7a32bfc4d3eaf89136345a22b7156`, scanned before publication,
+signed, pushed to the NUC registry, deployed by digest without rebuilding, and
+accepted by migrations, readiness probes, rollback, and the real two-account
+OAuth/PDS browser journey.
 
-## Build and publication contract
+## Published release
 
-`.github/workflows/deploy-staging.yml` runs only after successful `CI` on
-`main`, or after a protected manual dispatch whose SHA has successful
-`quality-gates` and `e2e-production` checks. A four-entry matrix builds API,
-indexer, moderation, and web exactly once from that SHA. Each local image is
-scanned for high/critical findings before push, pushed to GHCR, resolved to its
-registry digest, keyless-signed with Cosign, verified, and assembled into
-`artifact-digests.json`.
+The registry is available to the NUC Docker daemon through a loopback-only
+`127.0.0.1:5000` binding. The additional binding avoids a host-wide insecure
+registry setting and does not broaden the existing LAN firewall exposure.
 
-## Deployment and rollback contract
+| Service | Deployed digest |
+| --- | --- |
+| API | `127.0.0.1:5000/subculture-collective/patchwork-api@sha256:6da650e3b75a8d2dc10a9229fa6c613ce6e766ac463e69d64894cacf22838bc5` |
+| Indexer | `127.0.0.1:5000/subculture-collective/patchwork-indexer@sha256:b8a44c00978a66f2fd90c992cbe919c41d001bbee9107f7fbbfe2f7d6f8696fa` |
+| Moderation | `127.0.0.1:5000/subculture-collective/patchwork-moderation@sha256:900fb7782188e9c0cb93a16b3c1ab4c513665c3746f72f24555caaafc83c78c4` |
+| Web | `127.0.0.1:5000/subculture-collective/patchwork-web@sha256:029b8351b491c4887b6fcba54dd3616d3ea98c741c257dd165c982b730b518d1` |
 
-The protected `staging` environment transfers the digest manifest, Compose
-file, and host scripts over pinned-host-key SSH. The deployment script:
+Trivy 0.59.1 reported zero HIGH and zero CRITICAL findings for every published
+image. The first scan correctly blocked publication and led to three fixes:
+digest-pinned Node/nginx bases, patched OS packages and npm, and removal of
+development-only packages from Node runtime layers. A checksum-verified
+`brace-expansion` 5.0.8 replacement closed the final npm-bundled HIGH finding.
 
-1. rejects any image reference without a 64-character SHA-256 digest;
-2. preserves the current manifest as `previous-artifact-digests.json`;
-3. pulls exact images and runs API, indexer, and moderation migrations;
-4. starts services using `--no-build --wait`;
-5. verifies each internal `/health/ready` endpoint;
-6. records the current manifest only after readiness succeeds.
+Cosign 2.6.1 signed and verified all four digest references. The scoped private
+key, password file, and public key are `0600` under a `0700` NUC operator
+directory. The public-key fingerprint is retained with the release evidence.
+Because this is a private home registry, signing used a locally managed key and
+disabled transparency-log upload. The signatures prove integrity against the
+retained public key; they do not provide GitHub OIDC identity or Rekor
+transparency.
 
-Workflow failure invokes the rollback script. Rollback restores all four
-previous digests together with `--no-build --no-deps`, verifies readiness, and
-does not attempt unsafe down migrations. The schema must remain compatible
-with the previous application digest throughout the rollback window.
+## Deployment and rollback execution
 
-After host readiness, the workflow runs the real two-account OAuth/PDS browser
-journey and the artifact redaction gate. These commands, not echoed success
-text, decide deployment success.
+The production Compose topology now accepts the same four digest variables as
+staging. `deploy-staging-digests.sh` explicitly loaded the NUC host override,
+used the external PostgreSQL service, pulled only the manifest images, ran API
+13, indexer 4, and moderation 3 migrations, and started all runtimes with
+`--no-build --wait`.
 
-## Local verification
+The deployment gate verified:
 
-- Workflow and Compose YAML parse successfully.
-- Deployment and rollback scripts pass Bash syntax checks.
-- Seven focused delivery/topology tests pass, including behavioral rejection
-  of a mutable `:latest` manifest before Docker invocation.
-- Database-enabled repository gate: 836 passed.
-- PostgreSQL/HTTP integration: 24 passed.
-- Direct service integration: 9 passed.
-- Chromium: 39 passed; one real-environment journey skipped.
-- Coverage: 58.22% statements, 45.95% branches, 51.44% functions, 59.44% lines.
-- Workspace build, migration replay, and high-severity audit: passed.
+- all four `org.opencontainers.image.revision` labels equal the manifest SHA;
+- API, indexer, moderation, web, local Jetstream, and map range readiness;
+- the versioned PMTiles URL is embedded in the web bundle and returns exactly
+  1,024 bytes for the range probe;
+- the unversioned tile URL remains unavailable; and
+- `/`, `/api/health/ready`, `/api/contracts`, and `/api/query/directory`
+  return HTTP 200.
 
-## External blockers
+`rollback-staging-digests.sh` then restored all four digests for the prior
+known-good source commit `edf24486493bfc1ed56e93c0d8d767c52e564f29`
+without a down migration. Docker had already discarded the original taggable
+image metadata, so the rollback candidate was rebuilt from that exact source
+commit, published, and signed as rollback-only; it was not represented as the
+original binary artifact. The rollback passed revision, service, and map
+readiness, after which the scanned `55b337e` manifest was promoted forward
+again. Host release state retains current and previous manifests as `0600`
+files in a `0750` directory.
 
-Execution requires GHCR package permission, GitHub OIDC signing, a protected
-`staging` environment, pinned SSH credentials, a host deployment path and
-secret environment file, staging public origins, and two disposable OAuth
-storage states. Until those are supplied and the workflow completes, the
-publish/deploy/post-deploy checklist items and Phase 7 exit gate remain open.
+## Post-deploy browser acceptance
+
+The first browser attempt published and projected correctly but used Chicago
+coordinates while the feed contract queries a 100 km New York radius. The
+record projected in two seconds, but the helper could not discover an
+out-of-radius result. Both disposable accounts and the orphaned projection
+were removed. The harness now rejects coordinates outside the feed radius
+before publication.
+
+The corrected two-account run passed in 13.6 seconds:
+
+- two cookie-only OAuth sessions;
+- AT record creation and local Jetstream projection;
+- independent helper discovery;
+- report and durable block;
+- owner resolve, AT close, and CID-aware deletion; and
+- exact-coordinate, private-marker, URL, DOM, JSON, and token-name privacy
+  assertions.
+
+The artifact redaction gate passed with zero retained files. Both successful
+run accounts were deactivated in Patchwork and deleted from the PDS. Final
+verification found zero disposable projections and zero active disposable
+reports.
+
+## Remaining authority boundary
+
+The Phase 7 technical exit gate is complete on the NUC. The GitHub protected
+environment/GHCR keyless workflow has still not run, the signing key and
+registry share the staging host, backup durability is not independent, and no
+human incident acknowledgment is proven. Those are production/pilot
+governance risks and keep the alpha decision at `NO-GO`; they are not
+represented as missing execution of the home-staging digest deployment.

@@ -147,17 +147,17 @@
 
 ### Required proof
 
-- [ ] Signed digest publication and staging deployment of the four-service set.
-- [ ] Rollback to previous digests without incompatible down migration.
-- [ ] Restore into a separate empty staging database with measured RTO/RPO.
+- [x] Signed digest publication and staging deployment of the four-service set.
+- [x] Rollback to previous digests without incompatible down migration.
+- [x] Restore into a separate empty staging database with measured RTO/RPO.
 - [ ] Indexer-disconnect and database-loss game days route, acknowledge, and resolve alerts.
 - [ ] Named owners accept product, engineering, infrastructure, privacy, trust-and-safety, and on-call responsibilities.
 
 ### Acceptance evidence
 
-- [ ] Staging recovery log in `docs/operations/evidence/phase-7/`.
+- [x] Staging recovery log in `docs/operations/evidence/phase-7/`.
 - [ ] Alert timestamps, acknowledgements, and resolution notes in `docs/operations/game-day-log.md`.
-- [ ] Host scripts and rollback records prove digest-only promotion.
+- [x] Host scripts and rollback records prove digest-only promotion.
 
 ### Explicit non-goals
 

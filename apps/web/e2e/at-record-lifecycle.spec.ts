@@ -13,6 +13,18 @@ const liveEnvironmentAvailable = Boolean(
         exactLongitude &&
         privateMarker,
 );
+const feedOrigin = { latitude: 40.7128, longitude: -74.006 };
+const distanceFromFeedOriginKm = (latitude: number, longitude: number) => {
+    const radians = (degrees: number) => degrees * Math.PI / 180;
+    const latitudeDelta = radians(latitude - feedOrigin.latitude);
+    const longitudeDelta = radians(longitude - feedOrigin.longitude);
+    const a =
+        Math.sin(latitudeDelta / 2) ** 2 +
+        Math.cos(radians(feedOrigin.latitude)) *
+            Math.cos(radians(latitude)) *
+            Math.sin(longitudeDelta / 2) ** 2;
+    return 6_371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
 
 test.describe('real two-account AT record lifecycle', () => {
     test.skip(
@@ -24,6 +36,13 @@ test.describe('real two-account AT record lifecycle', () => {
         browser,
     }) => {
         test.setTimeout(180_000);
+        const latitude = Number(exactLatitude);
+        const longitude = Number(exactLongitude);
+        expect(Number.isFinite(latitude)).toBe(true);
+        expect(Number.isFinite(longitude)).toBe(true);
+        expect(distanceFromFeedOriginKm(latitude, longitude)).toBeLessThanOrEqual(
+            100,
+        );
         const requesterContext = await browser.newContext({
             storageState: requesterState!,
         });

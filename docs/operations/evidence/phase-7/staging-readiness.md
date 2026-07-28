@@ -1,7 +1,7 @@
 # Phase 7 recovery and alerting evidence
 
-Status: **NUC staging recovery and indexer-disconnect exercises complete;
-protected immutable deployment and human acknowledgment remain pending**
+Status: **NUC staging recovery, alerting, immutable deployment, and rollback
+exercises complete; human acknowledgment remains pending**
 
 ## NUC staging exercises — 2026-07-28 UTC
 
@@ -116,11 +116,13 @@ The committed rules cover API 5xx ratio, AT event-source disconnect and lag,
 oldest moderation queue item, PostgreSQL target loss, failed backup, and stale
 backup. API and moderation runtime emitters were completed in the same slice.
 
-## Remaining Phase 7 boundary
+## Remaining governance boundary
 
-The NUC exercises prove the deployed alert, disconnect, backup, restore,
-session-invalidation, and recovery mechanisms. Phase 7 is still not closed:
-images have not been scanned, signed, pushed, and deployed by digest through
-the protected workflow; rollback has not run from a prior four-digest
-manifest; and no human has acknowledged the notification or accepted incident
-ownership. No DNS change or registry publication was performed.
+The NUC exercises now prove deployed alerting, disconnect recovery, backup,
+restore, session invalidation, signed digest publication/deployment, rollback,
+and post-deploy browser acceptance. Task 7.2 details and exact digests are in
+`immutable-delivery.md`. No human has acknowledged the notification or
+accepted incident ownership, the registry/signing key/backup remain on the
+same host, and the GitHub protected-environment keyless path has not run.
+Those constraints keep the pilot decision at `NO-GO` without reopening the
+completed Phase 7 home-staging execution.

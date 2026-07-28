@@ -15,9 +15,9 @@ Current authority:
 
 The refreshed 2026-07-28 review records **NO-GO**. Local implementation and verification
 continue, but public deployment and pilot recruitment remain prohibited until
-immutable signed-digest staging, rollback, retention, accessibility, capacity,
-and ownership gates have current evidence. The real two-account browser,
-staging restore, and alert-game-day gates are complete.
+retention, accessibility, capacity, and ownership gates have current evidence.
+The real two-account browser, signed-digest staging/rollback, staging restore,
+and alert-game-day gates are complete.
 
 An issue being represented by code or tests does not mean its subsystem is externally integrated, durable, or production-ready. Use the maturity matrix for that determination.
 
@@ -28,8 +28,8 @@ An issue being represented by code or tests does not mean its subsystem is exter
 | Program governance | #94, #95 | Historical planning artifacts; Phase 1 of the continuation roadmap replaces their status model. |
 | Runtime completeness | #96, #97, #98, #99 | Some contracts, guards, checkpoints, and tests landed; durable moderation, live ingestion, and real integration remain continuation work. |
 | Security and privacy | #100, #101, #102, #103 | The authenticated HTTP perimeter, privacy redaction, and scheduled API/moderation retention are implemented locally. Formal privacy approval and deployed scheduler evidence remain incomplete. |
-| Reliability and observability | #104, #105, #106, #107 | Metrics and runbooks exist; current real staging alert, restore, rollback, and game-day evidence does not. |
-| Release engineering | #108, #109, #110, #111 | Image-build and rollout models exist; the workflow does not currently publish and deploy a verified staging release. |
+| Reliability and observability | #104, #105, #106, #107 | NUC alert, restore, rollback, and game-day evidence is current; independent durability and human acknowledgment remain absent. |
+| Release engineering | #108, #109, #110, #111 | Four zero-HIGH/CRITICAL signed digests are deployed and rollback-tested on NUC staging; protected GHCR/OIDC promotion remains unproven. |
 | Trust, safety, and launch | #112, #113, #114, #115 | Console models, policies, and documents exist; durable casework and pilot/GA evidence do not. |
 | Core lifecycle and account experience | #116, #117, #118, #119, #120, #121, #122, #123 | Rich in-memory services and UX models exist; real AT identity and durable cross-service journeys do not. |
 | Collaboration and trust expansion | #124, #125, #126, #127, #128, #129, #130, #131, #132 | Notifications, scheduling, groups, reputation, offline sync, feedback, verification, and matching are primarily tested models or fixture services. |

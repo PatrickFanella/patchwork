@@ -14,11 +14,12 @@ Recommended decision: **NO-GO**
 | 4. Secure HTTP surface | 18/18 (100%) | Complete locally |
 | 5. Live indexer | 17/17 (100%) | Runtime plus controlled live aid and directory lifecycles complete |
 | 6. Integrated web journey | 16/16 (100%) | Real two-account OAuth journey passed against the NUC runtime |
-| 7. Real staging operations | 15/18 (83%) | Recovery and alert game days complete; immutable signed-digest deployment remains |
+| 7. Real staging operations | 18/18 (100%) | Signed digest deployment, rollback, recovery, alerting, and post-deploy browser acceptance complete on NUC staging |
 | 8. Evaluation and scope control | 11/14 (79%) | `NO-GO`, expansion frozen, closure prepared; approvals pending |
 
-Raw roadmap completion is 130/136 items (96%). This is not a launch score: the
-remaining items are high-weight external gates, so the project is `NO-GO`.
+Raw roadmap completion is 133/136 items (98%). This is not a launch score: the
+remaining items are human authorization/decision gates, so the project is
+still `NO-GO`.
 
 The roadmap's narrow core paths are implemented locally: authentication
 adapters, AT CRUD, lifecycle, moderation, HTTP security, ingestion,
@@ -31,7 +32,7 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 
 ## Verification baseline
 
-- repository unit/contract suite: 891 tests;
+- repository unit/contract suite: 892 tests;
 - PostgreSQL/HTTP integration: 33 tests;
 - indexer suite with PostgreSQL enabled: 50 tests;
 - moderation suite with PostgreSQL enabled: 63 tests;
@@ -57,6 +58,9 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 - `9bf5122` — API private-data retention;
 - `6316193` — local recovery and alerting proof;
 - `7a4d0de` — immutable staging delivery mechanism;
+- `edf2448` — NUC recovery and alerting game days;
+- `55b337e` — hardened zero-HIGH/CRITICAL runtime artifact source;
+- `e522e5f`, `c013eb6` — production digest deployment and map readiness;
 - `e744aea` — persistent staging topology;
 - `1892d0b` — durable browser safety and owner actions;
 - `49cf598`, `4287596`, `90289f1` — ingestion, projections, discovery.
@@ -64,26 +68,24 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 ## Genuine external blockers
 
 The current prerequisite-by-prerequisite verification is recorded in
-`external-gate-audit.md`. The browser inputs were supplied for one controlled
-run and then destroyed; registry, protected-environment, and operator inputs
-remain absent.
+`external-gate-audit.md`. Disposable browser inputs were supplied for
+controlled runs and then destroyed. Signed local registry artifacts and
+current/previous manifests now exist; operator approvals remain absent.
 
-1. Protected registry/environment authentication, workflow secret routing,
-   and pinned SSH configuration for the authorized NUC staging host.
-2. Signed image publication, four-digest deployment, and rollback execution.
-3. Formal approval of the implemented backup-aware retention and deactivation
+1. Formal approval of the implemented backup-aware retention and deactivation
    policy, including the AT-repository deletion boundary.
-4. Independent WCAG/assistive-technology review and sustained deployed
+2. Independent WCAG/assistive-technology review and sustained deployed
    capacity test; the bounded local PostgreSQL read probe is green.
-5. Named product, engineering, infrastructure, privacy, trust-and-safety, and
+3. Named product, engineering, infrastructure, privacy, trust-and-safety, and
    on-call owners.
-6. Approval of `project-closure.md` or a replacement go decision.
+4. Approval of `project-closure.md` or a replacement go decision.
 
 ## Residual risks and next decision
 
-The controlled home runtime proves OAuth/PDS behavior, host configuration,
-restore, and alert routing, but not registry signing, protected deployment,
-four-image rollback, independent backup durability, or human response.
+The controlled home runtime proves OAuth/PDS behavior, signed local-registry
+deployment, four-image rollback, host configuration, restore, and alert
+routing. It does not prove protected GHCR/OIDC promotion, independent backup
+or signing-key durability, human response, or production capacity.
 Single-region/single-replica staging capacity remains only partially measured,
 and fixture-only expansion code remains frozen but present outside the alpha
 surface.

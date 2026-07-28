@@ -10,13 +10,16 @@ Patchwork is a **pre-alpha, NO-GO system**, not an approved public service. The
 narrow alpha now has real AT client adapters, durable private state, live-event
 ingestion, PostgreSQL projections, secured HTTP commands, and fail-closed
 production data paths. Its complete browser OAuth journey and real staging
-deployment, rollback, restore, and alert exercises remain unproven. The
+signed-digest deployment, rollback, restore, alert, and post-deploy browser
+exercises are proven on the NUC home-staging environment. Protected
+promotion, independent durability, formal review, capacity, and named human
+ownership remain unproven. The
 authoritative subsystem inventory is
 [`docs/architecture/current-state-matrix.md`](docs/architecture/current-state-matrix.md),
 and continuation work is sequenced by the
 [`2026-07-10 continuation roadmap`](docs/superpowers/plans/2026-07-10-patchwork-continuation-roadmap.md).
 The current launch decision is the
-[`2026-07-11 alpha go/no-go review`](docs/operations/evidence/phase-8/alpha-go-no-go.md).
+[`2026-07-28 alpha go/no-go review`](docs/operations/evidence/phase-8/alpha-go-no-go.md).
 
 ## What’s in this repo
 

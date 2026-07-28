@@ -9,8 +9,9 @@ evidence.
 
 Patchwork must not accept pilot participants or public traffic. The local alpha
 implementation is materially stronger than the abandoned prototype. Phase 6
-is now demonstrated, but Phase 7 and human-review exit gates are not. There are no
-exceptions to the launch criteria in this decision.
+and the Phase 7 technical home-staging gate are now demonstrated, but the
+human-review and pilot-authority gates are not. There are no exceptions to the
+launch criteria in this decision.
 
 ## Evidence reviewed
 
@@ -20,10 +21,10 @@ exceptions to the launch criteria in this decision.
 | Durable private state | Phase 3 restart, concurrency, idempotency, audit, and moderation evidence | Local and PostgreSQL gates pass |
 | HTTP security | Phase 4 method, auth, CSRF, stable-error, idempotency, and privacy evidence | Local gate passes |
 | Live ingestion and discovery | Phase 5 cursor, reconnect, projection, tombstone, dead-letter, rebuild, query, and automatic lifecycle-reconciliation evidence plus controlled live aid and directory lifecycles | Home-network external gate passes; protected staging repetition remains |
-| Web journey | Local browser evidence passes 50 Chromium cases; the controlled two-account OAuth case passed separately in 12.2 seconds | Phase 6 exit gate satisfied |
-| Staging topology and delivery | Phase 7 topology and digest-deployment mechanism evidence | No signed registry digest or staging deployment/rollback run |
+| Web journey | Local browser evidence passes 50 Chromium cases; controlled two-account OAuth cases passed before and after immutable deployment, most recently in 13.6 seconds | Phase 6 and post-deploy browser gates satisfied |
+| Staging topology and delivery | Four zero-HIGH/CRITICAL images were signed, published to the NUC loopback registry, deployed by exact digest, rolled back as a set, and promoted forward | Phase 7 technical home-staging gate satisfied; protected GHCR/OIDC execution remains absent |
 | Recovery and alerting | NUC indexer-disconnect alert/recovery plus live PostgreSQL 17 backup and empty-target restore with measured RTO/RPO | Mechanisms pass; independent backup durability and human acknowledgment remain |
-| Security | `npm audit --omit=dev --audit-level=high`: zero vulnerabilities on 2026-07-28; delivery workflow is configured to reject high/critical Trivy findings | Dependency gate green; deployed-image scan has not run |
+| Security | `npm audit --omit=dev --audit-level=high` is green; Trivy 0.59.1 reports zero HIGH/CRITICAL findings for all four deployed images; Cosign verifies every digest | Home-staging image gate green; signing key and registry share the host and have no transparency-log record |
 | Data retention | API migration 0012 and moderation migration 003 drive hourly non-overlapping cleanup for all alpha-private state. Active moderation cases and sessions are preserved; failure/staleness metrics alert for both runtimes. | Formal privacy/backup-deletion approval and deployed scheduler observations remain incomplete |
 | Data subject access and deactivation | Authenticated versioned export covers Patchwork-held alpha data without credentials or cross-subject projections. Durable deactivation removes Patchwork state, revokes login, sanitizes bounded retained exceptions, and suppresses future commands/projections. | Independent AT-repository deletion, controlled casework review, real staging exercise, and formal privacy approval remain incomplete |
 | Accessibility | The 50-case Chromium gate passes, including eight zero-violation axe route scans and cross-route 320px reflow | No independent WCAG 2.2 or assistive-technology review |
@@ -32,7 +33,7 @@ exceptions to the launch criteria in this decision.
 
 Current verification baseline:
 
-- repository unit/contract suite: 891 tests;
+- repository unit/contract suite: 892 tests;
 - PostgreSQL/HTTP integration: 33 tests;
 - indexer suite with PostgreSQL enabled: 50 tests;
 - moderation suite with PostgreSQL enabled: 63 tests;
@@ -51,8 +52,8 @@ These local results are necessary but do not substitute for external proof.
 | Condition | Required proof | Accountable role | Due or expiry |
 | --- | --- | --- | --- |
 | `AT-BROWSER` | Satisfied 2026-07-28: two disposable users completed OAuth, create, ingest, discover, report, block, close, and delete with no fixture fallback | Engineering | Complete |
-| `IMMUTABLE-STAGING` | Four scanned and signed digests deploy through the protected workflow and pass deep readiness | Infrastructure | 2026-08-11 |
-| `ROLLBACK` | Deployed staging returns to the prior four-digest manifest without incompatible down migration | Infrastructure | 2026-08-11 |
+| `IMMUTABLE-STAGING` | Satisfied for NUC home staging 2026-07-28: four scanned and signed digests deployed without rebuild and passed deep readiness/browser acceptance. Protected GHCR/OIDC promotion remains a production hardening item. | Infrastructure | Complete for home staging |
+| `ROLLBACK` | Satisfied 2026-07-28: staging returned to a signed prior-source four-digest manifest without a down migration, passed readiness, and promoted forward again | Infrastructure | Complete |
 | `RECOVERY` | Satisfied 2026-07-28: a live staging backup restored into an empty database, invalidated sessions, preserved required state, and recorded 1-second RTO/22-second RPO | Infrastructure + Engineering | Complete |
 | `ALERT-GAMEDAY` | Mechanism satisfied 2026-07-28: indexer disconnect fired through Alertmanager and recovered; human acknowledgment remains part of `OWNERSHIP` | Infrastructure + Incident Commander | Complete |
 | `RETENTION` | Scheduled private-data expiry and deactivation are implemented and tested; backup, retained-exception, suppression-marker, and AT-repository-boundary policy is formally approved | Privacy + Engineering | 2026-08-11 |

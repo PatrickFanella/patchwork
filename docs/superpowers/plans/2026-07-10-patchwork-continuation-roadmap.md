@@ -480,9 +480,9 @@ Deployment to the real staging host remains Task 7.2 and the Phase 7 exit gate.
 - Modify: `docs/operations/progressive-delivery-runbook.md`
 - Modify: `docs/operations/rollback-policy.md`
 
-- [ ] Build all four runtime images once, scan them, sign them, and push digest-addressed artifacts to the selected registry.
-- [ ] Deploy those exact digests to staging; do not rebuild in the deployment job.
-- [ ] Run migrations, readiness checks, and the real browser smoke journey after deployment.
+- [x] Build all four runtime images once, scan them, sign them, and push digest-addressed artifacts to the selected registry.
+- [x] Deploy those exact digests to staging; do not rebuild in the deployment job.
+- [x] Run migrations, readiness checks, and the real browser smoke journey after deployment.
 - [x] Replace echo-only staging checks with commands whose exit status reflects deployed service behavior.
 - [x] Implement rollback to the prior known-good image digests and document database forward-compatibility constraints.
 - [x] Commit the locally verified delivery mechanism as `ci: deploy immutable images to real staging`.
@@ -491,8 +491,14 @@ Local evidence: `docs/operations/evidence/phase-7/immutable-delivery.md`.
 The protected workflow builds each target once, scans before publication,
 signs and records registry digests, deploys with `--no-build`, runs migrations,
 deep readiness, and the real browser journey, and automatically restores the
-previous four-image manifest on failure. The first three items remain open
-until GHCR publication and an authorized staging deployment actually run.
+previous four-image manifest on failure. On 2026-07-28 the authorized NUC
+home-staging environment published a zero-HIGH/CRITICAL four-image set to its
+loopback registry, verified locally managed Cosign signatures, deployed exact
+digests with no rebuild, ran all migrations/readiness gates, rolled back to a
+signed prior-source manifest, promoted forward, and passed the disposable
+two-account browser journey in 13.6 seconds. GHCR keyless/protected-workflow
+execution remains a production-governance boundary rather than missing
+Task 7.2 home-staging execution.
 
 ### Task 7.3: Prove backup, restore, monitoring, and incident response
 
@@ -519,8 +525,9 @@ A live PostgreSQL 17 backup restored into an empty target in one second with a
 22-second recovery point, exact projection/private-state counts, and zero
 restored sessions. Evidence:
 `docs/operations/evidence/phase-7/staging-readiness.md`. Human notification
-acknowledgment and the immutable signed-digest deployment/rollback gate remain
-open.
+acknowledgment remains an ownership/governance boundary. The immutable
+signed-digest deployment and rollback gate completed on the NUC on 2026-07-28;
+see `immutable-delivery.md`.
 
 **Phase 7 exit gate:** A real staging URL runs immutable artifacts, passes the browser journey, restores from backup, rolls back safely, and emits actionable alerts during documented failure drills.
 

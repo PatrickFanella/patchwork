@@ -2,8 +2,9 @@
 
 Date: 2026-07-11
 
-This evidence closes the locally verifiable Task 7.1 topology contract. It does
-not claim a real staging deployment or the Phase 7 exit gate.
+This evidence closes the locally verifiable Task 7.1 topology contract. It did
+not claim a real staging deployment when recorded; the later 2026-07-28 NUC
+execution is recorded in `immutable-delivery.md` and `staging-readiness.md`.
 
 ## Topology
 
@@ -61,8 +62,10 @@ reported 11, 3, and 2 migrations skipped with no checksum drift.
 - Workspace build and high-severity dependency audit: passed; one known low
   Windows-only development-server advisory remains.
 
-## Remaining external proof
+## Subsequent external proof
 
-Task 7.2 must publish, sign, and deploy digest-addressed versions of these exact
-four artifacts. Task 7.3 must then record real readiness, backup/restore,
-rollback, alert delivery, and incident exercises on the staging host.
+Tasks 7.2 and 7.3 later published and signed the four-image set, deployed exact
+digests, exercised rollback, restored PostgreSQL into an empty target, fired
+the indexer-disconnect alert, and repeated the two-account browser journey on
+the authorized NUC staging host. Same-host durability, protected GHCR/OIDC
+promotion, and human ownership remain outside this topology evidence.

@@ -65,10 +65,12 @@ deploy-staging job (build immutable images, verify labels, smoke check)
 progressive-delivery-gate job (canary readiness, rollback trigger audit)
 ```
 
-The current CI file models these stages but does not yet publish or deploy
-digest-addressed artifacts. Task 7.2 must replace its build/echo scaffolding
-before this flow is operational; do not interpret a green local Compose check
-as deployment evidence.
+The protected CI path models these stages for GHCR/OIDC promotion. Separately,
+the authorized NUC home-staging execution published, signed, deployed, rolled
+back, and forward-promoted exact digests on 2026-07-28. See
+`evidence/phase-7/immutable-delivery.md`. A green local Compose check alone is
+still not deployment evidence, and the protected GitHub path remains
+production hardening.
 
 ## Smoke Checks
 

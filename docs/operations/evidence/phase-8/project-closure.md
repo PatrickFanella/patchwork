@@ -2,7 +2,7 @@
 
 Status: **prepared, not approved or executed**
 
-Decision source: `alpha-go-no-go.md` (`NO-GO`, 2026-07-11)
+Decision source: `alpha-go-no-go.md` (`NO-GO`, refreshed 2026-07-28)
 
 This is the clean-closure branch required by Task 8.3. It does not authorize
 data deletion, remote archival, registry deletion, DNS changes, or shutdown.
@@ -11,19 +11,24 @@ operator before execution.
 
 ## Current inventory
 
-- No Patchwork container is running on the local Docker host.
-- Local volume `patchwork_patchwork-postgres-data` remains and may contain
-  test/development data. It has not been deleted.
-- `main` was 62 commits ahead of `origin/main` at the latest local review. No
-  continuation commit was pushed by this workflow.
+- The NUC home-staging host runs the four Patchwork runtime services from the
+  signed `55b337e` four-digest manifest. The deployment remains pre-pilot and
+  must not accept public traffic.
+- NUC PostgreSQL, release manifests, registry artifacts, signing material,
+  monitoring state, and backup evidence remain live and have not been deleted.
+- The local disposable PostgreSQL verification stack is stopped; its test
+  volume is retained and has not been deleted.
+- Local `main` and `origin/main` were synchronized at the 2026-07-28 review.
 - The configured remote is the Subculture Collective Patchwork repository.
-- No verified staging deployment exists in committed evidence; repository
-  evidence therefore cannot prove that external resources are absent.
+- Verified NUC staging deployment, rollback, recovery, and alert evidence is
+  committed. Protected GHCR/OIDC promotion and independent durability remain
+  unproven.
 - Running Action Network and Roberts Rules databases are unrelated and must not
   be stopped or removed during Patchwork closure.
 
-The approved operator must independently inventory the staging host, registry,
-DNS, OAuth registration, monitoring, backups, and secrets manager.
+The approved operator must refresh this inventory immediately before any
+closure action and independently verify the staging host, registry, DNS, OAuth
+registration, monitoring, backups, and secrets manager.
 
 ## Retained reusable assets
 

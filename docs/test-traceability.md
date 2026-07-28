@@ -22,7 +22,7 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Repository unit/contract suite | 891 passed |
+| Repository unit/contract suite | 892 passed |
 | Direct lifecycle service integration | 9 passed |
 | PostgreSQL integration, including HTTP boundary | 26 passed |
 | Indexer PostgreSQL projection/reconciliation | 13 passed |
@@ -166,7 +166,12 @@ drill and the 2026-07-28 NUC exercises: live PostgreSQL 17 backup/restore,
 session invalidation, source/private-state count comparison, restrictive
 archive permissions, loaded Prometheus sources, and a routed
 indexer-disconnect alert. Human acknowledgment and immutable signed-digest
-deployment remain external.
+deployment were external at the time of that recovery drill. Later on
+2026-07-28, four zero-HIGH/CRITICAL images were published to the NUC registry,
+verified against a scoped Cosign public key, deployed by exact digest, rolled
+back as a set, promoted forward, and accepted by the real two-account browser
+journey. Human acknowledgment, protected GHCR/OIDC execution, independent
+durability, and named ownership remain external.
 
 ## Private-data retention
 
