@@ -22,7 +22,7 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Repository unit/contract suite | 894 passed |
+| Repository unit/contract suite | 897 passed |
 | Direct lifecycle service integration | 9 passed |
 | PostgreSQL integration, including HTTP boundary | 26 passed |
 | Indexer PostgreSQL projection/reconciliation | 13 passed |
@@ -182,6 +182,16 @@ and moderation queue/action SLIs remain under `patchwork_sli_*`; their
 administrative HTTP traffic is emitted under `patchwork_http_*`. This prevents
 Prometheus from retaining only the first of two identically labelled samples
 and hiding transport load during capacity or incident analysis.
+
+## Staging capacity evidence
+
+`staging-capacity.test.ts` prevents short or read-only benchmarks from
+satisfying the capacity gate. It requires five minutes of mixed workload,
+successful lifecycle projection and moderation resolution, complete cleanup,
+bounded host/container/database use, zero request/ingestion/restart deltas, low
+event-source lag, and ready post-workload recovery. The evaluator accepts only
+redacted aggregate evidence; account identifiers, tokens, exact locations,
+case details, and database connection strings are outside its schema.
 
 ## Private-data retention
 

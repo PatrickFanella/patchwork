@@ -10,7 +10,11 @@ const ALPHA_READ_ROUTES = [
     { endpoint: 'map', path: '/query/map', targetRps: 60 },
     { endpoint: 'feed', path: '/query/feed', targetRps: 80 },
     { endpoint: 'directory', path: '/query/directory', targetRps: 40 },
-] as const satisfies readonly { endpoint: LoadTestEndpoint; path: string }[];
+] as const satisfies readonly {
+    endpoint: LoadTestEndpoint;
+    path: string;
+    targetRps: number;
+}[];
 
 const readInteger = (name: string, fallback: number): number => {
     const raw = process.env[name];
@@ -39,10 +43,10 @@ const main = async (): Promise<void> => {
     );
     const enforceBudgets =
         process.env.PATCHWORK_CAPACITY_ENFORCE_BUDGETS === '1';
+    const parallelRoutes =
+        process.env.PATCHWORK_CAPACITY_PARALLEL_ROUTES === '1';
 
-    const results = [];
-    let failed = false;
-    for (const route of ALPHA_READ_ROUTES) {
+    const measureRoute = async (route: (typeof ALPHA_READ_ROUTES)[number]) => {
         const measured = await runHttpLoadProbe({
             baseUrl,
             path: route.path,
@@ -76,19 +80,28 @@ const main = async (): Promise<void> => {
                     budget,
                 )
             :   undefined;
-        if (
-            measured.errorCount > 0 ||
-            (enforceBudgets && !evaluation?.withinBudget)
-        ) {
-            failed = true;
-        }
-        results.push({
+        return {
             endpoint: route.endpoint,
             targetRps: route.targetRps,
             ...measured,
             budget: evaluation,
-        });
-    }
+        };
+    };
+    const results =
+        parallelRoutes ?
+            await Promise.all(ALPHA_READ_ROUTES.map(measureRoute))
+        :   await ALPHA_READ_ROUTES.reduce<
+                Promise<Awaited<ReturnType<typeof measureRoute>>[]>
+            >(async (pending, route) => {
+                const measured = await pending;
+                measured.push(await measureRoute(route));
+                return measured;
+            }, Promise.resolve([]));
+    const failed = results.some(
+        result =>
+            result.errorCount > 0 ||
+            (enforceBudgets && !result.budget?.withinBudget),
+    );
 
     process.stdout.write(
         `${JSON.stringify(
@@ -100,6 +113,7 @@ const main = async (): Promise<void> => {
                 durationPerRouteMs: durationMs,
                 concurrency,
                 forwardedForPoolSize,
+                routesRunInParallel: parallelRoutes,
                 budgetsEnforced: enforceBudgets,
                 results,
             },

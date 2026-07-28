@@ -19,6 +19,9 @@ files do not exist.
 It measures response-body completion, status counts, errors, achieved
 throughput, and p50/p95/p99 latency. The probe is paced rather than saturation
 based so it compares the current alpha routes with their modeled minimums.
+Set `PATCHWORK_CAPACITY_PARALLEL_ROUTES=1` only for the controlled staging
+drill to run all four read routes concurrently for the same bounded interval;
+the default remains sequential to avoid surprising local load.
 
 | Endpoint | Path | Target RPS | p95 budget | Maximum error rate |
 | --- | --- | ---: | ---: | ---: |
@@ -55,6 +58,26 @@ untrusted proxy or general public endpoint.
 The command exits nonzero for any response error. With
 `PATCHWORK_CAPACITY_ENFORCE_BUDGETS=1`, it also exits nonzero when latency,
 throughput, or error-rate targets fail.
+
+## Staging evidence gate
+
+The staging drill must record a minimum five-minute mixed workload rather than
+promoting a read-only benchmark into launch evidence. Its redacted JSON must
+include read totals/latency, at least three complete create-to-projection
+lifecycle journeys, at least three resolved durable moderation items, cleanup,
+host/container/database headroom, error/restart deltas, event-source lag, and
+post-workload readiness.
+
+Validate that evidence with:
+
+```bash
+npm run capacity:staging:evaluate -- /restricted/path/staging-capacity.json
+```
+
+The evaluator fails closed when a required measurement is missing, any
+workload errors, resource thresholds are exceeded, cleanup is incomplete, or
+the services do not recover ready. It establishes a bounded alpha-staging
+envelope, not a production maximum.
 
 ## Local evidence, 2026-07-11
 

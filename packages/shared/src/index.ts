@@ -34,6 +34,7 @@ export * from './staging.js';
 export * from './versioning.js';
 export * from './progressive-delivery.js';
 export * from './load-testing.js';
+export * from './staging-capacity.js';
 export * from './notifications.js';
 export * from './scheduling.js';
 export * from './multi-region.js';
