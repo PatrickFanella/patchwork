@@ -218,19 +218,29 @@ const executeIdempotentMutation = async (
     );
 };
 
-const aidPostCommandService =
+const createAidPostCommandService =
     atAuthRuntime ?
-        new AidPostCommandService(
-            sessionToken => atAuthRuntime.aidPostClient(sessionToken),
-            lifecycleRepository,
-            lifecycleRepository,
-        )
+        async (sessionToken: string) => {
+            // Restore OAuth before the idempotency executor takes the
+            // per-account transaction lock. OAuth refresh may persist a
+            // rotated session under that same lock.
+            const client = await atAuthRuntime.aidPostClient(sessionToken);
+            return new AidPostCommandService(
+                async () => client,
+                lifecycleRepository,
+                lifecycleRepository,
+            );
+        }
     :   undefined;
-const directoryResourceCommandService =
+const createDirectoryResourceCommandService =
     atAuthRuntime ?
-        new DirectoryResourceCommandService(sessionToken =>
-            atAuthRuntime.directoryResourceClient(sessionToken),
-        )
+        async (sessionToken: string) => {
+            // Keep OAuth restoration outside the idempotent mutation
+            // transaction for the same lock-ordering reason as aid posts.
+            const client =
+                await atAuthRuntime.directoryResourceClient(sessionToken);
+            return new DirectoryResourceCommandService(async () => client);
+        }
     :   undefined;
 
 const lifecycleTransitionHandler =
@@ -743,13 +753,15 @@ const handleAidPostCommandRoute = (
     response: ServerResponse,
     requestUrl: URL,
 ): boolean => {
-    if (!aidPostCommandService) return false;
+    if (!createAidPostCommandService) return false;
     if (!requestUrl.pathname.startsWith('/at/aid-posts')) return false;
 
     void (async () => {
         try {
             const authenticated = await authenticateApiRequest!(request);
             const sessionToken = authenticated.sessionToken;
+            const aidPostCommandService =
+                await createAidPostCommandService(sessionToken);
 
             if (
                 request.method === 'GET' &&
@@ -898,13 +910,15 @@ const handleDirectoryResourceCommandRoute = (
     response: ServerResponse,
     requestUrl: URL,
 ): boolean => {
-    if (!directoryResourceCommandService) return false;
+    if (!createDirectoryResourceCommandService) return false;
     if (requestUrl.pathname !== '/at/directory-resources') return false;
 
     void (async () => {
         try {
             const authenticated = await authenticateApiRequest!(request);
             const sessionToken = authenticated.sessionToken;
+            const directoryResourceCommandService =
+                await createDirectoryResourceCommandService(sessionToken);
 
             if (request.method === 'GET') {
                 const uri = requestUrl.searchParams.get('uri');
