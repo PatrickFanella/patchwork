@@ -1,5 +1,14 @@
 # Post-alpha expansion decision matrix
 
+> Historical launch-scope decision. This matrix records why expansion was
+> frozen under the 2026-07-11 operational `NO-GO`. The 2026-07-28
+> [`buyer-ready web product charter`](product/buyer-ready-web-charter.md)
+> subsequently authorized a bounded responsive-web feature-completion program.
+> It did not retroactively convert this matrix into launch evidence or approve
+> public-service operation. Use the
+> [`buyer-ready completion roadmap`](superpowers/plans/2026-07-28-buyer-ready-web-completion-roadmap.md)
+> for current implementation priority.
+
 Decision date: 2026-07-11
 
 Selected next slice: **none**

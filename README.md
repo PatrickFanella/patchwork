@@ -23,6 +23,14 @@ and continuation work is sequenced by the
 The current launch decision is the
 [`2026-07-28 alpha go/no-go review`](docs/operations/evidence/phase-8/alpha-go-no-go.md).
 
+The approved feature-completion target is the
+[`buyer-ready web product charter`](docs/product/buyer-ready-web-charter.md),
+with its
+[`current gap assessment`](docs/product/buyer-ready-gap-assessment.md) and
+[`ordered completion roadmap`](docs/superpowers/plans/2026-07-28-buyer-ready-web-completion-roadmap.md).
+That product-development decision does not by itself authorize Patchwork to
+operate as a public mutual-aid service.
+
 ## What’s in this repo
 
 - `apps/web` — Vite + React + TypeScript + Tailwind frontend
@@ -193,6 +201,9 @@ Monitoring:
 ## Architecture and protocol docs
 
 - `docs/superpowers/plans/2026-07-10-patchwork-continuation-roadmap.md` — authoritative continuation roadmap from pre-alpha prototype to a durable AT Protocol alpha
+- `docs/product/buyer-ready-web-charter.md` — approved responsive-web feature-completion target
+- `docs/product/buyer-ready-gap-assessment.md` — current runtime compared with the buyer-ready target
+- `docs/superpowers/plans/2026-07-28-buyer-ready-web-completion-roadmap.md` — ordered post-alpha feature-completion plan
 - `docs/architecture/domain-map.md`
 - `docs/architecture/service-boundaries.md`
 - `docs/architecture/adr/0001-v1-stack-and-domain-boundaries.md`

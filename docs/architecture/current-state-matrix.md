@@ -4,6 +4,11 @@ Updated: 2026-07-28
 
 This is the authoritative description of what the Patchwork runtime does today. It distinguishes tested contracts and in-memory models from durable or externally integrated behavior. The continuation sequence and exit gates live in `docs/superpowers/plans/2026-07-10-patchwork-continuation-roadmap.md`.
 
+The target for future responsive-web feature work is defined separately in
+[`buyer-ready-web-charter.md`](../product/buyer-ready-web-charter.md). The
+charter is not current-state evidence; this matrix must continue to describe
+only behavior that is implemented and verified.
+
 ## Maturity labels
 
 | Label | Meaning |

@@ -4,7 +4,14 @@
 > file describe intended outcomes, not verified runtime readiness. Expansion is
 > frozen by the 2026-07-10 continuation roadmap until the durable alpha gate is
 > met. Phase 8.2 selected no expansion slice while the alpha is `NO-GO`; all
-> entries below are explicitly deferred. See
+> entries below were explicitly deferred by that decision. The later
+> [`buyer-ready web product charter`](product/buyer-ready-web-charter.md)
+> authorizes a narrower feature-completion target that excludes native mobile,
+> production chat, groups, multi-region, external connectors, and opaque
+> reputation scoring. Its
+> [`completion roadmap`](superpowers/plans/2026-07-28-buyer-ready-web-completion-roadmap.md)
+> supersedes this file for implementation priority while leaving the
+> operational launch decision unchanged. See
 > `docs/EXPANSION_DECISION_MATRIX.md` for reevaluation criteria and
 > `docs/architecture/current-state-matrix.md` for current status.
 
