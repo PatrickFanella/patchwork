@@ -45,6 +45,10 @@ const main = async (): Promise<void> => {
         process.env.PATCHWORK_CAPACITY_ENFORCE_BUDGETS === '1';
     const parallelRoutes =
         process.env.PATCHWORK_CAPACITY_PARALLEL_ROUTES === '1';
+    const targetRpsPerRoute = readInteger(
+        'PATCHWORK_CAPACITY_TARGET_RPS_PER_ROUTE',
+        0,
+    );
 
     const measureRoute = async (route: (typeof ALPHA_READ_ROUTES)[number]) => {
         const measured = await runHttpLoadProbe({
@@ -54,7 +58,8 @@ const main = async (): Promise<void> => {
             concurrency,
             requestTimeoutMs,
             forwardedForPoolSize,
-            targetRps: route.targetRps,
+            targetRps:
+                targetRpsPerRoute > 0 ? targetRpsPerRoute : route.targetRps,
             ...(route.endpoint === 'map' || route.endpoint === 'feed' ?
                 {
                     searchParams: {
@@ -82,7 +87,8 @@ const main = async (): Promise<void> => {
             :   undefined;
         return {
             endpoint: route.endpoint,
-            targetRps: route.targetRps,
+            targetRps:
+                targetRpsPerRoute > 0 ? targetRpsPerRoute : route.targetRps,
             ...measured,
             budget: evaluation,
         };
@@ -114,6 +120,8 @@ const main = async (): Promise<void> => {
                 concurrency,
                 forwardedForPoolSize,
                 routesRunInParallel: parallelRoutes,
+                targetRpsPerRoute:
+                    targetRpsPerRoute > 0 ? targetRpsPerRoute : null,
                 budgetsEnforced: enforceBudgets,
                 results,
             },

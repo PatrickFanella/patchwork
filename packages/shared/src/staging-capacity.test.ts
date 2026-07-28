@@ -11,13 +11,12 @@ const passingEvidence = (): StagingCapacityEvidence => ({
         totalRequests: 30_000,
         errorCount: 0,
         worstP95Ms: 45,
-        minimumActualRps: 20,
-        allModeledBudgetsPassed: true,
+        minimumActualRps: 10,
     },
     lifecycleWorkload: {
         attempted: 3,
         completed: 3,
-        maximumProjectionSeconds: 2.5,
+        maximumProjectionSeconds: 15.3,
         cleanupComplete: true,
     },
     moderationWorkload: {
@@ -47,7 +46,9 @@ describe('evaluateStagingCapacityEvidence', () => {
     it('requires a sustained mixed workload rather than read-only evidence', () => {
         const evidence = passingEvidence();
         evidence.durationSeconds = 60;
+        evidence.readWorkload.minimumActualRps = 9;
         evidence.lifecycleWorkload.completed = 0;
+        evidence.lifecycleWorkload.maximumProjectionSeconds = 31;
         evidence.moderationWorkload.resolved = 0;
 
         const result = evaluateStagingCapacityEvidence(evidence);
@@ -56,7 +57,9 @@ describe('evaluateStagingCapacityEvidence', () => {
         expect(result.failures).toEqual(
             expect.arrayContaining([
                 'workload duration must be at least 300 seconds',
+                'every read route must sustain at least 10 requests per second',
                 'at least 3 lifecycle journeys must complete',
+                'lifecycle projection must complete within 30 seconds',
                 'at least 3 moderation items must resolve',
             ]),
         );

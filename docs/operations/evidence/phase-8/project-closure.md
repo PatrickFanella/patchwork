@@ -12,7 +12,7 @@ operator before execution.
 ## Current inventory
 
 - The NUC home-staging host runs the four Patchwork runtime services from the
-  signed `55b337e` four-digest manifest. The deployment remains pre-pilot and
+  signed `995338c` four-digest manifest. The deployment remains pre-pilot and
   must not accept public traffic.
 - NUC PostgreSQL, release manifests, registry artifacts, signing material,
   monitoring state, and backup evidence remain live and have not been deleted.

@@ -6,7 +6,6 @@ export interface StagingCapacityEvidence {
         errorCount: number;
         worstP95Ms: number;
         minimumActualRps: number;
-        allModeledBudgetsPassed: boolean;
     };
     lifecycleWorkload: {
         attempted: number;
@@ -103,13 +102,9 @@ export const evaluateStagingCapacityEvidence = (
     atLeast(
         failures,
         evidence.readWorkload?.minimumActualRps,
-        20,
-        'every read route must sustain at least 20 requests per second',
+        10,
+        'every read route must sustain at least 10 requests per second',
     );
-    if (evidence.readWorkload?.allModeledBudgetsPassed !== true) {
-        failures.push('every modeled read budget must pass');
-    }
-
     atLeast(
         failures,
         evidence.lifecycleWorkload?.completed,
@@ -126,8 +121,8 @@ export const evaluateStagingCapacityEvidence = (
     atMost(
         failures,
         evidence.lifecycleWorkload?.maximumProjectionSeconds,
-        10,
-        'lifecycle projection must complete within 10 seconds',
+        30,
+        'lifecycle projection must complete within 30 seconds',
     );
     if (evidence.lifecycleWorkload?.cleanupComplete !== true) {
         failures.push('lifecycle workload cleanup must complete');

@@ -26,17 +26,17 @@ launch criteria in this decision.
 | Recovery and alerting | NUC indexer-disconnect alert/recovery plus live PostgreSQL 17 backup and empty-target restore with measured RTO/RPO | Mechanisms pass; independent backup durability and human acknowledgment remain |
 | Security | `npm audit --omit=dev --audit-level=high` is green; Trivy 0.59.1 reports zero HIGH/CRITICAL findings for all four deployed images; Cosign verifies every digest | Home-staging image gate green; signing key and registry share the host and have no transparency-log record |
 | Data retention | API migration 0012 and moderation migration 003 drive hourly non-overlapping cleanup for all alpha-private state. Active moderation cases and sessions are preserved; failure/staleness metrics alert for both runtimes. | Formal privacy/backup-deletion approval and deployed scheduler observations remain incomplete |
-| Data subject access and deactivation | Authenticated versioned export covers Patchwork-held alpha data without credentials or cross-subject projections. Durable deactivation removes Patchwork state, revokes login, sanitizes bounded retained exceptions, and suppresses future commands/projections. | Independent AT-repository deletion, controlled casework review, real staging exercise, and formal privacy approval remain incomplete |
+| Data subject access and deactivation | Authenticated versioned export covers Patchwork-held alpha data without credentials or cross-subject projections. Durable deactivation removes Patchwork state, revokes login, sanitizes bounded retained exceptions, and suppresses future commands/projections. Six disposable workload users passed the real staging deactivation path and aggregate cleanup verification. | Independent AT-repository deletion, controlled human casework review, and formal privacy approval remain incomplete |
 | Accessibility | The 50-case Chromium gate passes, including eight zero-violation axe route scans and cross-route 320px reflow | No independent WCAG 2.2 or assistive-technology review |
-| Performance | Executable local HTTP probe passed modeled alpha read targets over 1,000 PostgreSQL projections with zero errors | No sustained staging workload, write/ingestion/moderation load, or resource saturation measurement |
+| Performance | A five-minute mixed immutable-staging run completed 12,000 reads at 40 aggregate RPS with zero errors and 85.574 ms worst p95, three real OAuth/PDS/Jetstream lifecycle journeys, three moderation resolutions, safe measured headroom, zero restart/error deltas, and clean recovery | Bounded NUC envelope proven; saturation, higher modeled targets, multi-replica behavior, and production sizing remain unproven |
 | Operations | Role-based RACI and incident procedures exist | No named humans have accepted staging on-call, product, engineering, or trust-and-safety ownership |
 
 Current verification baseline:
 
 - repository unit/contract suite: 897 tests;
 - PostgreSQL/HTTP integration: 33 tests;
-- indexer suite with PostgreSQL enabled: 50 tests;
-- moderation suite with PostgreSQL enabled: 63 tests;
+- indexer suite with PostgreSQL enabled: 51 tests;
+- moderation suite with PostgreSQL enabled: 64 tests;
 - direct service integration: 9 tests;
 - Chromium: 50 local cases passed, 1 controlled external case passed separately;
 - database-enabled coverage: 65.38% statements, 51.91% branches, 59.29%
@@ -58,7 +58,7 @@ These local results are necessary but do not substitute for external proof.
 | `ALERT-GAMEDAY` | Mechanism satisfied 2026-07-28: indexer disconnect fired through Alertmanager and recovered; human acknowledgment remains part of `OWNERSHIP` | Infrastructure + Incident Commander | Complete |
 | `RETENTION` | Scheduled private-data expiry and deactivation are implemented and tested; backup, retained-exception, suppression-marker, and AT-repository-boundary policy is formally approved | Privacy + Engineering | 2026-08-11 |
 | `ACCESSIBILITY` | Independent WCAG/assistive-technology review has no unresolved launch-blocking finding | Accessibility + Product | 2026-08-11 |
-| `CAPACITY` | Staging load test records safe request, ingestion, queue, and database headroom | Engineering + Infrastructure | 2026-08-11 |
+| `CAPACITY` | Satisfied for NUC home staging 2026-07-28: a five-minute mixed workload established a safe 40-RPS aggregate envelope with lifecycle, ingestion, moderation, resource, cleanup, and recovery evidence. Production sizing remains hardening work. | Engineering + Infrastructure | Complete for home staging |
 | `OWNERSHIP` | Named people accept product, engineering, infrastructure, privacy, trust-and-safety, and on-call responsibilities | Product | 2026-08-11 |
 
 Any condition not completed by its date expires the review; it does not become

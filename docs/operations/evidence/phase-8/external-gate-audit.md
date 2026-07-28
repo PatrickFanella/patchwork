@@ -28,6 +28,13 @@ deep readiness, map artifact checks, public health, Prometheus targets, and a
 prior-source four-digest manifest rolled back without a down migration and the
 scanned release promoted forward again.
 
+A subsequent immutable release from `995338c` corrected Prometheus series
+identity and was independently scanned, signed, deployed by digest, and
+accepted. A five-minute mixed workload against that release established a
+bounded 40-RPS aggregate home-staging envelope with zero read errors, three
+real lifecycle journeys, three durable moderation resolutions, safe measured
+resource headroom, clean recovery, and verified disposable-data cleanup.
+
 ## Requirement audit
 
 | Remaining gate | Local mechanism and evidence | Missing authoritative proof | Current prerequisite state |
@@ -49,9 +56,9 @@ scanned release promoted forward again.
 ## Unblocking sequence
 
 1. Treat protected GHCR/OIDC promotion, independent backup/signing durability,
-   and sustained capacity as production hardening; do not erase the completed
-   NUC proof.
-2. Obtain formal retention/accessibility/capacity/ownership review and record a
+   saturation testing, and production sizing as hardening; do not erase the
+   completed NUC proof.
+2. Obtain formal retention/accessibility/ownership review and record a
    fresh go/no-go decision.
 3. If those inputs will not be supplied, approve the prepared closure plan and
    name its operator; do not infer permission to destroy data or remote state.

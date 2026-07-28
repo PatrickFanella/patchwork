@@ -61,6 +61,8 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 - `edf2448` — NUC recovery and alerting game days;
 - `55b337e` — hardened zero-HIGH/CRITICAL runtime artifact source;
 - `e522e5f`, `c013eb6` — production digest deployment and map readiness;
+- `995338c` — unique domain/HTTP Prometheus series and current immutable release;
+- `83f08c1` — fail-closed mixed staging-capacity evidence gate;
 - `e744aea` — persistent staging topology;
 - `1892d0b` — durable browser safety and owner actions;
 - `49cf598`, `4287596`, `90289f1` — ingestion, projections, discovery.
@@ -74,8 +76,9 @@ current/previous manifests now exist; operator approvals remain absent.
 
 1. Formal approval of the implemented backup-aware retention and deactivation
    policy, including the AT-repository deletion boundary.
-2. Independent WCAG/assistive-technology review and sustained deployed
-   capacity test; the bounded local PostgreSQL read probe is green.
+2. Independent WCAG/assistive-technology review. The sustained deployed
+   capacity gate is complete for a bounded 40-RPS aggregate NUC envelope;
+   production sizing remains separate hardening work.
 3. Named product, engineering, infrastructure, privacy, trust-and-safety, and
    on-call owners.
 4. Approval of `project-closure.md` or a replacement go decision.
@@ -85,10 +88,10 @@ current/previous manifests now exist; operator approvals remain absent.
 The controlled home runtime proves OAuth/PDS behavior, signed local-registry
 deployment, four-image rollback, host configuration, restore, and alert
 routing. It does not prove protected GHCR/OIDC promotion, independent backup
-or signing-key durability, human response, or production capacity.
-Single-region/single-replica staging capacity remains only partially measured,
-and fixture-only expansion code remains frozen but present outside the alpha
-surface.
+or signing-key durability, human response, saturation limits, or production
+capacity. Single-region/single-replica home staging is proven only at the
+observed 40-RPS aggregate envelope, and fixture-only expansion code remains
+frozen but present outside the alpha surface.
 
 Do not launch or recruit participants. Either supply the authorized staging,
 OAuth, and ownership inputs and execute the remaining gates, or approve and

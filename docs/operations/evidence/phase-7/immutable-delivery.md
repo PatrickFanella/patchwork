@@ -36,6 +36,27 @@ disabled transparency-log upload. The signatures prove integrity against the
 retained public key; they do not provide GitHub OIDC identity or Rekor
 transparency.
 
+## Current metrics-integrity release
+
+A subsequent immutable release built from
+`995338c584524a84c2365c6a5658a6242399fd10` separated domain SLI series from
+generic HTTP transport series on the indexer and moderation worker. It was
+built once, scanned at zero HIGH/CRITICAL findings, signed and verified with
+the same scoped staging key, published to the loopback registry, and deployed
+by exact digest with no build:
+
+| Service | Current deployed digest |
+| --- | --- |
+| API | `127.0.0.1:5000/subculture-collective/patchwork-api@sha256:93b15bb4dc2ebddf2bdc6a48d0958c3143a4d8516b68e90b6d9448c2ccc7cc37` |
+| Indexer | `127.0.0.1:5000/subculture-collective/patchwork-indexer@sha256:c1632ca7b98d40b11836b3266976186dc9c45513f7d6bb597f03aacd0cad0901` |
+| Moderation | `127.0.0.1:5000/subculture-collective/patchwork-moderation@sha256:8eebea5cc820d389f35a8ec02556ec4f7b25c885e08edc3b8656d3414cb2a7ce` |
+| Web | `127.0.0.1:5000/subculture-collective/patchwork-web@sha256:ad793f48393e8ace89ea9807469bb7d4487adc748d86e0714739a865162006c2` |
+
+The deployment replayed all migrations, passed deep readiness and public
+route probes, and exposed unique `patchwork_sli_*` domain and
+`patchwork_http_*` transport series. Three real two-account journeys and the
+five-minute mixed capacity drill subsequently passed against this release.
+
 ## Deployment and rollback execution
 
 The production Compose topology now accepts the same four digest variables as

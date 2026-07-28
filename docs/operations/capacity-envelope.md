@@ -2,10 +2,13 @@
 
 ## Status
 
-Patchwork has an executable HTTP capacity probe and one bounded local
-PostgreSQL result. It does **not** yet have a validated staging capacity
-envelope. The numbers below are local loopback measurements and must not be
-used for production sizing, an alpha `GO`, or a reliability commitment.
+Patchwork has an executable HTTP capacity probe, one bounded local PostgreSQL
+result, and a five-minute mixed NUC home-staging result. The validated staging
+envelope is **40 aggregate read requests per second** across the four alpha
+routes (10 RPS per route), alongside three real lifecycle journeys and three
+durable moderation items. This is a safe observed home-staging operating
+point, not a saturation result, production sizing claim, alpha `GO`, or
+reliability commitment.
 
 The older shared contracts in `packages/shared/src/load-testing.ts` contain
 modeled targets for alpha and deferred routes. They are inputs to evaluation,
@@ -22,6 +25,10 @@ based so it compares the current alpha routes with their modeled minimums.
 Set `PATCHWORK_CAPACITY_PARALLEL_ROUTES=1` only for the controlled staging
 drill to run all four read routes concurrently for the same bounded interval;
 the default remains sequential to avoid surprising local load.
+`PATCHWORK_CAPACITY_TARGET_RPS_PER_ROUTE` may set one explicit discovery rate
+for every route during a controlled envelope search. Results must retain both
+the configured rate and the higher modeled targets; an override must never be
+reported as satisfying the original throughput budget.
 
 | Endpoint | Path | Target RPS | p95 budget | Maximum error rate |
 | --- | --- | ---: | ---: | ---: |
@@ -79,6 +86,34 @@ workload errors, resource thresholds are exceeded, cleanup is incomplete, or
 the services do not recover ready. It establishes a bounded alpha-staging
 envelope, not a production maximum.
 
+The home-staging gate requires at least 10 actual RPS on every route, p95 at or
+below 500 ms, three completed lifecycle journeys with a conservative
+create-to-projection upper bound at or below 30 seconds, three resolved
+moderation items, and the resource/reliability limits enforced by
+`staging-capacity.ts`.
+
+## NUC home-staging evidence, 2026-07-28
+
+A trusted Almaz edge generated all four read routes concurrently against the
+NUC immutable `995338c` runtime for 300 seconds. The run completed 12,000
+requests with no errors at 10 RPS per route and an 85.574 ms worst-route p95.
+During that interval, three independent two-account OAuth/PDS/Jetstream
+lifecycle journeys completed in 15.3, 13.8, and 11.3 seconds, and three
+durable moderation items resolved with a 0.356-second maximum queue age.
+
+The measured maxima/minima remained inside the gate: 65.3% host CPU, 58.98%
+host-memory headroom, 41% disk headroom, 1.4% container memory, 35% database
+connections, 0.032-second event-source lag, no error or restart delta, and
+0.047-second post-workload readiness. Disposable Patchwork accounts were
+deactivated, their PDS accounts were deleted, expected bounded
+deactivation/safety receipts were retained, and live projections, sessions,
+workflows, roles, owned blocks, moderation items, and moderation audit rows
+were absent afterward.
+
+The exact redacted aggregate evidence is
+`docs/operations/evidence/phase-8/staging-capacity.json`; methodology and
+caveats are in `staging-capacity.md`.
+
 ## Local evidence, 2026-07-11
 
 The isolated run used PostgreSQL 16.14, Node 24.15.0, an Apple M3 with 16 GiB
@@ -99,10 +134,9 @@ All four modeled budgets passed. Full evidence and caveats are in
 
 ## What remains unproven
 
-This short loopback run does not measure network/TLS overhead, non-empty
-directory data, concurrent writes, real ingestion, moderation queues,
-database connection saturation, CPU or memory ceilings, sustained behavior,
-multiple API replicas, or failure recovery under load. The staging `CAPACITY`
-condition therefore remains open until a representative data set and complete
-create/ingest/discover/moderate workload run long enough to measure resource
-headroom and recovery on immutable staging artifacts.
+The NUC run does not establish saturation ceilings, the higher modeled
+50/60/80/40 RPS route targets, multiple API replicas, multi-region behavior,
+independent database capacity, Internet-scale client diversity, or production
+traffic patterns. Those remain production hardening and sizing work. The
+bounded home-staging `CAPACITY` condition is complete only at the observed
+40-RPS aggregate envelope.

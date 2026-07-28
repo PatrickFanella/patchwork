@@ -12,8 +12,10 @@ ingestion, PostgreSQL projections, secured HTTP commands, and fail-closed
 production data paths. Its complete browser OAuth journey and real staging
 signed-digest deployment, rollback, restore, alert, and post-deploy browser
 exercises are proven on the NUC home-staging environment. Protected
-promotion, independent durability, formal review, capacity, and named human
-ownership remain unproven. The
+promotion, independent durability, formal review, production sizing, and named
+human ownership remain unproven. A five-minute mixed workload established a
+bounded 40-RPS aggregate home-staging envelope; it is not a production
+capacity claim. The
 authoritative subsystem inventory is
 [`docs/architecture/current-state-matrix.md`](docs/architecture/current-state-matrix.md),
 and continuation work is sequenced by the
