@@ -418,9 +418,9 @@ artifact. Vite rejects `VITE_DATA_MODE=fixture` for a production build.
 - Create: `apps/web/e2e/at-record-lifecycle.spec.ts`
 - Modify: `apps/web/playwright.config.ts`
 
-- [ ] Cover login, create request, discover from a second session, transition the minimal local workflow, report/block, close, and delete.
-- [ ] Assert that exact coordinates, tokens, and private moderation notes never appear in the DOM, URL, or captured network responses.
-- [ ] Run the test against PostgreSQL and disposable test-PDS accounts rather than mocked browser routes.
+- [x] Cover login, create request, discover from a second session, transition the minimal local workflow, report/block, close, and delete.
+- [x] Assert that exact coordinates, tokens, and private moderation notes never appear in the DOM, URL, or captured network responses.
+- [x] Run the test against PostgreSQL and disposable test-PDS accounts rather than mocked browser routes.
 - [x] Save screenshots and traces only on failure, with a redaction check before artifact upload.
 - [x] Run `npx playwright install chromium && npm run test:e2e -w @patchwork/web`.
 - [x] Commit the locally verified browser/runtime slice as `feat(web): wire durable alpha safety and owner actions`.
@@ -433,12 +433,19 @@ lifecycle state through an authenticated boundary, transition using only
 server-derived roles, reconcile the result to the AT record, and receive a
 retry control when public sync fails after private state commits. Authenticated
 discovery also enforces durable blocks without accepting browser identity or
-removing anonymous public access. The real
-two-account spec includes that workflow step but remains skipped until an
-authorized staging URL and two OAuth storage states are supplied; therefore
-the first three checklist items and the Phase 6 exit gate remain open.
+removing anonymous public access. The real two-account spec completed against
+the NUC-hosted PostgreSQL, PDS, local Jetstream, API, and web runtime on
+2026-07-28. The first red execution exposed an IP-shared auth-session
+rate-limit lockout; the fixed runtime assigns read-only session restoration to
+the ordinary read budget while retaining strict login/callback limits. A
+second harness correction waits for discovery network idle instead of
+repeatedly aborting its own query. The final controlled run passed in 12.2
+seconds, and both disposable Patchwork/PDS accounts were deactivated or
+deleted after their retained safety evidence was redacted.
 
-**Phase 6 exit gate:** Two browser sessions complete the real create-to-discover-to-close/delete journey against persistent services with fixture mode disabled.
+**Phase 6 exit gate: satisfied 2026-07-28.** Two browser sessions completed the
+real create-to-discover-to-close/delete journey against persistent services
+with fixture mode disabled.
 
 ## Phase 7 — Replace simulated operations with real staging evidence
 

@@ -48,8 +48,9 @@ functions, and 65.71% lines.
 
 Automated tools cannot prove usability with VoiceOver, NVDA, JAWS, switch
 control, speech input, cognitive accessibility needs, 200% text-only resizing,
-or real user workflows. No independent auditor has reviewed Patchwork, and the
-real authenticated two-account flow is not available for accessibility testing.
+or real user workflows. No independent auditor has reviewed Patchwork. The
+authenticated two-account flow is now executable, but it has not received a
+screen-reader, switch-control, speech-input, or cognitive-accessibility review.
 
 The `ACCESSIBILITY` go/no-go condition therefore remains open until an
 independent WCAG 2.2/assistive-technology review covers the deployed alpha and

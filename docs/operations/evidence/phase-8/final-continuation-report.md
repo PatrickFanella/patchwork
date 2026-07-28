@@ -1,6 +1,6 @@
 # Patchwork continuation status report
 
-Snapshot: 2026-07-11, current `main` worktree
+Snapshot: 2026-07-28, current `main` worktree
 
 Recommended decision: **NO-GO**
 
@@ -12,12 +12,12 @@ Recommended decision: **NO-GO**
 | 2. Real AT vertical slice | 21/21 (100%) | Direct two-account PDS lifecycle proven |
 | 3. Durable state | 18/18 (100%) | Complete locally, including moderation and retention |
 | 4. Secure HTTP surface | 18/18 (100%) | Complete locally |
-| 5. Live indexer | 17/17 (100%) | Runtime complete; shared live-browser lifecycle remains Phase 6 |
-| 6. Integrated web journey | 13/16 (81%) | Real two-account OAuth journey requires authorized state |
+| 5. Live indexer | 17/17 (100%) | Runtime plus controlled live aid and directory lifecycles complete |
+| 6. Integrated web journey | 16/16 (100%) | Real two-account OAuth journey passed against the NUC runtime |
 | 7. Real staging operations | 9/18 (50%) | Mechanisms complete; deployment and game days unexecuted |
 | 8. Evaluation and scope control | 11/14 (79%) | `NO-GO`, expansion frozen, closure prepared; approvals pending |
 
-Raw roadmap completion is 121/136 items (89%). This is not a launch score: the
+Raw roadmap completion is 124/136 items (91%). This is not a launch score: the
 remaining items are high-weight external gates, so the project is `NO-GO`.
 
 The roadmap's narrow core paths are implemented locally: authentication
@@ -31,12 +31,13 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 
 ## Verification baseline
 
-- database-enabled repository suite: 873 tests;
-- PostgreSQL/HTTP integration: 32 tests;
-- indexer PostgreSQL projection/reconciliation: 14 tests;
+- repository unit/contract suite: 891 tests;
+- PostgreSQL/HTTP integration: 33 tests;
+- indexer suite with PostgreSQL enabled: 50 tests;
+- moderation suite with PostgreSQL enabled: 63 tests;
 - direct service integration: 9 tests;
-- Chromium: 49 passed, 1 authorized-external test skipped;
-- migrations: API 13, indexer 3, moderation 3; clean application and replay;
+- Chromium: 50 local cases passed, 1 controlled external case passed separately;
+- migrations: API 13, indexer 4, moderation 3; clean application and replay;
 - database-enabled coverage: 65.38% statements, 51.91% branches, 59.29%
   functions, 66.54% lines;
 - build, lint, typecheck, artifact redaction, and high-severity audit pass;
@@ -63,21 +64,21 @@ AT-repository deletion and formal privacy approval remain external boundaries.
 ## Genuine external blockers
 
 The current prerequisite-by-prerequisite verification is recorded in
-`external-gate-audit.md`; it found all browser, staging, digest, and operator
-inputs absent and did not expose values or mutate external state.
+`external-gate-audit.md`. The browser inputs were supplied for one controlled
+run and then destroyed; registry, protected-staging, alert, and operator inputs
+remain absent.
 
 1. Authorized staging host, URL, registry, protected environment, and secrets.
-2. Two disposable OAuth/PDS browser accounts with redacted storage state.
-3. Signed image publication, four-digest deployment, and rollback execution.
-4. Restore of a staging backup with measured staging RTO/RPO.
-5. Delivered and resolved alerts during indexer and database game days.
-6. Formal approval of the implemented backup-aware retention and deactivation
+2. Signed image publication, four-digest deployment, and rollback execution.
+3. Restore of a staging backup with measured staging RTO/RPO.
+4. Delivered and resolved alerts during indexer and database game days.
+5. Formal approval of the implemented backup-aware retention and deactivation
    policy, including the AT-repository deletion boundary.
-7. Independent WCAG/assistive-technology review and sustained deployed
+6. Independent WCAG/assistive-technology review and sustained deployed
    capacity test; the bounded local PostgreSQL read probe is green.
-8. Named product, engineering, infrastructure, privacy, trust-and-safety, and
+7. Named product, engineering, infrastructure, privacy, trust-and-safety, and
    on-call owners.
-9. Approval of `project-closure.md` or a replacement go decision.
+8. Approval of `project-closure.md` or a replacement go decision.
 
 ## Residual risks and next decision
 

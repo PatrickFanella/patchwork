@@ -48,9 +48,11 @@ The indexer workspace serializes PostgreSQL-owning test files because they
 intentionally share one disposable schema. This removes cross-file TRUNCATE
 races without weakening any runtime concurrency test.
 
-## Remaining boundary
+## External boundary
 
-This evidence uses normalized events and PostgreSQL locally. It does not prove
-that the authorized staging Jetstream/PDS delivers a complete create, update,
-close, and delete sequence. The Phase 5 and Phase 6 exit gates remain open
-until the real two-account browser journey observes these same durable effects.
+The 2026-07-28 controlled two-account browser journey subsequently observed
+the complete aid create, update/close, and delete sequence through the home
+PDS, NUC-local Jetstream, PostgreSQL projection, lifecycle reconciler, and
+browser. Phase 5 and Phase 6 external behavior is therefore proven on the
+controlled home-network runtime; protected staging repetition and operational
+drills remain Phase 7 work.

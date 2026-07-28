@@ -54,9 +54,9 @@ with `VITE_DATA_MODE=fixture is forbidden in production builds.`
   Windows-only esbuild development-server advisory remains recorded and does
   not affect the production artifact.
 
-## Remaining Phase 6 work
+## Phase 6 follow-through
 
-Task 6.3 and the Phase 6 exit gate remain open. They require two real browser
-sessions, PostgreSQL-backed services, disposable PDS accounts, real OAuth,
-create/discover/workflow/report/block/close/delete behavior, and redacted
-failure artifacts with fixture mode disabled.
+Task 6.3 and the Phase 6 exit gate were completed on 2026-07-28 with two real
+browser sessions, PostgreSQL-backed services, disposable PDS accounts, OAuth,
+create/discover/workflow/report/block/close/delete behavior, and fixture mode
+disabled. See `alpha-browser-journey-local.md`.

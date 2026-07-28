@@ -13,10 +13,11 @@ Current authority:
 
 ## Current decision
 
-The 2026-07-11 review records **NO-GO**. Local implementation and verification
+The refreshed 2026-07-28 review records **NO-GO**. Local implementation and verification
 continue, but public deployment and pilot recruitment remain prohibited until
-the real browser, immutable staging, rollback, restore, alert-game-day,
-retention, accessibility, capacity, and ownership gates have current evidence.
+immutable staging, rollback, restore, alert-game-day, retention, accessibility,
+capacity, and ownership gates have current evidence. The real two-account
+browser gate is complete.
 
 An issue being represented by code or tests does not mean its subsystem is externally integrated, durable, or production-ready. Use the maturity matrix for that determination.
 

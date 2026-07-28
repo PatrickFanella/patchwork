@@ -56,10 +56,10 @@ test.describe('real two-account AT record lifecycle', () => {
         await requester.getByRole('button', { name: 'Publish request' }).click();
         await expect(requester.getByText(/persisted via API\/DB/)).toBeVisible();
 
-        await helper.goto('/feed');
+        await helper.goto('/feed', { waitUntil: 'networkidle' });
         await expect
             .poll(async () => {
-                await helper.reload();
+                await helper.reload({ waitUntil: 'networkidle' });
                 return helper.getByText(title).count();
             }, { timeout: 60_000, intervals: [2_000, 5_000, 10_000] })
             .toBe(1);
@@ -74,10 +74,10 @@ test.describe('real two-account AT record lifecycle', () => {
         await helper.getByRole('button', { name: 'Confirm block author' }).click();
         await expect(helper.getByText('Author blocked.')).toBeVisible();
 
-        await requester.goto('/feed');
+        await requester.goto('/feed', { waitUntil: 'networkidle' });
         await expect
             .poll(async () => {
-                await requester.reload();
+                await requester.reload({ waitUntil: 'networkidle' });
                 return requester.getByText(title).count();
             }, { timeout: 60_000, intervals: [2_000, 5_000, 10_000] })
             .toBe(1);
