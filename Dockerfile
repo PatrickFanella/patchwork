@@ -12,7 +12,15 @@ FROM node:22.22.2-alpine@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d76
 WORKDIR /app
 
 RUN apk upgrade --no-cache \
-    && npm install --global --no-audit --no-fund npm@12.0.1
+    && wget -qO /tmp/npm.tgz https://registry.npmjs.org/npm/-/npm-12.0.1.tgz \
+    && echo '5e02bea4c784df1c3bbea9e55c7d2232329e1d1920c254789833ed9e8b0a5f16  /tmp/npm.tgz' \
+        | sha256sum -c - \
+    && mkdir /tmp/npm \
+    && tar -xzf /tmp/npm.tgz -C /tmp/npm \
+    && rm -rf /usr/local/lib/node_modules/npm \
+    && mv /tmp/npm/package /usr/local/lib/node_modules/npm \
+    && rm -rf /tmp/npm /tmp/npm.tgz \
+    && npm --version
 
 COPY package.json package-lock.json ./
 COPY apps/mobile/package.json ./apps/mobile/package.json
