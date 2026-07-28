@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
     ModerationReviewQueue,
+    SliCollector,
     toIdempotencyKey,
     type ModerationQueueItem,
     type ModerationAuditRecord,
@@ -596,6 +597,25 @@ describe('durable queue/state backend (issue #96)', () => {
             expect(output).toContain('moderation_queue_oldest_item_age_seconds');
             expect(output).toContain(' 901');
             expect(output).toContain('action="delist"');
+        });
+
+        it('keeps moderation SLIs distinct from HTTP transport metrics', () => {
+            const metrics = new ModerationMetrics();
+            metrics.recordAction('delist');
+            const collector = new SliCollector();
+            collector.recordRequest('/health', 2);
+            const output = [
+                metrics.renderPrometheus(),
+                collector.renderHttpPrometheus('moderation-worker'),
+            ].join('\n');
+            const series = output
+                .split('\n')
+                .filter(line => line && !line.startsWith('#'))
+                .map(line => line.split(' ')[0]);
+
+            expect(new Set(series).size).toBe(series.length);
+            expect(output).toContain('patchwork_sli_request_total');
+            expect(output).toContain('patchwork_http_request_total');
         });
 
         it('integrates with service to track metrics on operations', () => {

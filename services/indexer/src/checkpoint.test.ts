@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
     buildPhase3FixtureFirehoseEvents,
+    SliCollector,
 } from '@patchwork/shared';
 import { InMemoryCheckpointStore } from './checkpoint.js';
 import { IndexerPipeline } from './pipeline.js';
@@ -308,6 +309,31 @@ describe('MetricsCollector', () => {
 });
 
 describe('renderPrometheusRuntimeMetrics', () => {
+    it('keeps ingestion SLIs distinct from HTTP transport metrics', () => {
+        const collector = new SliCollector();
+        collector.recordRequest('/health', 2);
+        const output = [
+            renderPrometheusRuntimeMetrics({
+                checkpointLagSeconds: 1,
+                checkpointSequence: 2,
+                checkpointCursor: 3,
+                checkpointHealthy: true,
+                ingestEventsTotal: 4,
+                ingestErrorsTotal: 0,
+                uptimeSeconds: 5,
+            }),
+            collector.renderHttpPrometheus('indexer'),
+        ].join('\n');
+        const series = output
+            .split('\n')
+            .filter(line => line && !line.startsWith('#'))
+            .map(line => line.split(' ')[0]);
+
+        expect(new Set(series).size).toBe(series.length);
+        expect(output).toContain('patchwork_sli_request_total');
+        expect(output).toContain('patchwork_http_request_total');
+    });
+
     it('exposes live event-source connection and lag metrics', () => {
         const output = renderPrometheusRuntimeMetrics(
             {

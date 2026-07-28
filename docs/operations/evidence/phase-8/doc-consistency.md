@@ -24,7 +24,7 @@ package scripts, HTTP routes, migrations, Compose, and CI workflows.
 | 12 | P2 | Production issue plan defines future production-ready conditions | Current authority is continuation roadmap and matrix | Historical plan; superseded |
 | 13 | P2 | ADR 0003 introduction says runtime is fixture-heavy | ADR records decision-time context, not current status | Historical context retained |
 | 14 | P2 | Earlier phase evidence records older migration counts | Current counts are 13/4/3 | Dated evidence retained; current reports corrected |
-| 15 | P2 | Earlier Phase 7 immutable-delivery evidence recorded 836 tests | Current repository suite has 892 tests | Immutable-delivery evidence refreshed after NUC execution |
+| 15 | P2 | Earlier Phase 7 immutable-delivery evidence recorded 836 tests | Current repository suite has 894 tests | Immutable-delivery evidence refreshed after NUC execution |
 | 16 | P2 | Phase 7 staging-readiness records seven alert rules | Current rule file has eleven | Dated drill evidence retained |
 | 17 | P2 | Legal changelog references `MODERATION_LOG_RETENTION_DAYS` | Runtime uses explicit seven-day migration and scheduler policy | Historical changelog retained; current policy corrected |
 | 18 | P2 | README “Fallback dataset” label can imply runtime fallback | Production code forbids fixture mode and never silently falls back | Wording already says test/demo only |

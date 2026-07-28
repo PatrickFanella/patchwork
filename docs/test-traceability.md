@@ -22,7 +22,7 @@ This document describes what each test layer actually executes. Test counts are 
 
 | Layer | Result |
 | --- | --- |
-| Repository unit/contract suite | 892 passed |
+| Repository unit/contract suite | 894 passed |
 | Direct lifecycle service integration | 9 passed |
 | PostgreSQL integration, including HTTP boundary | 26 passed |
 | Indexer PostgreSQL projection/reconciliation | 13 passed |
@@ -172,6 +172,16 @@ verified against a scoped Cosign public key, deployed by exact digest, rolled
 back as a set, promoted forward, and accepted by the real two-account browser
 journey. Human acknowledgment, protected GHCR/OIDC execution, independent
 durability, and named ownership remain external.
+
+## Metrics-series integrity
+
+The indexer checkpoint/metrics tests and moderation durable-queue tests compose
+each domain SLI renderer with its real HTTP collector and require every emitted
+Prometheus series to have a unique metric-and-label identity. Indexer ingestion
+and moderation queue/action SLIs remain under `patchwork_sli_*`; their
+administrative HTTP traffic is emitted under `patchwork_http_*`. This prevents
+Prometheus from retaining only the first of two identically labelled samples
+and hiding transport load during capacity or incident analysis.
 
 ## Private-data retention
 

@@ -181,6 +181,37 @@ export class SliCollector {
         return lines.join('\n');
     }
 
+    /**
+     * Render transport-only HTTP metrics for a service whose primary SLI
+     * family already uses patchwork_sli_* for domain work such as ingestion or
+     * moderation. Keeping the families distinct prevents duplicate Prometheus
+     * series from hiding either workload.
+     */
+    renderHttpPrometheus(service: PatchworkService): string {
+        const labels = formatLabels({ service });
+        const heapUsed = process.memoryUsage().heapUsed;
+        const heapTotal = process.memoryUsage().heapTotal;
+        const saturation =
+            heapTotal > 0 ?
+                parseFloat((heapUsed / heapTotal).toFixed(4))
+            :   0;
+
+        return [
+            '# HELP patchwork_http_request_total Total HTTP requests processed.',
+            '# TYPE patchwork_http_request_total counter',
+            `patchwork_http_request_total${labels} ${this._requestTotal}`,
+            '# HELP patchwork_http_error_total Total HTTP request errors.',
+            '# TYPE patchwork_http_error_total counter',
+            `patchwork_http_error_total${labels} ${this._errorTotal}`,
+            '# HELP patchwork_http_request_duration_seconds Cumulative HTTP request duration in seconds.',
+            '# TYPE patchwork_http_request_duration_seconds counter',
+            `patchwork_http_request_duration_seconds${labels} ${parseFloat(this._durationTotalSeconds.toFixed(6))}`,
+            '# HELP patchwork_http_heap_saturation_ratio HTTP process heap memory saturation (0-1).',
+            '# TYPE patchwork_http_heap_saturation_ratio gauge',
+            `patchwork_http_heap_saturation_ratio${labels} ${saturation}`,
+        ].join('\n');
+    }
+
     reset(): void {
         this._requestTotal = 0;
         this._errorTotal = 0;

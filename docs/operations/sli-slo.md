@@ -3,7 +3,10 @@
 ## Service Level Indicators (SLIs)
 
 All services expose Prometheus-compatible metrics at their `/metrics` endpoint.
-Metric names follow the `patchwork_sli_` prefix with standard labels:
+Primary service-work indicators use the `patchwork_sli_` prefix. Indexer and
+moderation HTTP transport telemetry uses the separate `patchwork_http_` family
+so it cannot collide with ingestion or queue SLIs. Both families use standard
+labels:
 
 ```
 {project="patchwork", service="<api|indexer|moderation-worker>", component="<stitch|spool|thimble>"}
@@ -17,6 +20,20 @@ Metric names follow the `patchwork_sli_` prefix with standard labels:
 | `patchwork_sli_error_total` | counter | Total errors encountered |
 | `patchwork_sli_request_duration_seconds` | counter | Cumulative request duration |
 | `patchwork_sli_saturation_ratio` | gauge | Resource saturation (0-1) |
+
+### HTTP Transport Metrics
+
+Indexer and moderation additionally expose these transport-only metrics:
+
+| Metric Name | Type | Description |
+|---|---|---|
+| `patchwork_http_request_total` | counter | Total HTTP requests processed |
+| `patchwork_http_error_total` | counter | Total HTTP request errors |
+| `patchwork_http_request_duration_seconds` | counter | Cumulative HTTP request duration |
+| `patchwork_http_heap_saturation_ratio` | gauge | HTTP process heap saturation (0-1) |
+
+API HTTP traffic remains its primary service workload and therefore continues
+to use `patchwork_sli_*`.
 
 ### Per-Service Metrics
 
@@ -39,6 +56,7 @@ Metric names follow the `patchwork_sli_` prefix with standard labels:
 - `patchwork_ingest_errors_total` -- total ingestion errors
 - `patchwork_sli_request_total` -- mirrors ingest_events_total (SLI-aligned)
 - `patchwork_sli_error_total` -- mirrors ingest_errors_total (SLI-aligned)
+- `patchwork_http_*` -- indexer administration/health HTTP traffic and heap
 
 #### Moderation Worker (`service="moderation-worker"`)
 
@@ -51,6 +69,7 @@ Metric names follow the `patchwork_sli_` prefix with standard labels:
 - `patchwork_sli_request_total` -- mirrors total actions (SLI-aligned)
 - `patchwork_sli_error_total` -- mirrors moderation_errors_total (SLI-aligned)
 - `patchwork_sli_saturation_ratio` -- queue depth / 1000 capacity
+- `patchwork_http_*` -- moderation administration/health HTTP traffic and heap
 
 ## Service Level Objectives (SLOs)
 
@@ -92,15 +111,18 @@ patchwork_sli_saturation_ratio{service="moderation-worker"}
 ### Memory Saturation Across All Services
 
 ```promql
-patchwork_sli_saturation_ratio{project="patchwork"}
+patchwork_sli_saturation_ratio{project="patchwork",service="api"}
+or
+patchwork_http_heap_saturation_ratio{project="patchwork"}
 ```
 
 ## Performance SLIs (Capacity Validation)
 
 In addition to the operational SLIs above, the platform tracks
-performance-specific indicators for capacity planning. These are
-defined in `packages/shared/src/load-testing.ts` and validated by the
-load test suite in `services/api/src/performance.test.ts`.
+performance-specific indicators for capacity planning. These are defined in
+`packages/shared/src/load-testing.ts`, exercised by
+`packages/shared/src/http-load-probe.test.ts`, and executed against a real
+configured API by `scripts/run-http-load-probe.ts`.
 
 ### Per-Endpoint Latency SLIs
 

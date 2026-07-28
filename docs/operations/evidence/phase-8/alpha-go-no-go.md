@@ -33,7 +33,7 @@ launch criteria in this decision.
 
 Current verification baseline:
 
-- repository unit/contract suite: 892 tests;
+- repository unit/contract suite: 894 tests;
 - PostgreSQL/HTTP integration: 33 tests;
 - indexer suite with PostgreSQL enabled: 50 tests;
 - moderation suite with PostgreSQL enabled: 63 tests;

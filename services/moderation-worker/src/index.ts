@@ -73,7 +73,8 @@ const renderPrometheusMetrics = (): string => {
     ].join('\n');
 
     const moderationMetricsText = metrics.renderPrometheus();
-    const sliMetricsText = sliCollector.renderPrometheus('moderation-worker');
+    const sliMetricsText =
+        sliCollector.renderHttpPrometheus('moderation-worker');
 
     return `${baseMetrics}\n${moderationMetricsText}\n${sliMetricsText}`;
 };

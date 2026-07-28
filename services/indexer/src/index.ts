@@ -198,7 +198,7 @@ const createRouteHandlers = (
             runtimeMetrics,
             source?.getMetrics(),
         );
-        const sli = sliCollector.renderPrometheus('indexer');
+        const sli = sliCollector.renderHttpPrometheus('indexer');
         return {
             statusCode: 200,
             body: `${base}\n${sli}`,
