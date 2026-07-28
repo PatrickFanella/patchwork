@@ -124,6 +124,9 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  * Select the appropriate rate limiter for a given route pathname.
  */
 export const selectLimiter = (method: string | undefined, pathname: string): RateLimiter => {
+    if (method === 'GET' && pathname === '/auth/session') {
+        return generalLimiter;
+    }
     if (AUTH_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
         return authLimiter;
     }

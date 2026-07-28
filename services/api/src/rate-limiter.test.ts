@@ -106,6 +106,10 @@ describe('selectLimiter', () => {
         expect(selectLimiter('POST', '/auth/refresh')).toBe(authLimiter);
     });
 
+    it('treats browser session restoration as ordinary read traffic', () => {
+        expect(selectLimiter('GET', '/auth/session')).toBe(generalLimiter);
+    });
+
     it('returns mutationLimiter for account mutation paths', () => {
         expect(selectLimiter('POST', '/account/deactivate')).toBe(mutationLimiter);
         expect(selectLimiter('POST', '/account/export')).toBe(mutationLimiter);

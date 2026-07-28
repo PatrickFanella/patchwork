@@ -23,6 +23,7 @@ test.describe('real two-account AT record lifecycle', () => {
     test('create, discover, report, block, close, and delete without leaking private inputs', async ({
         browser,
     }) => {
+        test.setTimeout(180_000);
         const requesterContext = await browser.newContext({
             storageState: requesterState!,
         });
@@ -60,7 +61,7 @@ test.describe('real two-account AT record lifecycle', () => {
             .poll(async () => {
                 await helper.reload();
                 return helper.getByText(title).count();
-            }, { timeout: 60_000 })
+            }, { timeout: 60_000, intervals: [2_000, 5_000, 10_000] })
             .toBe(1);
         await helper.getByRole('button', { name: `Report ${title}` }).click();
         await helper.getByLabel('Report reason').selectOption('other');
@@ -78,7 +79,7 @@ test.describe('real two-account AT record lifecycle', () => {
             .poll(async () => {
                 await requester.reload();
                 return requester.getByText(title).count();
-            }, { timeout: 60_000 })
+            }, { timeout: 60_000, intervals: [2_000, 5_000, 10_000] })
             .toBe(1);
         await requester
             .getByRole('button', { name: `Resolve request "${title}"` })
