@@ -7,9 +7,12 @@ ARG GIT_BRANCH=unknown
 ARG BUILD_VERSION=0.0.0
 ARG CI_RUN_ID=local
 
-FROM node:22-alpine AS deps
+FROM node:22.22.2-alpine@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f AS deps
 
 WORKDIR /app
+
+RUN apk upgrade --no-cache \
+    && npm install --global --no-audit --no-fund npm@12.0.1
 
 COPY package.json package-lock.json ./
 COPY apps/mobile/package.json ./apps/mobile/package.json
@@ -28,7 +31,11 @@ FROM deps AS source
 WORKDIR /app
 COPY . .
 
-FROM source AS api-runtime
+FROM source AS runtime-base
+
+RUN npm prune --omit=dev --no-audit --no-fund
+
+FROM runtime-base AS api-runtime
 
 ARG GIT_SHA
 ARG GIT_BRANCH
@@ -43,7 +50,7 @@ ENV NODE_ENV=production
 EXPOSE 4000
 CMD ["npm", "run", "start", "-w", "@patchwork/api"]
 
-FROM source AS indexer-runtime
+FROM runtime-base AS indexer-runtime
 
 ARG GIT_SHA
 ARG GIT_BRANCH
@@ -58,7 +65,7 @@ ENV NODE_ENV=production
 EXPOSE 4100
 CMD ["npm", "run", "start", "-w", "@patchwork/indexer"]
 
-FROM source AS moderation-runtime
+FROM runtime-base AS moderation-runtime
 
 ARG GIT_SHA
 ARG GIT_BRANCH
@@ -86,7 +93,7 @@ ENV VITE_MAP_TILE_URL=${VITE_MAP_TILE_URL}
 
 RUN npm run build -w @patchwork/web
 
-FROM nginx:1.27-alpine AS web-runtime
+FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de AS web-runtime
 
 ARG GIT_SHA
 ARG GIT_BRANCH
@@ -97,6 +104,8 @@ LABEL org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.ref.name="${GIT_BRANCH}" \
       com.patchwork.ci.run-id="${CI_RUN_ID}" \
       com.patchwork.service="web"
+
+RUN apk upgrade --no-cache
 
 COPY --from=web-build /app/apps/web/dist /usr/share/nginx/html
 COPY ./docker/nginx/patchwork-web.conf /etc/nginx/conf.d/default.conf
