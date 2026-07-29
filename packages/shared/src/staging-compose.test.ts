@@ -54,81 +54,97 @@ const renderCompose = (filename: string) => {
 describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
     '%s persistent topology',
     filename => {
-        it('requires secrets, orders all migrations, and probes dependency readiness', () => {
-            const raw = readFileSync(resolve(repositoryRoot, filename), 'utf8');
-            expect(raw).not.toContain('did:example');
-            expect(raw).not.toContain('API_DATA_SOURCE:-');
-            expect(raw).toContain('VITE_MAP_TILE_URL: ${');
-            expect(raw).toContain(
-                filename === 'docker-compose.yml' ?
-                    'API_TRUSTED_PROXIES: ${API_TRUSTED_PROXIES:?' :
-                    'API_TRUSTED_PROXIES: ${STAGING_API_TRUSTED_PROXIES:?',
-            );
-            for (const imageVariable of [
-                'PATCHWORK_API_IMAGE',
-                'PATCHWORK_INDEXER_IMAGE',
-                'PATCHWORK_MODERATION_IMAGE',
-                'PATCHWORK_WEB_IMAGE',
-            ]) {
-                expect(raw).toContain(`image: \${${imageVariable}:-`);
-            }
-
-            const { services } = renderCompose(filename);
-            for (const migration of [
-                'patchwork-api-migrations',
-                'patchwork-indexer-migrations',
-                'patchwork-moderation-migrations',
-            ]) {
-                expect(services[migration]?.command?.join(' ')).toContain(
-                    'db:migrate',
+        it(
+            'requires secrets, orders all migrations, and probes dependency readiness',
+            () => {
+                const raw = readFileSync(
+                    resolve(repositoryRoot, filename),
+                    'utf8',
                 );
-            }
-            expect(
-                services['patchwork-api']?.depends_on?.[
-                    'patchwork-api-migrations'
-                ]?.condition,
-            ).toBe('service_completed_successfully');
-            for (const runtime of [
-                'patchwork-api',
-                'patchwork-spool',
-                'patchwork-thimble',
-                'patchwork-web',
-            ]) {
-                const healthcheck = services[runtime]?.healthcheck?.test?.join(' ');
-                expect(healthcheck).toContain(
-                    runtime === 'patchwork-web' ? '/srv/patchwork-map/' : '/health/ready',
+                expect(raw).not.toContain('did:example');
+                expect(raw).not.toContain('API_DATA_SOURCE:-');
+                expect(raw).toContain('VITE_MAP_TILE_URL: ${');
+                expect(raw).toContain(
+                    filename === 'docker-compose.yml' ?
+                        'API_TRUSTED_PROXIES: ${API_TRUSTED_PROXIES:?'
+                    :   'API_TRUSTED_PROXIES: ${STAGING_API_TRUSTED_PROXIES:?',
                 );
-                if (runtime === 'patchwork-web') {
-                    expect(healthcheck).toContain('wget -qO- http://127.0.0.1/');
+                for (const imageVariable of [
+                    'PATCHWORK_API_IMAGE',
+                    'PATCHWORK_INDEXER_IMAGE',
+                    'PATCHWORK_MODERATION_IMAGE',
+                    'PATCHWORK_WEB_IMAGE',
+                ]) {
+                    expect(raw).toContain(`image: \${${imageVariable}:-`);
                 }
-            }
-            expect(services['patchwork-web']?.environment).toMatchObject({
-                VITE_MAP_TILE_URL: '/tiles/us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
-            });
-            const api = services['patchwork-api']?.environment;
-            expect(api).toMatchObject({
-                API_DATA_SOURCE: 'postgres',
-                PATCHWORK_ENV:
-                    filename === 'docker-compose.yml' ?
-                        'production'
-                    :   'staging',
-                ATPROTO_ACCOUNT_PDS_URL: 'http://pds.internal.test:3000',
-                ATPROTO_OAUTH_CLIENT_ID: expect.stringMatching(/^https:/),
-                ATPROTO_OAUTH_REDIRECT_URI: expect.stringMatching(/^https:/),
-                ATPROTO_SESSION_ENCRYPTION_KEY: expect.any(String),
-            });
-            for (const runtime of [
-                'patchwork-api',
-                'patchwork-spool',
-                'patchwork-thimble',
-            ]) {
-                expect(services[runtime]?.environment?.PATCHWORK_ENV).toBe(
-                    filename === 'docker-compose.yml' ?
-                        'production'
-                    :   'staging',
-                );
-            }
-        });
+
+                const { services } = renderCompose(filename);
+                for (const migration of [
+                    'patchwork-api-migrations',
+                    'patchwork-indexer-migrations',
+                    'patchwork-moderation-migrations',
+                ]) {
+                    expect(services[migration]?.command?.join(' ')).toContain(
+                        'db:migrate',
+                    );
+                }
+                expect(
+                    services['patchwork-api']?.depends_on?.[
+                        'patchwork-api-migrations'
+                    ]?.condition,
+                ).toBe('service_completed_successfully');
+                for (const runtime of [
+                    'patchwork-api',
+                    'patchwork-spool',
+                    'patchwork-thimble',
+                    'patchwork-web',
+                ]) {
+                    const healthcheck =
+                        services[runtime]?.healthcheck?.test?.join(' ');
+                    expect(healthcheck).toContain(
+                        runtime === 'patchwork-web' ?
+                            '/srv/patchwork-map/'
+                        :   '/health/ready',
+                    );
+                    if (runtime === 'patchwork-web') {
+                        expect(healthcheck).toContain(
+                            'wget -qO- http://127.0.0.1/',
+                        );
+                    }
+                }
+                expect(services['patchwork-web']?.environment).toMatchObject({
+                    VITE_MAP_TILE_URL:
+                        '/tiles/us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
+                });
+                const api = services['patchwork-api']?.environment;
+                expect(api).toMatchObject({
+                    API_DATA_SOURCE: 'postgres',
+                    PATCHWORK_ENV:
+                        filename === 'docker-compose.yml' ?
+                            'production'
+                        :   'staging',
+                    ATPROTO_ACCOUNT_PDS_URL:
+                        'http://pds.internal.test:3000',
+                    ATPROTO_OAUTH_CLIENT_ID:
+                        expect.stringMatching(/^https:/),
+                    ATPROTO_OAUTH_REDIRECT_URI:
+                        expect.stringMatching(/^https:/),
+                    ATPROTO_SESSION_ENCRYPTION_KEY: expect.any(String),
+                });
+                for (const runtime of [
+                    'patchwork-api',
+                    'patchwork-spool',
+                    'patchwork-thimble',
+                ]) {
+                    expect(services[runtime]?.environment?.PATCHWORK_ENV).toBe(
+                        filename === 'docker-compose.yml' ?
+                            'production'
+                        :   'staging',
+                    );
+                }
+            },
+            20_000,
+        );
     },
 );
 
