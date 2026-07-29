@@ -36,6 +36,10 @@ services:
                 condition: service_healthy
             patchwork-thimble:
                 condition: service_healthy
+            patchwork-objects:
+                condition: service_healthy
+            patchwork-clamav:
+                condition: service_healthy
         environment:
             NODE_ENV: production
             PATCHWORK_ENV: production
@@ -56,6 +60,14 @@ services:
             API_DATABASE_URL: postgresql://patchwork:${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}@patchwork-postgres:5432/patchwork
             API_MODERATION_SERVICE_URL: http://patchwork-thimble:4200
             MODERATION_SERVICE_TOKEN: ${MODERATION_SERVICE_TOKEN:?Set MODERATION_SERVICE_TOKEN in .env}
+            API_ATTACHMENT_INTERVAL_SECONDS: ${API_ATTACHMENT_INTERVAL_SECONDS:-30}
+            ATTACHMENT_OBJECT_ENDPOINT: http://patchwork-objects:9000
+            ATTACHMENT_OBJECT_ACCESS_KEY: ${PATCHWORK_ATTACHMENT_ACCESS_KEY:?Set PATCHWORK_ATTACHMENT_ACCESS_KEY in .env}
+            ATTACHMENT_OBJECT_SECRET_KEY: ${PATCHWORK_ATTACHMENT_SECRET_KEY:?Set PATCHWORK_ATTACHMENT_SECRET_KEY in .env}
+            ATTACHMENT_OBJECT_BUCKET: patchwork-private-attachments
+            ATTACHMENT_SIGNING_KEY: ${PATCHWORK_ATTACHMENT_SIGNING_KEY:?Set PATCHWORK_ATTACHMENT_SIGNING_KEY in .env}
+            ATTACHMENT_CLAMD_HOST: patchwork-clamav
+            ATTACHMENT_CLAMD_PORT: 3310
         healthcheck:
             test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:4000/health/ready >/dev/null']
             interval: 10s
@@ -120,6 +132,39 @@ services:
             ATPROTO_SERVICE_DID: ${ATPROTO_SERVICE_DID:?Set a real ATPROTO_SERVICE_DID}
             ATPROTO_PDS_URL: ${ATPROTO_PDS_URL:-https://bsky.social}
             DATABASE_URL: postgresql://patchwork:${PATCHWORK_POSTGRES_PASSWORD:?Set PATCHWORK_POSTGRES_PASSWORD in .env}@patchwork-postgres:5432/patchwork
+        networks:
+            internal:
+
+    patchwork-objects:
+        image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+        container_name: patchwork-objects
+        restart: unless-stopped
+        command: ['server', '/data']
+        environment:
+            MINIO_ROOT_USER: ${PATCHWORK_ATTACHMENT_ACCESS_KEY:?Set PATCHWORK_ATTACHMENT_ACCESS_KEY in .env}
+            MINIO_ROOT_PASSWORD: ${PATCHWORK_ATTACHMENT_SECRET_KEY:?Set PATCHWORK_ATTACHMENT_SECRET_KEY in .env}
+        healthcheck:
+            test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null']
+            interval: 10s
+            timeout: 5s
+            retries: 18
+        volumes:
+            - patchwork-object-data:/data
+        networks:
+            internal:
+
+    patchwork-clamav:
+        image: clamav/clamav@sha256:6b7c8e09559250f25b0184516b0a2ae805136e57485260e16c780c9fd6e6aba9
+        container_name: patchwork-clamav
+        restart: unless-stopped
+        healthcheck:
+            test: ['CMD-SHELL', 'clamdscan --ping 1 >/dev/null']
+            interval: 30s
+            timeout: 10s
+            retries: 20
+            start_period: 360s
+        volumes:
+            - patchwork-clamav-signatures:/var/lib/clamav
         networks:
             internal:
 
@@ -231,6 +276,8 @@ services:
 
 volumes:
     patchwork-postgres-data:
+    patchwork-object-data:
+    patchwork-clamav-signatures:
 
 networks:
     internal:

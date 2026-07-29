@@ -161,6 +161,18 @@ be retried only after checking database availability and migration 0012. Never
 manually broaden a deletion predicate to clear the alert. A stale pass beyond
 two hours is treated as a scheduler or API-liveness fault.
 
+### Private attachment deletion
+
+Check `patchwork_attachment_deletion_failures_pending`, the redacted
+`attachment_pipeline_sweep_completed` event, MinIO health, and the durable
+`attachment_deletion_jobs` rows. Do not remove failed jobs or attachment
+metadata to clear the alert. Restore object-store connectivity, allow the
+bounded exponential retry to run, and verify that the original and derivative
+keys are absent before resolving the incident. If the entire sweep failed,
+check PostgreSQL, ClamAV, and MinIO readiness without copying object keys,
+filenames, upload tokens, signed URLs, or attachment bodies into logs or
+incident notes.
+
 Every game day records UTC timestamps, commands, alert transition and delivery,
 operator decision, recovery observation, and follow-up fixes in the Phase 7
 evidence file. Local simulations do not satisfy the staging alert-delivery gate.

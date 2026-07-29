@@ -46,6 +46,15 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations: { runbook_url: "docs/operations/incident-response.md#retention-enforcement" }
+      - alert: PatchworkAttachmentDeletionFailed
+        expr: patchwork_attachment_deletion_failures_pending{service="api",environment="staging"} > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations: { runbook_url: "docs/operations/incident-response.md#private-attachment-deletion" }
+      - alert: PatchworkAttachmentPipelineSweepFailed
+        expr: increase(patchwork_attachment_pipeline_sweep_failures_total{service="api",environment="staging"}[15m]) > 0
+        labels: { severity: warning }
+        annotations: { runbook_url: "docs/operations/incident-response.md#private-attachment-deletion" }
       - alert: PatchworkModerationRetentionFailed
         expr: moderation_retention_last_attempt_success{service="moderation-worker",environment="staging"} == 0
         for: 5m
