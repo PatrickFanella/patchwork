@@ -22,8 +22,10 @@ second cross-route case applies 200% root text sizing with
 `prefers-reduced-motion: reduce`, proves that page-level horizontal overflow
 does not appear, and verifies that animation and transition duration collapse
 to the reduced-motion budget. A focused Phase 8 accessibility/presentation run
-passed 70 cases before the three legal-policy routes were added. The final
-feature-completion evidence records the superseding full-suite count.
+passed 70 cases before the three legal-policy routes were added. The
+superseding complete production-mode Chromium run passed 96 runnable cases
+with one credentialed external journey skipped; all eighteen unfiltered axe
+route scans passed.
 
 Playwright now starts Patchwork on the dedicated strict port `41739` with
 server reuse disabled. During this audit, the former port-5173 configuration
