@@ -90,6 +90,12 @@ import {
     type OrganizationMember,
     type OrganizationStewardship,
     type PublicOrganization,
+    type ExactAddressRequest,
+    type VerificationApplication,
+    type VerificationAppeal,
+    type VerificationReviewQueue,
+    type VerificationSubjectType,
+    type VerificationWorkspace,
     type VolunteerDiscoveryProfile,
     type VolunteerProfileCommandInput,
     acceptCurrentPoliciesViaApi,
@@ -114,6 +120,9 @@ import {
     fetchOrganizationMembersViaApi,
     fetchOrganizationsViaApi,
     fetchOrganizationStewardshipsViaApi,
+    fetchExactAddressReviewQueueViaApi,
+    fetchVerificationReviewQueueViaApi,
+    fetchVerificationWorkspaceViaApi,
     fetchSettingsAuditFromApi,
     fetchSettingsFromApi,
     fetchVolunteerProfilesViaApi,
@@ -121,13 +130,19 @@ import {
     getAtVolunteerProfileViaApi,
     initiateChatViaApi,
     inviteOrganizationMemberViaApi,
+    decideExactAddressViaApi,
+    decideVerificationAppealViaApi,
+    decideVerificationViaApi,
     queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
     reconcileAidPostStatusViaApi,
     reconfirmOrganizationStewardshipViaApi,
+    requestExactPublicAddressViaApi,
     removeOrganizationMemberViaApi,
     updateSettingsViaApi,
     transitionAidPostViaApi,
+    submitVerificationAppealViaApi,
+    submitVerificationApplicationViaApi,
     updateAccountPreferencesViaApi,
     updateOrganizationMemberRoleViaApi,
     updateAtDirectoryResourceViaApi,
@@ -178,6 +193,7 @@ const appRoutes = [
     '/resources',
     '/volunteer',
     '/organizations',
+    '/verification',
     '/posting',
     '/chat',
     '/settings',
@@ -215,6 +231,7 @@ const routeLabels: Readonly<Record<AppRoute, string>> = {
     '/resources': 'Resources',
     '/volunteer': 'Volunteer',
     '/organizations': 'Organizations',
+    '/verification': 'Verification',
     '/posting': 'Posting',
     '/chat': 'Chat',
     '/settings': 'Settings',
@@ -236,6 +253,7 @@ const primaryRoutes: readonly AppRoute[] = [
     '/resources',
     '/volunteer',
     '/organizations',
+    '/verification',
     '/posting',
 ];
 
@@ -349,6 +367,13 @@ const formatCategoryLabel = (value: string): string => {
         .split('-')
         .map(part => part.charAt(0).toUpperCase() + part.slice(1))
         .join(' ');
+};
+
+const formatDateTime = (value: string): string => {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ?
+            'an unavailable date'
+        :   parsed.toLocaleString();
 };
 
 const normalizeRoute = (pathname: string): AppRoute => {
@@ -3142,6 +3167,23 @@ const ResourceRoute = ({
                     <p className='mt-2 text-sm text-mh-textSoft'>
                         {detailPanel.eligibilityNotes}
                     </p>
+                    {detailPanel.exactPublicAddress ?
+                        <div className='mh-alert mt-3 text-sm'>
+                            <p className='font-bold'>
+                                Moderator-approved public address
+                            </p>
+                            <p>{detailPanel.exactPublicAddress}</p>
+                            <p className='mt-1 text-xs text-mh-textSoft'>
+                                Approval expires{' '}
+                                {formatDateTime(
+                                    detailPanel.exactAddressApprovalExpiresAt ??
+                                        '',
+                                )}
+                                . This is a public resource address, not a
+                                person&apos;s location.
+                            </p>
+                        </div>
+                    :   null}
                     <div className='mt-4 flex flex-wrap gap-2'>
                         {detailPanel.actions.map(action => (
                             <Button
@@ -4123,6 +4165,633 @@ const VolunteerRoute = ({ did }: { did: string }) => {
             :   <Panel title='Sign in to volunteer'>
                     <p>Create and manage a profile with your AT identity.</p>
                 </Panel>}
+        </section>
+    );
+};
+
+const VerificationRoute = ({ did }: { did: string }) => {
+    const [workspace, setWorkspace] = useState<VerificationWorkspace>();
+    const [review, setReview] = useState<VerificationReviewQueue>();
+    const [exactReview, setExactReview] =
+        useState<ExactAddressRequest[]>();
+    const [status, setStatus] = useState('Loading private verification status…');
+    const [subjectType, setSubjectType] =
+        useState<VerificationSubjectType>('volunteer');
+    const [organizationId, setOrganizationId] = useState('');
+    const [resourceUri, setResourceUri] = useState('');
+    const [evidenceLabel, setEvidenceLabel] = useState('');
+    const [evidenceIssuer, setEvidenceIssuer] = useState('');
+    const [privateNotes, setPrivateNotes] = useState('');
+    const [attachmentId, setAttachmentId] = useState('');
+    const [appealApplicationId, setAppealApplicationId] = useState('');
+    const [appealReason, setAppealReason] = useState('');
+    const [streetAddress, setStreetAddress] = useState('');
+    const [latitude, setLatitude] = useState('');
+    const [longitude, setLongitude] = useState('');
+    const [confidentialFacility, setConfidentialFacility] = useState(false);
+    const [reviewReason, setReviewReason] = useState(
+        'Evidence reviewed against the verification policy.',
+    );
+
+    const load = useCallback(async () => {
+        if (!did) return;
+        setStatus('Loading private verification status…');
+        const mine = await fetchVerificationWorkspaceViaApi();
+        if (!mine.ok) {
+            setStatus(`Error: ${mine.error}`);
+            return;
+        }
+        setWorkspace(mine.data);
+        setStatus('Verification status loaded.');
+
+        const [verificationQueue, exactQueue] = await Promise.all([
+            fetchVerificationReviewQueueViaApi(),
+            fetchExactAddressReviewQueueViaApi(),
+        ]);
+        setReview(verificationQueue.ok ? verificationQueue.data : undefined);
+        setExactReview(exactQueue.ok ? exactQueue.data : undefined);
+    }, [did]);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    if (!did) {
+        return (
+            <Panel title='Sign in to manage verification'>
+                <p className='text-sm text-mh-textMuted'>
+                    Verification evidence, decisions, appeals, and exact-address
+                    requests are private authenticated workflows.
+                </p>
+                <a className='mh-text-link mt-3 inline-block' href='/login'>
+                    Sign in
+                </a>
+            </Panel>
+        );
+    }
+
+    const submitApplication = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setStatus('Submitting verification application…');
+        const result = await submitVerificationApplicationViaApi({
+            subjectType,
+            ...(subjectType !== 'volunteer' ? { organizationId } : {}),
+            ...(subjectType === 'resource' ? { resourceUri } : {}),
+            evidence: [
+                {
+                    kind:
+                        subjectType === 'volunteer' ? 'identity'
+                        : subjectType === 'organization' ?
+                            'organization-registration'
+                        :   'service-authorization',
+                    label: evidenceLabel,
+                    issuer: evidenceIssuer || null,
+                    issuedAt: null,
+                    attachmentId: attachmentId || null,
+                    privateNotes: privateNotes || null,
+                },
+            ],
+        });
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        setEvidenceLabel('');
+        setEvidenceIssuer('');
+        setPrivateNotes('');
+        setAttachmentId('');
+        await load();
+        setStatus('Verification application submitted privately.');
+    };
+
+    const submitAppeal = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setStatus('Submitting appeal…');
+        const result = await submitVerificationAppealViaApi({
+            applicationId: appealApplicationId,
+            reason: appealReason,
+        });
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        setAppealReason('');
+        await load();
+        setStatus('Appeal submitted for moderator review.');
+    };
+
+    const submitExactAddress = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setStatus('Submitting exact public-resource address…');
+        const result = await requestExactPublicAddressViaApi({
+            organizationId,
+            resourceUri,
+            streetAddress,
+            latitude: Number(latitude),
+            longitude: Number(longitude),
+            confidentialFacility,
+        });
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        setStreetAddress('');
+        await load();
+        setStatus(
+            confidentialFacility ?
+                'Confidential address quarantined and kept out of public discovery.'
+            :   'Exact address submitted for separate moderator approval.',
+        );
+    };
+
+    const decideApplication = async (
+        application: VerificationApplication,
+        action: 'approve' | 'deny' | 'revoke' | 'renew',
+    ) => {
+        setStatus(`Recording ${action} decision…`);
+        const result = await decideVerificationViaApi({
+            applicationId: application.id,
+            action,
+            reason: reviewReason,
+        });
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        await load();
+        setStatus(`Verification ${action} decision recorded.`);
+    };
+
+    const decideAppeal = async (
+        appeal: VerificationAppeal,
+        decision: 'upheld' | 'denied',
+    ) => {
+        const result = await decideVerificationAppealViaApi({
+            appealId: appeal.id,
+            decision,
+            resolutionNote: reviewReason,
+        });
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        await load();
+        setStatus(`Appeal ${decision} decision recorded.`);
+    };
+
+    const decideExact = async (
+        request: ExactAddressRequest,
+        decision: 'approve' | 'reject' | 'revoke',
+    ) => {
+        const result = await decideExactAddressViaApi({
+            requestId: request.id,
+            decision,
+            reason: reviewReason,
+        });
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        await load();
+        setStatus(`Exact-address ${decision} decision recorded.`);
+    };
+
+    const appealable =
+        workspace?.applications.filter(application =>
+            ['denied', 'revoked', 'expired'].includes(application.status),
+        ) ?? [];
+
+    return (
+        <section className='space-y-6'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>Verification</h1>
+                <p className='mt-2 text-sm text-mh-textMuted'>
+                    Evidence stays private. Public verification expires
+                    annually, and exact resource addresses require a separate
+                    moderator approval.
+                </p>
+                <p
+                    role={status.startsWith('Error:') ? 'alert' : 'status'}
+                    className='mt-3 text-sm font-bold'
+                >
+                    {status}
+                </p>
+            </header>
+
+            <Panel title='Apply for verification'>
+                <form className='space-y-3' onSubmit={submitApplication}>
+                    <label className='block text-sm font-bold'>
+                        Subject
+                        <select
+                            className='mh-input mt-1 w-full px-3 py-2'
+                            value={subjectType}
+                            onChange={event =>
+                                setSubjectType(
+                                    event.target
+                                        .value as VerificationSubjectType,
+                                )
+                            }
+                        >
+                            <option value='volunteer'>My volunteer identity</option>
+                            <option value='organization'>Organization</option>
+                            <option value='resource'>Organization resource</option>
+                        </select>
+                    </label>
+                    {subjectType !== 'volunteer' ?
+                        <label className='block text-sm font-bold'>
+                            Organization ID
+                            <Input
+                                className='mt-1'
+                                required
+                                value={organizationId}
+                                onChange={event =>
+                                    setOrganizationId(event.target.value)
+                                }
+                            />
+                        </label>
+                    :   null}
+                    {subjectType === 'resource' ?
+                        <label className='block text-sm font-bold'>
+                            Resource AT URI
+                            <Input
+                                className='mt-1'
+                                required
+                                value={resourceUri}
+                                onChange={event =>
+                                    setResourceUri(event.target.value)
+                                }
+                            />
+                        </label>
+                    :   null}
+                    <label className='block text-sm font-bold'>
+                        Evidence label
+                        <Input
+                            className='mt-1'
+                            required
+                            value={evidenceLabel}
+                            onChange={event =>
+                                setEvidenceLabel(event.target.value)
+                            }
+                        />
+                    </label>
+                    <label className='block text-sm font-bold'>
+                        Issuer (optional)
+                        <Input
+                            className='mt-1'
+                            value={evidenceIssuer}
+                            onChange={event =>
+                                setEvidenceIssuer(event.target.value)
+                            }
+                        />
+                    </label>
+                    <label className='block text-sm font-bold'>
+                        Clean private attachment ID (optional)
+                        <Input
+                            className='mt-1'
+                            value={attachmentId}
+                            onChange={event =>
+                                setAttachmentId(event.target.value)
+                            }
+                        />
+                    </label>
+                    <label className='block text-sm font-bold'>
+                        Private reviewer notes (optional)
+                        <Input
+                            className='mt-1'
+                            value={privateNotes}
+                            onChange={event =>
+                                setPrivateNotes(event.target.value)
+                            }
+                        />
+                    </label>
+                    <Button type='submit'>Submit private application</Button>
+                </form>
+            </Panel>
+
+            <Panel title='My status and annual renewal'>
+                {workspace?.applications.length ?
+                    <ul className='space-y-3'>
+                        {workspace.applications.map(application => (
+                            <li className='mh-record-card' key={application.id}>
+                                <div className='flex flex-wrap justify-between gap-2'>
+                                    <strong>
+                                        {formatCategoryLabel(
+                                            application.subjectType,
+                                        )}
+                                    </strong>
+                                    <Badge
+                                        tone={
+                                            application.status === 'approved' ?
+                                                'success'
+                                            : application.status === 'pending' ?
+                                                'info'
+                                            :   'danger'
+                                        }
+                                    >
+                                        {formatCategoryLabel(
+                                            application.status,
+                                        )}
+                                    </Badge>
+                                </div>
+                                <p className='mt-2 text-xs text-mh-textMuted'>
+                                    Application {application.id}
+                                </p>
+                                {application.expiresAt ?
+                                    <p className='mt-1 text-xs'>
+                                        Annual approval expires{' '}
+                                        {formatDateTime(application.expiresAt)}
+                                    </p>
+                                :   null}
+                            </li>
+                        ))}
+                    </ul>
+                :   <p className='text-sm text-mh-textMuted'>
+                        No verification applications yet.
+                    </p>
+                }
+            </Panel>
+
+            {appealable.length ?
+                <Panel title='Appeal a decision'>
+                    <form className='space-y-3' onSubmit={submitAppeal}>
+                        <label className='block text-sm font-bold'>
+                            Application
+                            <select
+                                className='mh-input mt-1 w-full px-3 py-2'
+                                required
+                                value={appealApplicationId}
+                                onChange={event =>
+                                    setAppealApplicationId(event.target.value)
+                                }
+                            >
+                                <option value=''>Choose an application</option>
+                                {appealable.map(application => (
+                                    <option
+                                        key={application.id}
+                                        value={application.id}
+                                    >
+                                        {application.subjectType} —{' '}
+                                        {application.status}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className='block text-sm font-bold'>
+                            Appeal reason
+                            <Input
+                                className='mt-1'
+                                required
+                                value={appealReason}
+                                onChange={event =>
+                                    setAppealReason(event.target.value)
+                                }
+                            />
+                        </label>
+                        <Button type='submit'>Submit appeal</Button>
+                    </form>
+                </Panel>
+            :   null}
+
+            <Panel title='Request an exact public-resource address'>
+                <p className='mb-3 text-sm text-mh-textMuted'>
+                    Active organization and resource verification are required.
+                    Confidential facilities are always quarantined.
+                </p>
+                <form className='space-y-3' onSubmit={submitExactAddress}>
+                    <label className='block text-sm font-bold'>
+                        Organization ID
+                        <Input
+                            className='mt-1'
+                            required
+                            value={organizationId}
+                            onChange={event =>
+                                setOrganizationId(event.target.value)
+                            }
+                        />
+                    </label>
+                    <label className='block text-sm font-bold'>
+                        Resource AT URI
+                        <Input
+                            className='mt-1'
+                            required
+                            value={resourceUri}
+                            onChange={event => setResourceUri(event.target.value)}
+                        />
+                    </label>
+                    <label className='block text-sm font-bold'>
+                        Street address
+                        <Input
+                            className='mt-1'
+                            required
+                            value={streetAddress}
+                            onChange={event =>
+                                setStreetAddress(event.target.value)
+                            }
+                        />
+                    </label>
+                    <div className='grid gap-3 sm:grid-cols-2'>
+                        <label className='block text-sm font-bold'>
+                            Latitude
+                            <Input
+                                className='mt-1'
+                                type='number'
+                                step='any'
+                                required
+                                value={latitude}
+                                onChange={event =>
+                                    setLatitude(event.target.value)
+                                }
+                            />
+                        </label>
+                        <label className='block text-sm font-bold'>
+                            Longitude
+                            <Input
+                                className='mt-1'
+                                type='number'
+                                step='any'
+                                required
+                                value={longitude}
+                                onChange={event =>
+                                    setLongitude(event.target.value)
+                                }
+                            />
+                        </label>
+                    </div>
+                    <label className='flex items-center gap-2 text-sm font-bold'>
+                        <input
+                            type='checkbox'
+                            checked={confidentialFacility}
+                            onChange={event =>
+                                setConfidentialFacility(event.target.checked)
+                            }
+                        />
+                        This is a confidential facility
+                    </label>
+                    <Button type='submit'>Request separate approval</Button>
+                </form>
+                {workspace?.exactAddressRequests.length ?
+                    <ul className='mt-4 space-y-2'>
+                        {workspace.exactAddressRequests.map(request => (
+                            <li className='mh-record-card' key={request.id}>
+                                {request.resourceUri} —{' '}
+                                <strong>{request.status}</strong>
+                            </li>
+                        ))}
+                    </ul>
+                :   null}
+            </Panel>
+
+            {review || exactReview ?
+                <Panel title='Moderator review'>
+                    <p className='mb-3 text-sm text-mh-textMuted'>
+                        This section appears only for authorized reviewers.
+                        Evidence metadata is never included in public discovery.
+                    </p>
+                    <label className='block text-sm font-bold'>
+                        Decision rationale
+                        <Input
+                            className='mt-1'
+                            required
+                            value={reviewReason}
+                            onChange={event =>
+                                setReviewReason(event.target.value)
+                            }
+                        />
+                    </label>
+                    <div className='mt-4 space-y-3'>
+                        {review?.applications.map(application => (
+                            <Card
+                                key={application.id}
+                                title={`${application.subjectType} verification`}
+                            >
+                                <p className='text-xs'>
+                                    {application.applicantDid} ·{' '}
+                                    {application.status}
+                                </p>
+                                <ul className='my-2 text-xs'>
+                                    {review.evidence
+                                        .filter(
+                                            item =>
+                                                item.applicationId ===
+                                                application.id,
+                                        )
+                                        .map(item => (
+                                            <li key={item.id}>
+                                                {item.label}
+                                                {item.attachment ?
+                                                    ` — attachment ${item.attachment.status}`
+                                                :   ''}
+                                            </li>
+                                        ))}
+                                </ul>
+                                <div className='flex flex-wrap gap-2'>
+                                    {application.status === 'approved' ?
+                                        <>
+                                            <Button
+                                                onClick={() =>
+                                                    void decideApplication(
+                                                        application,
+                                                        'renew',
+                                                    )
+                                                }
+                                            >
+                                                Renew one year
+                                            </Button>
+                                            <Button
+                                                variant='neutral'
+                                                onClick={() =>
+                                                    void decideApplication(
+                                                        application,
+                                                        'revoke',
+                                                    )
+                                                }
+                                            >
+                                                Revoke
+                                            </Button>
+                                        </>
+                                    :   <>
+                                            <Button
+                                                onClick={() =>
+                                                    void decideApplication(
+                                                        application,
+                                                        'approve',
+                                                    )
+                                                }
+                                            >
+                                                Approve one year
+                                            </Button>
+                                            <Button
+                                                variant='neutral'
+                                                onClick={() =>
+                                                    void decideApplication(
+                                                        application,
+                                                        'deny',
+                                                    )
+                                                }
+                                            >
+                                                Deny
+                                            </Button>
+                                        </>
+                                    }
+                                </div>
+                            </Card>
+                        ))}
+                        {review?.appeals.map(appeal => (
+                            <Card key={appeal.id} title='Verification appeal'>
+                                <p className='text-sm'>{appeal.reason}</p>
+                                <div className='mt-2 flex gap-2'>
+                                    <Button
+                                        onClick={() =>
+                                            void decideAppeal(appeal, 'upheld')
+                                        }
+                                    >
+                                        Uphold appeal
+                                    </Button>
+                                    <Button
+                                        variant='neutral'
+                                        onClick={() =>
+                                            void decideAppeal(appeal, 'denied')
+                                        }
+                                    >
+                                        Deny appeal
+                                    </Button>
+                                </div>
+                            </Card>
+                        ))}
+                        {exactReview?.map(request => (
+                            <Card key={request.id} title='Exact-address review'>
+                                <p className='text-sm'>
+                                    {request.streetAddress} ·{' '}
+                                    {request.resourceUri}
+                                </p>
+                                {request.confidentialFacility ?
+                                    <p className='mh-alert mt-2 text-xs font-bold'>
+                                        Confidential: approval is prohibited.
+                                    </p>
+                                :   null}
+                                <div className='mt-2 flex gap-2'>
+                                    <Button
+                                        disabled={request.confidentialFacility}
+                                        onClick={() =>
+                                            void decideExact(request, 'approve')
+                                        }
+                                    >
+                                        Approve public address
+                                    </Button>
+                                    <Button
+                                        variant='neutral'
+                                        onClick={() =>
+                                            void decideExact(request, 'reject')
+                                        }
+                                    >
+                                        Reject
+                                    </Button>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </Panel>
+            :   null}
         </section>
     );
 };
@@ -6433,6 +7102,8 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             :   <VolunteerRoute did={currentUserDid} />
         : currentRoute === '/organizations' ?
             <OrganizationsRoute did={currentUserDid} />
+        : currentRoute === '/verification' ?
+            <VerificationRoute did={currentUserDid} />
         : currentRoute === '/chat' ?
             <ChatRoute
                 currentUserDid={currentUserDid}

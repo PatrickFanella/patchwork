@@ -42,6 +42,13 @@ export interface ResourceDirectoryCard {
         url?: string;
         phone?: string;
     };
+    exactPublicAddress?: {
+        kind: 'exact-public-resource';
+        streetAddress: string;
+        latitude: number;
+        longitude: number;
+        approvalExpiresAt: string;
+    };
     distanceMeters?: number;
 }
 
@@ -79,6 +86,8 @@ export interface ResourceDetailPanelModel {
     categoryLabel?: string;
     openHours?: string;
     eligibilityNotes?: string;
+    exactPublicAddress?: string;
+    exactAddressApprovalExpiresAt?: string;
     actions: readonly ResourceDetailAction[];
 }
 
@@ -235,6 +244,9 @@ export const openResourceDetailPanel = (
         openHours: selected.openHours ?? 'Hours unavailable',
         eligibilityNotes:
             selected.eligibilityNotes ?? 'Eligibility details unavailable',
+        exactPublicAddress: selected.exactPublicAddress?.streetAddress,
+        exactAddressApprovalExpiresAt:
+            selected.exactPublicAddress?.approvalExpiresAt,
         actions: [
             {
                 id: 'request_intake',

@@ -1283,6 +1283,230 @@ export const reconfirmOrganizationStewardshipViaApi = async (
         :   result;
 };
 
+export type VerificationSubjectType =
+    | 'volunteer'
+    | 'organization'
+    | 'resource';
+export type VerificationApplicationStatus =
+    | 'pending'
+    | 'under-review'
+    | 'approved'
+    | 'denied'
+    | 'revoked'
+    | 'expired';
+
+export interface VerificationApplication {
+    id: string;
+    applicantDid: string;
+    subjectType: VerificationSubjectType;
+    organizationId: string | null;
+    subjectRef: string;
+    status: VerificationApplicationStatus;
+    submittedAt: string;
+    decidedAt: string | null;
+    expiresAt: string | null;
+    revokedAt: string | null;
+    updatedAt: string;
+}
+
+export interface VerificationEvidence {
+    id: string;
+    applicationId: string;
+    kind: string;
+    label: string;
+    issuer: string | null;
+    issuedAt: string | null;
+    attachmentId: string | null;
+    privateNotes: string | null;
+    createdAt: string;
+    attachment?: {
+        id: string;
+        status: string | null;
+        detectedMime: string | null;
+    } | null;
+}
+
+export interface VerificationAppeal {
+    id: string;
+    applicationId: string;
+    applicantDid?: string;
+    reason: string;
+    status: string;
+    submittedAt: string;
+    resolvedAt?: string | null;
+    resolutionNote?: string | null;
+}
+
+export interface ExactAddressRequest {
+    id: string;
+    organizationId: string;
+    resourceUri: string;
+    applicantDid?: string;
+    streetAddress?: string;
+    latitude?: number;
+    longitude?: number;
+    confidentialFacility: boolean;
+    status: string;
+    requestedAt: string;
+    approvalExpiresAt?: string | null;
+    decisionReason?: string | null;
+}
+
+export interface VerificationWorkspace {
+    applications: VerificationApplication[];
+    evidence: VerificationEvidence[];
+    appeals: VerificationAppeal[];
+    exactAddressRequests: ExactAddressRequest[];
+}
+
+export interface VerificationReviewQueue {
+    applications: VerificationApplication[];
+    evidence: VerificationEvidence[];
+    appeals: VerificationAppeal[];
+}
+
+const parseVerificationWorkspace = (
+    payload: unknown,
+): ApiClientResult<VerificationWorkspace> => {
+    if (
+        !isRecord(payload) ||
+        !Array.isArray(payload['applications']) ||
+        !Array.isArray(payload['evidence']) ||
+        !Array.isArray(payload['appeals']) ||
+        !Array.isArray(payload['exactAddressRequests'])
+    ) {
+        return invalidResponseFailure(
+            'Verification status response was malformed.',
+        );
+    }
+    return { ok: true, data: payload as unknown as VerificationWorkspace };
+};
+
+export const fetchVerificationWorkspaceViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<VerificationWorkspace>> => {
+    const result = await requestJson(
+        '/verification/mine',
+        new URLSearchParams(),
+        signal,
+    );
+    return result.ok ? parseVerificationWorkspace(result.data) : result;
+};
+
+export const submitVerificationApplicationViaApi = async (
+    input: {
+        subjectType: VerificationSubjectType;
+        organizationId?: string;
+        resourceUri?: string;
+        evidence: Array<{
+            kind:
+                | 'identity'
+                | 'organization-registration'
+                | 'service-authorization'
+                | 'community-reference'
+                | 'training'
+                | 'other';
+            label: string;
+            issuer: string | null;
+            issuedAt: string | null;
+            attachmentId: string | null;
+            privateNotes: string | null;
+        }>;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<unknown>> =>
+    requestJsonPost('/verification/applications', input, signal);
+
+export const submitVerificationAppealViaApi = async (
+    input: { applicationId: string; reason: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<unknown>> =>
+    requestJsonPost('/verification/appeals', input, signal);
+
+export const requestExactPublicAddressViaApi = async (
+    input: {
+        organizationId: string;
+        resourceUri: string;
+        streetAddress: string;
+        latitude: number;
+        longitude: number;
+        confidentialFacility: boolean;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<unknown>> =>
+    requestJsonPost('/verification/exact-address/requests', input, signal);
+
+export const fetchVerificationReviewQueueViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<VerificationReviewQueue>> => {
+    const result = await requestJson(
+        '/verification/review',
+        new URLSearchParams(),
+        signal,
+    );
+    if (
+        !result.ok ||
+        !isRecord(result.data) ||
+        !Array.isArray(result.data['applications']) ||
+        !Array.isArray(result.data['evidence']) ||
+        !Array.isArray(result.data['appeals'])
+    ) {
+        return result.ok ?
+                invalidResponseFailure(
+                    'Verification review response was malformed.',
+                )
+            :   result;
+    }
+    return { ok: true, data: result.data as unknown as VerificationReviewQueue };
+};
+
+export const decideVerificationViaApi = async (
+    input: {
+        applicationId: string;
+        action: 'approve' | 'deny' | 'revoke' | 'renew';
+        reason: string;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<unknown>> =>
+    requestJsonPost('/verification/decisions', input, signal);
+
+export const decideVerificationAppealViaApi = async (
+    input: {
+        appealId: string;
+        decision: 'upheld' | 'denied';
+        resolutionNote: string;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<unknown>> =>
+    requestJsonPost('/verification/appeal-decisions', input, signal);
+
+export const fetchExactAddressReviewQueueViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<ExactAddressRequest[]>> => {
+    const result = await requestJson(
+        '/verification/exact-address/review',
+        new URLSearchParams(),
+        signal,
+    );
+    return result.ok ?
+            parseArrayProperty<ExactAddressRequest>(
+                result.data,
+                'requests',
+                'Exact-address review response was malformed.',
+            )
+        :   result;
+};
+
+export const decideExactAddressViaApi = async (
+    input: {
+        requestId: string;
+        decision: 'approve' | 'reject' | 'revoke';
+        reason: string;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<unknown>> =>
+    requestJsonPost('/verification/exact-address/decisions', input, signal);
+
 // ---------------------------------------------------------------------------
 // Settings API
 // ---------------------------------------------------------------------------
@@ -1688,6 +1912,26 @@ const mapDirectoryPayloadToCards = (
         }
 
         const contact = isRecord(row['contact']) ? row['contact'] : {};
+        const exactPublicAddress =
+            isRecord(row['exactPublicAddress']) ?
+                row['exactPublicAddress']
+            :   undefined;
+        const exactStreetAddress =
+            exactPublicAddress ?
+                readString(exactPublicAddress, 'streetAddress')
+            :   undefined;
+        const exactLatitude =
+            exactPublicAddress ?
+                readNumber(exactPublicAddress, 'latitude')
+            :   undefined;
+        const exactLongitude =
+            exactPublicAddress ?
+                readNumber(exactPublicAddress, 'longitude')
+            :   undefined;
+        const exactApprovalExpiresAt =
+            exactPublicAddress ?
+                readString(exactPublicAddress, 'approvalExpiresAt')
+            :   undefined;
 
         cards.push({
             uri,
@@ -1719,6 +1963,20 @@ const mapDirectoryPayloadToCards = (
                 url: readString(contact, 'url'),
                 phone: readString(contact, 'phone'),
             },
+            ...(exactStreetAddress &&
+            exactLatitude !== undefined &&
+            exactLongitude !== undefined &&
+            exactApprovalExpiresAt ?
+                {
+                    exactPublicAddress: {
+                        kind: 'exact-public-resource' as const,
+                        streetAddress: exactStreetAddress,
+                        latitude: exactLatitude,
+                        longitude: exactLongitude,
+                        approvalExpiresAt: exactApprovalExpiresAt,
+                    },
+                }
+            :   {}),
         });
 
         return cards;
