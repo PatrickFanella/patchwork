@@ -27,6 +27,17 @@ const composeEnvironment = {
     STAGING_ATPROTO_SESSION_ENCRYPTION_KEY: 'test-staging-encryption-key',
     MODERATION_SERVICE_TOKEN: 'test-production-service-token',
     STAGING_MODERATION_SERVICE_TOKEN: 'test-staging-service-token',
+    PATCHWORK_ATTACHMENT_ACCESS_KEY: 'test-production-object-access',
+    PATCHWORK_ATTACHMENT_SECRET_KEY:
+        'test-production-object-secret-that-is-long',
+    PATCHWORK_ATTACHMENT_SIGNING_KEY:
+        'test-production-signing-key-that-is-long',
+    STAGING_PATCHWORK_ATTACHMENT_ACCESS_KEY:
+        'test-staging-object-access',
+    STAGING_PATCHWORK_ATTACHMENT_SECRET_KEY:
+        'test-staging-object-secret-that-is-long',
+    STAGING_PATCHWORK_ATTACHMENT_SIGNING_KEY:
+        'test-staging-signing-key-that-is-long',
     PATCHWORK_PM_TILES_DIRECTORY: '/tmp/tiles',
     PATCHWORK_PM_TILES_FILENAME: 'us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
     STAGING_PATCHWORK_PM_TILES_DIRECTORY: '/tmp/tiles',
@@ -93,6 +104,16 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
                         'patchwork-api-migrations'
                     ]?.condition,
                 ).toBe('service_completed_successfully');
+                expect(
+                    services['patchwork-api']?.depends_on?.[
+                        'patchwork-objects'
+                    ]?.condition,
+                ).toBe('service_healthy');
+                expect(
+                    services['patchwork-api']?.depends_on?.[
+                        'patchwork-clamav'
+                    ]?.condition,
+                ).toBe('service_healthy');
                 for (const runtime of [
                     'patchwork-api',
                     'patchwork-spool',
@@ -116,6 +137,12 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
                     VITE_MAP_TILE_URL:
                         '/tiles/us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
                 });
+                expect(
+                    services['patchwork-objects']?.healthcheck?.test?.join(' '),
+                ).toContain('/minio/health/live');
+                expect(
+                    services['patchwork-clamav']?.healthcheck?.test?.join(' '),
+                ).toContain('clamdscan --ping');
                 const api = services['patchwork-api']?.environment;
                 expect(api).toMatchObject({
                     API_DATA_SOURCE: 'postgres',
@@ -130,6 +157,16 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
                     ATPROTO_OAUTH_REDIRECT_URI:
                         expect.stringMatching(/^https:/),
                     ATPROTO_SESSION_ENCRYPTION_KEY: expect.any(String),
+                    ATTACHMENT_OBJECT_ENDPOINT: expect.stringMatching(
+                        /^http:\/\/patchwork-objects:9000$/,
+                    ),
+                    ATTACHMENT_OBJECT_BUCKET: expect.stringContaining(
+                        'private-attachments',
+                    ),
+                    ATTACHMENT_SIGNING_KEY: expect.any(String),
+                    ATTACHMENT_CLAMD_HOST: expect.stringMatching(
+                        /^patchwork-clamav$/,
+                    ),
                 });
                 for (const runtime of [
                     'patchwork-api',

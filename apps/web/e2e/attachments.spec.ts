@@ -128,12 +128,14 @@ test('posting binds private bytes to the created aid-post without exposing stora
         );
     });
 
-    await page.goto('/posting');
+    await page.goto('/posting', { waitUntil: 'networkidle' });
+    await expect(page.getByText(ownerDid)).toBeVisible();
     await page.getByLabel('Private attachments (optional)').setInputFiles({
         name: 'handoff.png',
         mimeType: 'image/png',
         buffer: Buffer.from('private-handoff-bytes'),
     });
+    await expect(page.getByRole('listitem')).toHaveText('handoff.png · 1 KB');
     await page.getByRole('button', { name: 'Publish request' }).click();
 
     await expect(
