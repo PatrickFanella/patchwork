@@ -80,18 +80,20 @@ describePostgres('VerificationCaseService PostgreSQL boundary', () => {
         );
         await pool.query(
             `INSERT INTO private_attachments (
-                attachment_id, owner_did, purpose, object_key,
+                attachment_id, owner_did, purpose, filename, object_key,
                 declared_mime, detected_mime, byte_size, status,
+                upload_expires_at, retention_expires_at,
                 created_at, updated_at, deleted_at
              ) VALUES
-                ($1, $3, 'verification-evidence',
+                ($1, $3, 'verification-evidence', 'clean-evidence.pdf',
                  'verification/owner/clean-evidence',
                  'application/pdf', 'application/pdf', 100, 'clean',
-                 NOW(), NOW(), NULL),
+                 NOW(), NOW() + INTERVAL '1 year', NOW(), NOW(), NULL),
                 ($2, $3, 'verification-evidence',
+                 'quarantined-evidence.pdf',
                  'verification/owner/quarantined-evidence',
                  'application/pdf', 'application/pdf', 100, 'quarantined',
-                 NOW(), NOW(), NULL)`,
+                 NOW(), NOW() + INTERVAL '1 year', NOW(), NOW(), NULL)`,
             [cleanAttachmentId, quarantinedAttachmentId, ownerDid],
         );
     });

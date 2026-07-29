@@ -8,6 +8,15 @@ import {
     checkServiceHealth,
 } from './config.js';
 
+const productionAttachmentConfig = {
+    ATTACHMENT_OBJECT_ENDPOINT: 'http://objects:9000',
+    ATTACHMENT_OBJECT_ACCESS_KEY: 'attachment-access',
+    ATTACHMENT_OBJECT_SECRET_KEY: 'attachment-secret',
+    ATTACHMENT_OBJECT_BUCKET: 'private-attachments',
+    ATTACHMENT_SIGNING_KEY: 'attachment-signing-key-at-least-32-characters',
+    ATTACHMENT_CLAMD_HOST: 'clamav',
+};
+
 describe('config schema', () => {
     it('fails fast with a clear message for invalid DID', () => {
         const previous = process.env.ATPROTO_SERVICE_DID;
@@ -180,6 +189,7 @@ describe('validateProductionConfig', () => {
                 DATABASE_URL: 'postgresql://localhost/patchwork',
                 API_MODERATION_SERVICE_URL: 'http://moderation:4200',
                 MODERATION_SERVICE_TOKEN: 'service-secret',
+                ...productionAttachmentConfig,
             }),
         ).not.toThrow();
     });
@@ -204,8 +214,22 @@ describe('validateProductionConfig', () => {
                 API_DATABASE_URL: 'postgresql://localhost/patchwork',
                 API_MODERATION_SERVICE_URL: 'http://moderation:4200',
                 MODERATION_SERVICE_TOKEN: 'service-secret',
+                ...productionAttachmentConfig,
             }),
         ).not.toThrow();
+    });
+
+    it('requires the private object store and malware scanner in production', () => {
+        expect(() =>
+            validateProductionConfig({
+                NODE_ENV: 'production',
+                ATPROTO_SERVICE_DID: 'did:web:patchwork.example.com',
+                API_DATA_SOURCE: 'postgres',
+                DATABASE_URL: 'postgresql://localhost/patchwork',
+                API_MODERATION_SERVICE_URL: 'http://moderation:4200',
+                MODERATION_SERVICE_TOKEN: 'service-secret',
+            }),
+        ).toThrow(/private attachment runtime requires/);
     });
 });
 

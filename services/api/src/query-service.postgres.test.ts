@@ -51,7 +51,8 @@ describePostgres('PostgresProjectionQueryService', () => {
                       indexer_aid_post_projections,
                       indexer_directory_resource_projections,
                       indexer_volunteer_profile_projections,
-                      indexer_dead_letters`,
+                      indexer_dead_letters
+             RESTART IDENTITY CASCADE`,
         );
         const now = new Date();
         await pool.query(

@@ -403,16 +403,18 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         );
         await pool.query(
             `INSERT INTO private_attachments (
-                attachment_id, owner_did, purpose, object_key,
+                attachment_id, owner_did, purpose, filename, object_key,
                 declared_mime, detected_mime, byte_size, status,
+                upload_expires_at, retention_expires_at,
                 created_at, updated_at
              ) VALUES (
                 '55555555-5555-4555-8555-555555555555',
                 'did:plc:privacyviewer',
                 'verification-evidence',
+                'private-viewer-evidence.pdf',
                 'verification/private-viewer-evidence.pdf',
                 'application/pdf', 'application/pdf', 2048, 'clean',
-                NOW(), NOW()
+                NOW(), NOW() + INTERVAL '1 year', NOW(), NOW()
              );
              INSERT INTO verification_applications (
                 application_id, applicant_did, subject_type,

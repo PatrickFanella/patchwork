@@ -14,13 +14,18 @@
         "lint": "npm run typecheck",
         "typecheck": "tsc -p tsconfig.json --noEmit",
         "test": "vitest run --no-file-parallelism",
-        "test:integration:postgres": "vitest run --no-file-parallelism src/auth/session-repository.postgres.test.ts src/db/core-operational-state.test.ts src/db/volunteer-private-profile-store.postgres.test.ts src/http/lifecycle-transition-handler.postgres.test.ts src/http/durable-safety-handler.postgres.test.ts src/http/account-privacy-handler.postgres.test.ts src/http/discovery-handler.postgres.test.ts src/query-service.postgres.test.ts src/account-onboarding-service.postgres.test.ts src/organization-service.postgres.test.ts src/verification-case-service.postgres.test.ts src/coordination-service.postgres.test.ts src/exact-location-signal-service.postgres.test.ts"
+        "test:integration:postgres": "vitest run --no-file-parallelism src/auth/session-repository.postgres.test.ts src/db/core-operational-state.test.ts src/db/volunteer-private-profile-store.postgres.test.ts src/http/lifecycle-transition-handler.postgres.test.ts src/http/durable-safety-handler.postgres.test.ts src/http/account-privacy-handler.postgres.test.ts src/http/discovery-handler.postgres.test.ts src/query-service.postgres.test.ts src/account-onboarding-service.postgres.test.ts src/organization-service.postgres.test.ts src/verification-case-service.postgres.test.ts src/coordination-service.postgres.test.ts src/exact-location-signal-service.postgres.test.ts src/attachment-service.postgres.test.ts",
+        "test:integration:attachments": "vitest run --no-file-parallelism src/attachment-real-integration.test.ts"
     },
     "dependencies": {
         "@atproto/oauth-client-node": "0.4.8",
         "@patchwork/at-client": "0.1.0",
         "@patchwork/shared": "0.1.0",
-        "pg": "^8.19.0"
+        "file-type": "^21.3.2",
+        "minio": "^8.0.7",
+        "pdf-lib": "^1.17.1",
+        "pg": "^8.19.0",
+        "sharp": "^0.35.3"
     },
     "devDependencies": {
         "@types/pg": "^8.16.0"

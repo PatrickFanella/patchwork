@@ -66,6 +66,13 @@ import {
 } from './http/coordination-handler.js';
 import { CoordinationService } from './coordination-service.js';
 import {
+    createAttachmentHandler,
+    isAttachmentRoute,
+} from './http/attachment-handler.js';
+import { AttachmentService } from './attachment-service.js';
+import { MinioPrivateObjectStore } from './private-object-store.js';
+import { ClamdMalwareScanner } from './clamd-scanner.js';
+import {
     createExactLocationSignalHandler,
     isExactLocationSignalRoute,
 } from './http/exact-location-signal-handler.js';
@@ -133,6 +140,7 @@ if (postgresPool) {
         organization_table: string | null;
         verification_table: string | null;
         coordination_table: string | null;
+        attachment_table: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
@@ -145,7 +153,9 @@ if (postgresPool) {
             to_regclass('verification_applications')::TEXT
                 AS verification_table,
             to_regclass('coordination_offers')::TEXT
-                AS coordination_table`,
+                AS coordination_table,
+            to_regclass('attachment_scan_attempts')::TEXT
+                AS attachment_table`,
     );
     if (
         !projectionSchema.rows[0]?.projection_table ||
@@ -154,6 +164,7 @@ if (postgresPool) {
         !projectionSchema.rows[0]?.organization_table ||
         !projectionSchema.rows[0]?.verification_table ||
         !projectionSchema.rows[0]?.coordination_table ||
+        !projectionSchema.rows[0]?.attachment_table ||
         !projectionSchema.rows[0]?.state_table
     ) {
         await postgresPool.end();
@@ -220,6 +231,35 @@ const exactLocationSignalService =
             () => process.env['PATCHWORK_MAINTENANCE_MODE'] === 'true',
         )
     :   undefined;
+const attachmentService =
+    postgresPool &&
+    config.ATTACHMENT_OBJECT_ENDPOINT &&
+    config.ATTACHMENT_OBJECT_ACCESS_KEY &&
+    config.ATTACHMENT_OBJECT_SECRET_KEY &&
+    config.ATTACHMENT_OBJECT_BUCKET &&
+    config.ATTACHMENT_SIGNING_KEY &&
+    config.ATTACHMENT_CLAMD_HOST ?
+        new AttachmentService(
+            postgresPool,
+            new MinioPrivateObjectStore(
+                config.ATTACHMENT_OBJECT_BUCKET,
+                {
+                    endpoint: config.ATTACHMENT_OBJECT_ENDPOINT,
+                    accessKey: config.ATTACHMENT_OBJECT_ACCESS_KEY,
+                    secretKey: config.ATTACHMENT_OBJECT_SECRET_KEY,
+                },
+            ),
+            new ClamdMalwareScanner(
+                config.ATTACHMENT_CLAMD_HOST,
+                config.ATTACHMENT_CLAMD_PORT,
+            ),
+            config.ATTACHMENT_SIGNING_KEY,
+            `${config.API_PUBLIC_ORIGIN.replace(/\/$/, '')}/api`,
+        )
+    :   undefined;
+if (attachmentService) {
+    await attachmentService.ensureReady();
+}
 const consentExemptPaths = new Set([
     '/account/onboarding',
     '/account/consent',
@@ -311,7 +351,20 @@ const createAidPostCommandService =
             const client = await atAuthRuntime.aidPostClient(sessionToken);
             return new AidPostCommandService(
                 async () => client,
-                lifecycleRepository,
+                {
+                    reconcileDeletion: async command => {
+                        const result =
+                            await lifecycleRepository!.reconcileDeletion(
+                                command,
+                            );
+                        await attachmentService?.deleteForSubject(
+                            command.actorDid,
+                            command.postUri,
+                            new Date(command.occurredAt),
+                        );
+                        return result;
+                    },
+                },
                 lifecycleRepository,
             );
         }
@@ -419,6 +472,13 @@ const exactLocationSignalHandler =
     authenticateApiRequest && exactLocationSignalService ?
         createExactLocationSignalHandler({
             service: exactLocationSignalService,
+            authenticate: authenticateApiRequest,
+        })
+    :   undefined;
+const attachmentHandler =
+    authenticateApiRequest && attachmentService ?
+        createAttachmentHandler({
+            service: attachmentService,
             authenticate: authenticateApiRequest,
         })
     :   undefined;
@@ -539,6 +599,10 @@ const buildReadinessPayload = async (): Promise<{
     };
 };
 
+let attachmentDeletionFailuresTotal = 0;
+let attachmentDeletionFailuresPending = 0;
+let attachmentPipelineSweepFailuresTotal = 0;
+
 const renderPrometheusMetrics = (): string => {
     const uptimeSeconds = Math.floor(process.uptime());
 
@@ -553,7 +617,19 @@ const renderPrometheusMetrics = (): string => {
 
     const sliMetrics = sliCollector.renderPrometheus('api');
 
-    return `${baseMetrics}\n${sliMetrics}\n${retentionMetrics.renderPrometheus()}`;
+    const attachmentMetrics = [
+        '# HELP patchwork_attachment_deletion_failures_total Object deletion attempts that failed.',
+        '# TYPE patchwork_attachment_deletion_failures_total counter',
+        `patchwork_attachment_deletion_failures_total{project="patchwork",service="api",component="stitch"} ${attachmentDeletionFailuresTotal}`,
+        '# HELP patchwork_attachment_deletion_failures_pending Durable object deletion jobs with a recorded failure.',
+        '# TYPE patchwork_attachment_deletion_failures_pending gauge',
+        `patchwork_attachment_deletion_failures_pending{project="patchwork",service="api",component="stitch"} ${attachmentDeletionFailuresPending}`,
+        '# HELP patchwork_attachment_pipeline_sweep_failures_total Attachment pipeline sweeps that failed before completion.',
+        '# TYPE patchwork_attachment_pipeline_sweep_failures_total counter',
+        `patchwork_attachment_pipeline_sweep_failures_total{project="patchwork",service="api",component="stitch"} ${attachmentPipelineSweepFailuresTotal}`,
+    ].join('\n');
+
+    return `${baseMetrics}\n${sliMetrics}\n${retentionMetrics.renderPrometheus()}\n${attachmentMetrics}`;
 };
 
 const writeJson = (
@@ -1454,6 +1530,13 @@ const contractRoutes = [
     '/location/consent',
     '/location/signal',
     '/location/revoke',
+    '/attachments',
+    '/attachments/uploads',
+    '/attachments/access',
+    '/attachments/review',
+    '/attachments/:attachmentId',
+    '/attachments/uploads/:attachmentId',
+    '/attachments/content/:attachmentId',
     '/health',
     '/health/ready',
     '/metrics',
@@ -1673,6 +1756,18 @@ export const createApiServer = () => {
         if (
             exactLocationSignalHandler?.(request, response, requestUrl)
         ) {
+            return;
+        }
+        if (attachmentHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isAttachmentRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'ATTACHMENT_SERVICE_UNAVAILABLE',
+                    message: 'Private attachments are unavailable.',
+                },
+            });
             return;
         }
         if (isExactLocationSignalRoute(request, requestUrl)) {
@@ -1948,6 +2043,7 @@ export const startApiServer = () => {
     let verificationScheduler: RetentionScheduler | undefined;
     let coordinationScheduler: RetentionScheduler | undefined;
     let exactLocationScheduler: RetentionScheduler | undefined;
+    let attachmentScheduler: RetentionScheduler | undefined;
     if (postgresPool) {
         const retention = new PostgresRetentionService(postgresPool);
         retentionScheduler = startRetentionScheduler({
@@ -2061,6 +2157,47 @@ export const startApiServer = () => {
                 },
             });
         }
+        if (attachmentService) {
+            attachmentScheduler = startRetentionScheduler({
+                intervalMs:
+                    config.API_ATTACHMENT_INTERVAL_SECONDS * 1_000,
+                enforce: async () => {
+                    const scans = await attachmentService.runScanSweep();
+                    const lifecycle =
+                        await attachmentService.runLifecycleReconciliation();
+                    const deletions =
+                        await attachmentService.runDeletionSweep();
+                    attachmentDeletionFailuresTotal += deletions.failed;
+                    attachmentDeletionFailuresPending =
+                        deletions.failedPending;
+                    const orphans =
+                        await attachmentService.runOrphanReconciliation();
+                    const event = {
+                        level:
+                            deletions.failed > 0 ? 'error' : 'info',
+                        event: 'attachment_pipeline_sweep_completed',
+                        scans,
+                        lifecycle,
+                        deletions,
+                        orphans,
+                    };
+                    if (deletions.failed > 0) {
+                        console.error(JSON.stringify(event));
+                    } else {
+                        console.log(JSON.stringify(event));
+                    }
+                },
+                onError: () => {
+                    attachmentPipelineSweepFailuresTotal += 1;
+                    console.error(
+                        JSON.stringify({
+                            level: 'error',
+                            event: 'attachment_pipeline_sweep_failed',
+                        }),
+                    );
+                },
+            });
+        }
     }
     server.listen(config.API_PORT, config.API_HOST, () => {
         console.log(
@@ -2073,6 +2210,7 @@ export const startApiServer = () => {
         verificationScheduler?.stop();
         coordinationScheduler?.stop();
         exactLocationScheduler?.stop();
+        attachmentScheduler?.stop();
     });
     return server;
 };

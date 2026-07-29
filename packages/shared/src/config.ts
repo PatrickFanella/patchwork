@@ -68,8 +68,26 @@ const apiSchema = baseSchema.merge(atprotoSchema).extend({
         .min(60)
         .max(86_400)
         .default(3_600),
+    API_ATTACHMENT_INTERVAL_SECONDS: z.coerce
+        .number()
+        .int()
+        .min(10)
+        .max(3_600)
+        .default(30),
     API_MODERATION_SERVICE_URL: optionalUrlField,
     MODERATION_SERVICE_TOKEN: optionalSecretField,
+    ATTACHMENT_OBJECT_ENDPOINT: optionalUrlField,
+    ATTACHMENT_OBJECT_ACCESS_KEY: optionalSecretField,
+    ATTACHMENT_OBJECT_SECRET_KEY: optionalSecretField,
+    ATTACHMENT_OBJECT_BUCKET: optionalSecretField,
+    ATTACHMENT_SIGNING_KEY: optionalSecretField,
+    ATTACHMENT_CLAMD_HOST: optionalSecretField,
+    ATTACHMENT_CLAMD_PORT: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(65_535)
+        .default(3310),
     API_DATA_SOURCE: z.enum(['fixture', 'postgres']).default('fixture'),
     API_DATABASE_URL: optionalUrlField,
     DATABASE_URL: optionalUrlField,
@@ -89,6 +107,36 @@ const apiSchemaWithRefinements = apiSchema.superRefine((value, context) => {
             path: ['API_DATABASE_URL'],
             message:
                 'API_DATABASE_URL (or DATABASE_URL) is required when API_DATA_SOURCE=postgres.',
+        });
+    }
+    const attachmentFields = [
+        'ATTACHMENT_OBJECT_ENDPOINT',
+        'ATTACHMENT_OBJECT_ACCESS_KEY',
+        'ATTACHMENT_OBJECT_SECRET_KEY',
+        'ATTACHMENT_OBJECT_BUCKET',
+        'ATTACHMENT_SIGNING_KEY',
+        'ATTACHMENT_CLAMD_HOST',
+    ] as const;
+    const configured = attachmentFields.filter(field => Boolean(value[field]));
+    if (
+        configured.length > 0 &&
+        configured.length !== attachmentFields.length
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['ATTACHMENT_OBJECT_ENDPOINT'],
+            message:
+                'All private attachment object-store, signing, and ClamAV fields are required together.',
+        });
+    }
+    if (
+        value.ATTACHMENT_SIGNING_KEY &&
+        value.ATTACHMENT_SIGNING_KEY.length < 32
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['ATTACHMENT_SIGNING_KEY'],
+            message: 'ATTACHMENT_SIGNING_KEY must be at least 32 characters.',
         });
     }
 });
@@ -194,6 +242,12 @@ export interface ProductionApiConfig extends ProductionConfigBase {
     ATPROTO_SESSION_ENCRYPTION_KEY?: string;
     API_MODERATION_SERVICE_URL?: string;
     MODERATION_SERVICE_TOKEN?: string;
+    ATTACHMENT_OBJECT_ENDPOINT?: string;
+    ATTACHMENT_OBJECT_ACCESS_KEY?: string;
+    ATTACHMENT_OBJECT_SECRET_KEY?: string;
+    ATTACHMENT_OBJECT_BUCKET?: string;
+    ATTACHMENT_SIGNING_KEY?: string;
+    ATTACHMENT_CLAMD_HOST?: string;
 }
 
 export interface AtAuthRuntimeConfig extends ProductionApiConfig {
@@ -264,6 +318,23 @@ export const validateProductionConfig = (
     if (!config.API_MODERATION_SERVICE_URL || !config.MODERATION_SERVICE_TOKEN) {
         throw new Error(
             'FATAL: API_MODERATION_SERVICE_URL and MODERATION_SERVICE_TOKEN are required in production.',
+        );
+    }
+
+    const attachmentRequired: Array<keyof ProductionApiConfig> = [
+        'ATTACHMENT_OBJECT_ENDPOINT',
+        'ATTACHMENT_OBJECT_ACCESS_KEY',
+        'ATTACHMENT_OBJECT_SECRET_KEY',
+        'ATTACHMENT_OBJECT_BUCKET',
+        'ATTACHMENT_SIGNING_KEY',
+        'ATTACHMENT_CLAMD_HOST',
+    ];
+    const missingAttachments = attachmentRequired.filter(
+        key => !config[key],
+    );
+    if (missingAttachments.length > 0) {
+        throw new Error(
+            `FATAL: private attachment runtime requires ${missingAttachments.join(', ')}.`,
         );
     }
 };
