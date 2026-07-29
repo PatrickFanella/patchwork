@@ -316,7 +316,11 @@ describePostgres('durable notification outbox', () => {
                 ($1, $2, 'accepted', 'accepted', 'Offer accepted.',
                  '{}'::jsonb, NOW()),
                 ($1, $2, 'connection-completed', 'completed',
-                 'Connection completed.', '{}'::jsonb, NOW())`,
+                 'Connection completed.', '{}'::jsonb, NOW()),
+                ($1, $2, 'expired', 'expired', 'Offer expired.',
+                 '{}'::jsonb, NOW()),
+                ($1, $2, 'connection-cancelled', 'cancelled',
+                 'Connection cancelled.', '{}'::jsonb, NOW())`,
             [offerId, ownerDid, helperDid],
         );
         await pool.query(
@@ -416,8 +420,10 @@ describePostgres('durable notification outbox', () => {
             expect.arrayContaining([
                 'offer_received',
                 'offer_accepted',
+                'offer_expired',
                 'connection_started',
                 'connection_completed',
+                'connection_cancelled',
                 'lifecycle_changed',
                 'verification_submitted',
                 'verification_decided',
