@@ -1,6 +1,6 @@
 # Buyer-ready evaluator guide
 
-Updated: 2026-07-28
+Updated: 2026-07-29
 
 Patchwork is a responsive mutual-aid coordination product with implemented
 anonymous and authenticated journeys. It remains operationally **NO-GO** for a
@@ -55,6 +55,7 @@ through structured offers, connections, activity items, and outcomes.
 - [Current-state matrix](../architecture/current-state-matrix.md)
 - [Buyer-ready API contract map](../architecture/buyer-ready-api-contracts.md)
 - [Local WCAG 2.2 AA audit](../operations/evidence/phase-8/accessibility-audit.md)
+- [Feature-completion acceptance](../operations/evidence/buyer-ready-phase-9-feature-completion-2026-07-29.md)
 - [Operational go/no-go](../operations/evidence/phase-8/alpha-go-no-go.md)
 
 The local accessibility evidence is automated/manual repository evidence, not

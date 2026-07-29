@@ -1,6 +1,6 @@
 # Patchwork current-state matrix
 
-Updated: 2026-07-28
+Updated: 2026-07-29
 
 This is the authoritative description of what the Patchwork runtime does today. It distinguishes tested contracts and in-memory models from durable or externally integrated behavior. The buyer-ready sequence and exit gates live in [`2026-07-28-buyer-ready-web-completion-roadmap.md`](../superpowers/plans/2026-07-28-buyer-ready-web-completion-roadmap.md).
 
@@ -20,6 +20,12 @@ only behavior that is implemented and verified.
 | `production-ready` | External integration, durability, security, deployment, recovery, monitoring, and operational ownership are all demonstrated. |
 
 No subsystem is currently `production-ready`.
+
+Every subsystem included by the buyer-ready web charter has a
+`partially-persistent` or `externally-integrated` runtime path. Rows that remain
+`fixture-runtime` or `contract-only` below are explicitly excluded expansion
+work such as production chat, scheduling, groups, native mobile, multi-region,
+offline sync, reputation, and external connectors.
 
 ## Alpha-critical subsystems
 
@@ -81,4 +87,18 @@ A process restart preserves OAuth/session state, consent and preferences, lifecy
 
 ## Verification interpretation
 
-The repository coverage gate passes 970 tests, with 95 environment-gated tests skipped. The PostgreSQL integration gate passes 63 tests across 15 files, real MinIO/clamd integration remains green, and direct web service integration passes 8 tests. The local Chromium gate passes 70 cases, with one credential-gated live-PDS case skipped. The retained suite now includes durable volunteer, organization, stewardship, verification, appeal, exact-address, offers, connections, matching, inbox, notification intent and external-delivery adapters, outcomes, private attachment transform/scan/access/deletion, export, deactivation, and the real two-context exact-location peer exchange in addition to the earlier consent, lifecycle, safety, ingestion, moderation, deployment, capacity, and no-chat boundaries. Passing local and controlled home-network tests still does not substitute for protected promotion, independent durability, human ownership, live provider credentials, and production operations.
+The clean feature-completion coverage gate passes 981 tests, with 109
+environment-gated tests skipped. Fresh PostgreSQL gates pass 68 API, 52
+indexer, and 71 moderation cases; real MinIO/clamd integration passes; and
+direct web service integration passes 8 cases. The final Playwright harness
+builds and serves the production bundle, then passes 96 runnable Chromium
+cases with one credential-gated live-PDS case skipped. The retained suite
+includes durable volunteer, organization, stewardship, verification, appeal,
+exact-address, offers, connections, matching, inbox, notification intent and
+external-delivery adapters, outcomes, private attachment
+transform/scan/access/deletion, export, deactivation, the real two-context
+exact-location peer exchange, showcase separation, offline/stale states,
+eighteen route axe scans, and the intentional no-chat boundary. Passing local
+and controlled home-network tests still does not substitute for protected
+promotion, independent durability, human ownership, live provider
+credentials, and production operations.

@@ -13,6 +13,19 @@ and the Phase 7 technical home-staging gate are now demonstrated, but the
 human-review and pilot-authority gates are not. There are no exceptions to the
 launch criteria in this decision.
 
+## Feature-completion addendum — 2026-07-29
+
+The buyer-ready web feature program completed its clean repository acceptance
+at revision `6025cb2d`. This changes the software feature assessment, not the
+launch decision. Every charter-included subsystem now has a durable or
+externally integrated runtime path, the browser gate runs against the built
+production bundle, and the feature-completion review is recorded in
+[`buyer-ready-phase-9-feature-completion-2026-07-29.md`](../buyer-ready-phase-9-feature-completion-2026-07-29.md).
+
+The independent and human-authority gates below were not supplied. The
+decision remains **NO-GO**, public deployment and participant recruitment
+remain prohibited, and no feature-completion result is launch approval.
+
 ## Evidence reviewed
 
 | Area | Current evidence | Assessment |
@@ -21,30 +34,31 @@ launch criteria in this decision.
 | Durable private state | Phase 3 restart, concurrency, idempotency, audit, and moderation evidence | Local and PostgreSQL gates pass |
 | HTTP security | Phase 4 method, auth, CSRF, stable-error, idempotency, and privacy evidence | Local gate passes |
 | Live ingestion and discovery | Phase 5 cursor, reconnect, projection, tombstone, dead-letter, rebuild, query, and automatic lifecycle-reconciliation evidence plus controlled live aid and directory lifecycles | Home-network external gate passes; protected staging repetition remains |
-| Web journey | Local browser evidence passes 56 runnable Chromium cases; controlled two-account OAuth cases passed before and after the prior immutable deployment, most recently in 13.6 seconds; the current alpha-scope release passed immutable deployment and public browser inspection | Phase 6 and current post-deploy browser gates satisfied |
+| Web journey | The clean feature-completion gate builds and serves the production bundle and passes 96 runnable Chromium cases; one credentialed live OAuth/PDS case is skipped locally. Earlier controlled two-account OAuth cases passed before and after the prior immutable deployment. | Buyer-ready local feature gate and prior controlled external OAuth path pass; fresh credentialed signup/PDS repetition remains external |
 | Staging topology and delivery | Four zero-HIGH/CRITICAL images were signed, published to the NUC loopback registry, deployed by exact digest, rolled back as a set, and promoted forward | Phase 7 technical home-staging gate satisfied; protected GHCR/OIDC execution remains absent |
 | Recovery and alerting | NUC indexer-disconnect alert/recovery plus live PostgreSQL 17 backup and empty-target restore with measured RTO/RPO | Mechanisms pass; independent backup durability and human acknowledgment remain |
 | Security | `npm audit --omit=dev --audit-level=high` is green; Trivy 0.59.1 reports zero HIGH/CRITICAL findings for all four deployed images; Cosign verifies every digest | Home-staging image gate green; signing key and registry share the host and have no transparency-log record |
 | Data retention | API migration 0012 and moderation migration 003 drive hourly non-overlapping cleanup for all alpha-private state. Active moderation cases and sessions are preserved; failure/staleness metrics alert for both runtimes. The immutable NUC schedulers removed representative expired API and moderation rows on their next natural hourly pass with successful metrics, zero alerts, and zero restarts. | Formal privacy/backup-deletion, retained-exception, suppression-marker, and AT-repository-boundary approval remains incomplete |
 | Data subject access and deactivation | Authenticated versioned export covers Patchwork-held alpha data without credentials or cross-subject projections. Durable deactivation removes Patchwork state, revokes login, sanitizes bounded retained exceptions, and suppresses future commands/projections. Six disposable workload users passed the real staging deactivation path and aggregate cleanup verification. | Independent AT-repository deletion, controlled human casework review, and formal privacy approval remain incomplete |
-| Accessibility | The 56-case runnable Chromium gate passes, including nine zero-violation axe route scans, cross-route 320px reflow, 200% text sizing, and reduced-motion checks | No independent WCAG 2.2 or assistive-technology review |
+| Accessibility | The production-bundle Chromium gate passes 96 runnable cases, including eighteen zero-violation axe route scans, cross-route 320px reflow, 200% text sizing, and reduced-motion checks | No independent WCAG 2.2 or assistive-technology review |
+| Buyer-ready runtime | Organizations/stewardship, verification/exact public addresses, offers/connections/outcomes, matching, private attachments, exact peer location, notifications, moderation/maintenance, showcase origin, export/deactivation, and the no-chat boundary pass clean local gates | Feature-complete locally; protected providers, independent reviews, and launch operations remain unapproved |
 | Performance | A five-minute mixed immutable-staging run completed 12,000 reads at 40 aggregate RPS with zero errors and 85.574 ms worst p95, three real OAuth/PDS/Jetstream lifecycle journeys, three moderation resolutions, safe measured headroom, zero restart/error deltas, and clean recovery | Bounded NUC envelope proven; saturation, higher modeled targets, multi-replica behavior, and production sizing remain unproven |
 | Operations | Role-based RACI and incident procedures exist | No named humans have accepted staging on-call, product, engineering, or trust-and-safety ownership |
 
 Current verification baseline:
 
-- repository unit/contract suite: 897 tests;
-- API suite with PostgreSQL enabled: 301 tests;
-- indexer suite with PostgreSQL enabled: 51 tests;
-- moderation suite with PostgreSQL enabled: 64 tests;
-- direct service integration: 9 tests;
-- Chromium: 56 local cases passed, 1 controlled external case passed separately
-  against the prior immutable release;
-- database-enabled coverage: 65.38% statements, 51.91% branches, 59.29%
-  functions, 66.54% lines;
-- API/indexer/moderation migrations replay cleanly at 13/4/3;
-- build, typecheck, lint, artifact redaction, and high-severity dependency audit
-  pass.
+- repository unit/contract suite: web 237, API 303 runnable, indexer 35
+  runnable, moderation 53 runnable, AT client 26, lexicons 5, and shared 322;
+- fresh PostgreSQL suites: API 68, indexer 52, and moderation 71;
+- direct web service integration: 8 tests;
+- real MinIO/clamd attachment integration: 1 end-to-end case;
+- production-bundle Chromium: 96 runnable cases passed and 1
+  credential-required external PDS case skipped;
+- diagnostic coverage: 46.06% statements, 36.10% branches, 40.73% functions,
+  and 46.94% lines across 981 runnable tests;
+- API/indexer/moderation migrations replay cleanly at 22/6/5;
+- build, typecheck, lint, exact-location absence, artifact redaction,
+  Prometheus rule validation, and production/full dependency audits pass.
 
 These local results are necessary but do not substitute for external proof.
 
