@@ -38,6 +38,37 @@ const client = (): AidPostClient => ({
 });
 
 describe('AidPostCommandService', () => {
+    it('does not publish when the pre-publication gate holds the submission', async () => {
+        const at = client();
+        const safetyGate = {
+            review: vi.fn().mockRejectedValue(
+                new AtClientError('UPSTREAM_ERROR', 'held for review'),
+            ),
+        };
+        const service = new AidPostCommandService(
+            async () => at,
+            undefined,
+            undefined,
+            safetyGate,
+        );
+
+        await expect(
+            service.create(
+                'browser-session',
+                record,
+                'idempotency-one',
+                'did:plc:alice',
+            ),
+        ).rejects.toThrow('held for review');
+        expect(safetyGate.review).toHaveBeenCalledWith(
+            expect.objectContaining({
+                actorDid: 'did:plc:alice',
+                operation: 'create',
+            }),
+        );
+        expect(at.create).not.toHaveBeenCalled();
+    });
+
     it('creates through the client restored from the opaque browser session', async () => {
         const at = client();
         const factory = vi.fn(async () => at);

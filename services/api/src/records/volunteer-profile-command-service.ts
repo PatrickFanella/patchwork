@@ -5,6 +5,8 @@ import {
 } from '@patchwork/at-lexicons';
 import type { VolunteerProfileRecordResult } from '@patchwork/at-client';
 import { z } from 'zod';
+import type { PublicSubmissionSafetyGate } from '../public-submission-safety.js';
+import { PublicHttpError } from '../http/error-response.js';
 
 const volunteerUriSchema = z
     .string()
@@ -101,6 +103,7 @@ export class VolunteerProfileCommandService {
     constructor(
         private readonly clientFactory: VolunteerProfileClientFactory,
         private readonly privateStore: VolunteerPrivateProfileStore,
+        private readonly safetyGate?: PublicSubmissionSafetyGate,
     ) {}
 
     async create(
@@ -127,6 +130,18 @@ export class VolunteerProfileCommandService {
             .update(idempotencyKey)
             .digest('hex')
             .slice(0, 22)}`;
+        if (this.safetyGate) {
+            await this.safetyGate.review({
+                actorDid: ownerDid,
+                subjectUri:
+                    `at://${ownerDid}/app.patchwork.volunteer.profile/${rkey}`,
+                submissionType: 'volunteer-profile',
+                operation: 'create',
+                record: record as unknown as Record<string, unknown>,
+                idempotencyKey:
+                    `volunteer-profile:create:${idempotencyKey}`,
+            });
+        }
         const result = await client.create(record, rkey);
         await this.privateStore.put(ownerDid, command.privateProfile);
         return { ...result, privateProfile: command.privateProfile };
@@ -154,6 +169,7 @@ export class VolunteerProfileCommandService {
         ownerDid: string,
         input: unknown,
         now = new Date(),
+        idempotencyKey?: string,
     ): Promise<
         VolunteerProfileRecordResult & {
             privateProfile: VolunteerPrivateProfile;
@@ -169,6 +185,24 @@ export class VolunteerProfileCommandService {
             createdAt: current.record.createdAt,
             updatedAt: now.toISOString(),
         };
+        if (this.safetyGate) {
+            if (!idempotencyKey) {
+                throw new PublicHttpError(
+                    503,
+                    'SUBMISSION_SAFETY_UNAVAILABLE',
+                    'Publication safety checks are unavailable. Nothing was published.',
+                );
+            }
+            await this.safetyGate.review({
+                actorDid: ownerDid,
+                subjectUri: command.uri,
+                submissionType: 'volunteer-profile',
+                operation: 'update',
+                record: record as unknown as Record<string, unknown>,
+                idempotencyKey:
+                    `volunteer-profile:update:${idempotencyKey}`,
+            });
+        }
         const result = await client.update(
             command.uri,
             command.expectedCid,

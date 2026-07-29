@@ -35,6 +35,10 @@ interface QueueRow {
     created_at: Date | string;
     requested_at: Date | string;
     updated_at: Date | string;
+    priority: 'low' | 'normal' | 'high' | 'urgent';
+    reason_codes: string[];
+    safe_preview: Record<string, string>;
+    automated_decision: 'accepted' | 'quarantined' | 'rejected' | null;
 }
 
 interface AuditRow {
@@ -61,6 +65,10 @@ const toItem = (row: QueueRow): ModerationQueueItem => ({
     visibility: row.visibility,
     appealState: row.appeal_state,
     context: row.context,
+    priority: row.priority,
+    reasonCodes: row.reason_codes,
+    safePreview: row.safe_preview,
+    automatedDecision: row.automated_decision,
     createdAt: new Date(row.created_at).toISOString(),
     requestedAt: new Date(row.requested_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),

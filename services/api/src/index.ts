@@ -86,6 +86,12 @@ import {
     isExactLocationSignalRoute,
 } from './http/exact-location-signal-handler.js';
 import { ExactLocationSignalService } from './exact-location-signal-service.js';
+import { MaintenanceModeService } from './maintenance-mode-service.js';
+import {
+    createMaintenanceHandler,
+    isBlockedByMaintenance,
+    isMaintenanceRoute,
+} from './http/maintenance-handler.js';
 import {
     createDurableSafetyHandler,
     isDurableSafetyRoute,
@@ -99,6 +105,7 @@ import {
 import { createDiscoveryHandler } from './http/discovery-handler.js';
 import { createGracefulShutdown } from './http/graceful-shutdown.js';
 import { createModerationGateway } from './http/moderation-gateway.js';
+import { createPublicSubmissionSafetyGate } from './public-submission-safety.js';
 import {
     idempotencyKeyFromRequest,
     withIdempotencyKey,
@@ -151,6 +158,7 @@ if (postgresPool) {
         coordination_table: string | null;
         attachment_table: string | null;
         notification_table: string | null;
+        maintenance_table: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
@@ -167,7 +175,9 @@ if (postgresPool) {
             to_regclass('attachment_scan_attempts')::TEXT
                 AS attachment_table,
             to_regclass('notification_intents')::TEXT
-                AS notification_table`,
+                AS notification_table,
+            to_regclass('platform_maintenance_state')::TEXT
+                AS maintenance_table`,
     );
     if (
         !projectionSchema.rows[0]?.projection_table ||
@@ -178,6 +188,7 @@ if (postgresPool) {
         !projectionSchema.rows[0]?.coordination_table ||
         !projectionSchema.rows[0]?.attachment_table ||
         !projectionSchema.rows[0]?.notification_table ||
+        !projectionSchema.rows[0]?.maintenance_table ||
         !projectionSchema.rows[0]?.state_table
     ) {
         await postgresPool.end();
@@ -237,11 +248,21 @@ const verificationCaseService =
     postgresPool ? new VerificationCaseService(postgresPool) : undefined;
 const coordinationService =
     postgresPool ? new CoordinationService(postgresPool) : undefined;
+const maintenanceModeService =
+    postgresPool ?
+        new MaintenanceModeService(
+            postgresPool,
+            process.env['PATCHWORK_MAINTENANCE_MODE'] === 'true',
+        )
+    :   undefined;
+if (maintenanceModeService) {
+    await maintenanceModeService.ensureReady();
+}
 const exactLocationSignalService =
     postgresPool ?
         new ExactLocationSignalService(
             postgresPool,
-            () => process.env['PATCHWORK_MAINTENANCE_MODE'] === 'true',
+            () => maintenanceModeService?.isActive() ?? true,
         )
     :   undefined;
 const attachmentService =
@@ -343,6 +364,20 @@ const moderationGateway =
             serviceToken: config.MODERATION_SERVICE_TOKEN,
         })
     :   undefined;
+const publicSubmissionSafetyGate =
+    moderationGateway ?
+        createPublicSubmissionSafetyGate(moderationGateway)
+    : postgresPool ?
+        {
+            review: async () => {
+                throw new PublicHttpError(
+                    503,
+                    'SUBMISSION_SAFETY_UNAVAILABLE',
+                    'Publication safety checks are unavailable. Nothing was published.',
+                );
+            },
+        }
+    :   undefined;
 const idempotencyExecutor =
     postgresPool ? new PostgresIdempotencyExecutor(postgresPool) : undefined;
 const pdsSignupService = createPdsSignupService({
@@ -407,6 +442,7 @@ const createAidPostCommandService =
                     },
                 },
                 lifecycleRepository,
+                publicSubmissionSafetyGate,
             );
         }
     :   undefined;
@@ -417,7 +453,10 @@ const createDirectoryResourceCommandService =
             // transaction for the same lock-ordering reason as aid posts.
             const client =
                 await atAuthRuntime.directoryResourceClient(sessionToken);
-            return new DirectoryResourceCommandService(async () => client);
+            return new DirectoryResourceCommandService(
+                async () => client,
+                publicSubmissionSafetyGate,
+            );
         }
     :   undefined;
 const volunteerPrivateProfileStore =
@@ -432,6 +471,7 @@ const createVolunteerProfileCommandService =
             return new VolunteerProfileCommandService(
                 async () => client,
                 volunteerPrivateProfileStore,
+                publicSubmissionSafetyGate,
             );
         }
     :   undefined;
@@ -530,6 +570,14 @@ const notificationHandler =
             authenticate: authenticateApiRequest,
             providerFeedbackToken:
                 config.NOTIFICATION_PROVIDER_WEBHOOK_TOKEN,
+        })
+    :   undefined;
+const maintenanceHandler =
+    authenticateApiRequest && maintenanceModeService ?
+        createMaintenanceHandler({
+            service: maintenanceModeService,
+            authenticate: authenticateApiRequest,
+            executeIdempotent: executeIdempotentMutation,
         })
     :   undefined;
 const discoveryHandler = createDiscoveryHandler({
@@ -1135,6 +1183,7 @@ const handleAidPostCommandRoute = (
                             sessionToken,
                             commandBody,
                             idempotencyKey,
+                            authenticated.principal.did,
                         ),
                     }),
                     null,
@@ -1152,11 +1201,12 @@ const handleAidPostCommandRoute = (
                     request,
                     authenticated.principal.did,
                     body,
-                    async commandBody => ({
+                    async (commandBody, idempotencyKey) => ({
                         statusCode: 200,
                         body: await aidPostCommandService.update(
                             sessionToken,
                             commandBody,
+                            idempotencyKey,
                         ),
                     }),
                     null,
@@ -1289,6 +1339,7 @@ const handleDirectoryResourceCommandRoute = (
                             sessionToken,
                             commandBody,
                             idempotencyKey,
+                            authenticated.principal.did,
                         ),
                     }),
                     null,
@@ -1303,11 +1354,12 @@ const handleDirectoryResourceCommandRoute = (
                     request,
                     authenticated.principal.did,
                     body,
-                    async commandBody => ({
+                    async (commandBody, idempotencyKey) => ({
                         statusCode: 200,
                         body: await directoryResourceCommandService.update(
                             sessionToken,
                             commandBody,
+                            idempotencyKey,
                         ),
                     }),
                     null,
@@ -1409,12 +1461,14 @@ const handleVolunteerProfileCommandRoute = (
                     request,
                     ownerDid,
                     body,
-                    async commandBody => ({
+                    async (commandBody, idempotencyKey) => ({
                         statusCode: 200,
                         body: await service.update(
                             sessionToken,
                             ownerDid,
                             commandBody,
+                            undefined,
+                            idempotencyKey,
                         ),
                     }),
                     null,
@@ -1619,6 +1673,10 @@ const contractRoutes = [
     '/notifications/email/confirm',
     '/notifications/push',
     '/internal/notifications/provider-feedback',
+    '/status',
+    '/maintenance',
+    '/maintenance/declare',
+    '/maintenance/resume',
     '/health',
     '/health/ready',
     '/metrics',
@@ -1781,6 +1839,32 @@ export const createApiServer = () => {
         }
 
         if (handleRealAuthRoute(request, response, requestUrl)) {
+            return;
+        }
+
+        if (maintenanceHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isMaintenanceRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'MAINTENANCE_STATE_UNAVAILABLE',
+                    message: 'Service status is unavailable.',
+                },
+            });
+            return;
+        }
+        if (
+            maintenanceModeService?.isActive() &&
+            isBlockedByMaintenance(request, requestUrl)
+        ) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'MAINTENANCE_MODE_ACTIVE',
+                    message:
+                        maintenanceModeService.status().publicMessage,
+                },
+            });
             return;
         }
 

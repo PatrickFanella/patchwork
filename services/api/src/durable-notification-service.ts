@@ -664,9 +664,78 @@ export class DurableNotificationService {
         }
     }
 
+    async ingestModerationUrgentEvents(batchSize = 100): Promise<number> {
+        const client = await this.pool.connect();
+        try {
+            await client.query('BEGIN');
+            const available = await client.query<{ table_name: string | null }>(
+                `SELECT to_regclass('moderation_notification_events')::text
+                        AS table_name`,
+            );
+            if (!available.rows[0]?.table_name) {
+                await client.query('COMMIT');
+                return 0;
+            }
+            const moderators = await client.query<{ did: string }>(
+                `SELECT did FROM platform_roles
+                  WHERE role IN ('moderator', 'admin')
+                  ORDER BY did`,
+            );
+            if (moderators.rows.length === 0) {
+                await client.query('COMMIT');
+                return 0;
+            }
+            const events = await client.query<{
+                event_id: string;
+                deduplication_key: string;
+                created_at: Date | string;
+            }>(
+                `SELECT event_id, deduplication_key, created_at
+                   FROM moderation_notification_events
+                  WHERE consumed_at IS NULL
+                  ORDER BY created_at, event_id
+                  FOR UPDATE SKIP LOCKED
+                  LIMIT $1`,
+                [batchSize],
+            );
+            for (const event of events.rows) {
+                for (const moderator of moderators.rows) {
+                    await client.query(
+                        `SELECT patchwork_enqueue_notification(
+                            $1, 'moderation_action',
+                            'Urgent moderation review',
+                            'A high-risk submission is waiting for moderator review.',
+                            'urgent', '/moderation', '{}'::jsonb,
+                            $2, $3
+                         )`,
+                        [
+                            moderator.did,
+                            `${event.deduplication_key}:${moderator.did}`,
+                            event.created_at,
+                        ],
+                    );
+                }
+                await client.query(
+                    `UPDATE moderation_notification_events
+                        SET consumed_at = NOW()
+                      WHERE event_id = $1`,
+                    [event.event_id],
+                );
+            }
+            await client.query('COMMIT');
+            return events.rowCount ?? 0;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
     async runDeliverySweep(
         batchSize = 50,
     ): Promise<{ processed: number; delivered: number; failed: number }> {
+        await this.ingestModerationUrgentEvents();
         await this.materializeChannels();
         const staleBefore = new Date(Date.now() - DELIVERY_LOCK_TIMEOUT_MS);
         await this.pool.query(

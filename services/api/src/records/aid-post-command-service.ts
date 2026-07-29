@@ -1,6 +1,11 @@
-import type { AidPostRecord } from '@patchwork/at-lexicons';
+import {
+    aidPostSchema,
+    type AidPostRecord,
+} from '@patchwork/at-lexicons';
 import { AtClientError, type AidPostRecordResult } from '@patchwork/at-client';
 import { z } from 'zod';
+import type { PublicSubmissionSafetyGate } from '../public-submission-safety.js';
+import { PublicHttpError } from '../http/error-response.js';
 
 export interface AidPostClient {
     create(record: unknown, rkey?: string): Promise<AidPostRecordResult>;
@@ -104,19 +109,41 @@ export class AidPostCommandService {
         private readonly clientFactory: AidPostClientFactory,
         private readonly deletionReconciler?: AidPostDeletionReconciler,
         private readonly lifecycleStatusSource?: AidPostLifecycleStatusSource,
+        private readonly safetyGate?: PublicSubmissionSafetyGate,
     ) {}
 
     async create(
         sessionToken: string,
         record: unknown,
         idempotencyKey?: string,
+        actorDid?: string,
     ): Promise<AidPostRecordResult> {
+        const parsed = aidPostSchema.parse(record);
         const client = await this.clientFactory(sessionToken);
         const rkey =
             idempotencyKey ?
                 `pw${createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 22)}`
             :   undefined;
-        return rkey ? client.create(record, rkey) : client.create(record);
+        if (this.safetyGate) {
+            if (!rkey || !actorDid || !idempotencyKey) {
+                throw new PublicHttpError(
+                    503,
+                    'SUBMISSION_SAFETY_UNAVAILABLE',
+                    'Publication safety checks are unavailable. Nothing was published.',
+                );
+            }
+            await this.safetyGate.review({
+                actorDid,
+                subjectUri:
+                    `at://${actorDid}/app.patchwork.aid.post/${rkey}`,
+                submissionType: 'aid-post',
+                operation: 'create',
+                record: parsed as unknown as Record<string, unknown>,
+                idempotencyKey:
+                    `aid-post:create:${idempotencyKey}`,
+            });
+        }
+        return rkey ? client.create(parsed, rkey) : client.create(parsed);
     }
 
     async get(
@@ -130,13 +157,32 @@ export class AidPostCommandService {
     async update(
         sessionToken: string,
         input: unknown,
+        idempotencyKey?: string,
     ): Promise<AidPostRecordResult> {
         const command = updateCommandSchema.parse(input);
+        const record = aidPostSchema.parse(command.record);
+        if (this.safetyGate) {
+            if (!idempotencyKey) {
+                throw new PublicHttpError(
+                    503,
+                    'SUBMISSION_SAFETY_UNAVAILABLE',
+                    'Publication safety checks are unavailable. Nothing was published.',
+                );
+            }
+            await this.safetyGate.review({
+                actorDid: command.uri.slice(5).split('/')[0]!,
+                subjectUri: command.uri,
+                submissionType: 'aid-post',
+                operation: 'update',
+                record: record as unknown as Record<string, unknown>,
+                idempotencyKey: `aid-post:update:${idempotencyKey}`,
+            });
+        }
         const client = await this.clientFactory(sessionToken);
         return client.update(
             command.uri,
             command.expectedCid,
-            command.record,
+            record,
         );
     }
 

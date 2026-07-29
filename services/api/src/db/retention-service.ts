@@ -9,6 +9,7 @@ export interface RetentionResult {
     oauthSessions: number;
     idempotencyCommands: number;
     workflows: number;
+    maintenanceAudit: number;
 }
 
 const REPLAY_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
@@ -57,6 +58,11 @@ export class PostgresRetentionService {
                  WHERE retention_until IS NOT NULL AND retention_until <= $1`,
                 [now.toISOString()],
             );
+            const maintenanceAudit = await client.query(
+                `DELETE FROM platform_maintenance_audit
+                 WHERE retention_until <= $1`,
+                [now.toISOString()],
+            );
             const blocks = await deleteExpired(client, 'user_blocks', now);
             const reports = await deleteExpired(client, 'abuse_reports', now);
             const auditEvents = await deleteExpired(
@@ -74,6 +80,7 @@ export class PostgresRetentionService {
                 oauthSessions: oauthSessions.rowCount ?? 0,
                 idempotencyCommands: idempotencyCommands.rowCount ?? 0,
                 workflows: workflows.rowCount ?? 0,
+                maintenanceAudit: maintenanceAudit.rowCount ?? 0,
             };
         } catch (error) {
             await client.query('ROLLBACK');

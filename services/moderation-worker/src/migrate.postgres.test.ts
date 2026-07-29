@@ -31,6 +31,7 @@ describeWithPostgres('moderation database migrations', () => {
                 '001_create_moderation_tables.sql',
                 '002_durable_moderation.sql',
                 '003_retention_enforcement.sql',
+                '004_submission_safety_and_urgent_events.sql',
             ],
             skipped: [],
         });
@@ -44,8 +45,10 @@ describeWithPostgres('moderation database migrations', () => {
         );
         expect(runtimeTables.rows.map(row => row.table_name)).toEqual([
             'moderation_audit_records',
+            'moderation_notification_events',
             'moderation_queue_items',
             'moderation_schema_migrations',
+            'moderation_submission_reviews',
         ]);
 
         const replay = await runModerationMigrations({ pool });
@@ -55,6 +58,7 @@ describeWithPostgres('moderation database migrations', () => {
                 '001_create_moderation_tables.sql',
                 '002_durable_moderation.sql',
                 '003_retention_enforcement.sql',
+                '004_submission_safety_and_urgent_events.sql',
             ],
         });
     });

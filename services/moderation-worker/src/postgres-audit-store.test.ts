@@ -48,6 +48,12 @@ describeWithPostgres('PostgresModerationAuditStore', () => {
                 'utf8',
             ),
         );
+        await pool.query(
+            await readFile(
+                new URL('./migrations/004_submission_safety_and_urgent_events.sql', import.meta.url),
+                'utf8',
+            ),
+        );
     });
 
     beforeEach(async () => {

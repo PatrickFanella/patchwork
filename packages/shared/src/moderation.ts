@@ -54,6 +54,12 @@ export interface ModerationQueueContext {
     tags?: string[];
 }
 
+export type ModerationPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type AutomatedModerationDecision =
+    | 'accepted'
+    | 'quarantined'
+    | 'rejected';
+
 export interface ModerationQueueItem {
     queueId: string;
     subjectUri: string;
@@ -68,6 +74,10 @@ export interface ModerationQueueItem {
     requestedAt: string;
     updatedAt: string;
     context: ModerationQueueContext;
+    priority?: ModerationPriority;
+    reasonCodes?: string[];
+    safePreview?: Record<string, string>;
+    automatedDecision?: AutomatedModerationDecision | null;
 }
 
 export interface ModerationAuditStateSnapshot {
@@ -372,6 +382,10 @@ export const buildModerationQueueItem = (
         requestedAt,
         updatedAt: requestedAt,
         context: mergeContext({}, input.context ?? {}),
+        priority: 'normal',
+        reasonCodes: [],
+        safePreview: {},
+        automatedDecision: null,
     };
 };
 

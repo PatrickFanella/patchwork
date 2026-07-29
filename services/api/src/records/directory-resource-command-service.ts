@@ -5,6 +5,8 @@ import {
 } from '@patchwork/at-lexicons';
 import type { DirectoryResourceRecordResult } from '@patchwork/at-client';
 import { z } from 'zod';
+import type { PublicSubmissionSafetyGate } from '../public-submission-safety.js';
+import { PublicHttpError } from '../http/error-response.js';
 
 export interface DirectoryResourceClient {
     create(
@@ -42,12 +44,14 @@ const updateCommandSchema = mutationReferenceSchema.extend({
 export class DirectoryResourceCommandService {
     constructor(
         private readonly clientFactory: DirectoryResourceClientFactory,
+        private readonly safetyGate?: PublicSubmissionSafetyGate,
     ) {}
 
     async create(
         sessionToken: string,
         input: unknown,
         idempotencyKey?: string,
+        actorDid?: string,
     ): Promise<DirectoryResourceRecordResult> {
         const record = directoryResourceSchema.parse(input);
         const publicRecord: DirectoryResourceRecord = {
@@ -59,6 +63,25 @@ export class DirectoryResourceCommandService {
             idempotencyKey ?
                 `pw${createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 22)}`
             :   undefined;
+        if (this.safetyGate) {
+            if (!rkey || !actorDid || !idempotencyKey) {
+                throw new PublicHttpError(
+                    503,
+                    'SUBMISSION_SAFETY_UNAVAILABLE',
+                    'Publication safety checks are unavailable. Nothing was published.',
+                );
+            }
+            await this.safetyGate.review({
+                actorDid,
+                subjectUri:
+                    `at://${actorDid}/app.patchwork.directory.resource/${rkey}`,
+                submissionType: 'directory-resource',
+                operation: 'create',
+                record: publicRecord as unknown as Record<string, unknown>,
+                idempotencyKey:
+                    `directory-resource:create:${idempotencyKey}`,
+            });
+        }
         return rkey ?
                 client.create(publicRecord, rkey)
             :   client.create(publicRecord);
@@ -76,6 +99,7 @@ export class DirectoryResourceCommandService {
     async update(
         sessionToken: string,
         input: unknown,
+        idempotencyKey?: string,
     ): Promise<DirectoryResourceRecordResult> {
         const command = updateCommandSchema.parse(input);
         const proposed = directoryResourceSchema.parse(command.record);
@@ -86,6 +110,24 @@ export class DirectoryResourceCommandService {
             createdAt: current.record.createdAt,
             verificationStatus: current.record.verificationStatus,
         };
+        if (this.safetyGate) {
+            if (!idempotencyKey) {
+                throw new PublicHttpError(
+                    503,
+                    'SUBMISSION_SAFETY_UNAVAILABLE',
+                    'Publication safety checks are unavailable. Nothing was published.',
+                );
+            }
+            await this.safetyGate.review({
+                actorDid: command.uri.slice(5).split('/')[0]!,
+                subjectUri: command.uri,
+                submissionType: 'directory-resource',
+                operation: 'update',
+                record: publicRecord as unknown as Record<string, unknown>,
+                idempotencyKey:
+                    `directory-resource:update:${idempotencyKey}`,
+            });
+        }
         return client.update(
             command.uri,
             command.expectedCid,

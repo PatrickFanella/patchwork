@@ -15,6 +15,7 @@ describeWithPostgres('private-data retention enforcement', () => {
             '0002_at_sessions.sql',
             '0003_core_operational_state.sql',
             '0011_http_idempotency.sql',
+            '0021_maintenance_mode.sql',
         ]) {
             await pool.query(
                 await readFile(

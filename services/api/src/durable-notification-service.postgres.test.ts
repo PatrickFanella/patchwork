@@ -75,6 +75,7 @@ describePostgres('durable notification outbox', () => {
                       notification_push_subscriptions,
                       notification_email_endpoints,
                       notification_intents,
+                      moderation_notification_events,
                       coordination_offer_events,
                       coordination_connections,
                       coordination_offers,
@@ -569,6 +570,72 @@ describePostgres('durable notification outbox', () => {
         expect(await restarted.getOperatorMetrics()).toMatchObject({
             deadLetter: 1,
         });
+    });
+
+    it('delivers each urgent moderation event to configured moderator channels exactly once across restart', async () => {
+        const moderatorDid = 'did:plc:urgent-moderator';
+        await pool.query(
+            `INSERT INTO platform_roles (did, role, updated_by, updated_at)
+             VALUES ($1, 'moderator', 'did:plc:test-admin', NOW())
+             ON CONFLICT (did) DO UPDATE SET role = 'moderator'`,
+            [moderatorDid],
+        );
+        await pool.query(
+            `INSERT INTO account_preferences (
+                did, privacy, notifications, visibility, language, location,
+                created_at, updated_at
+             ) VALUES (
+                $1, 'community',
+                '{"inApp":true,"email":false,"push":true}',
+                'authenticated', 'en',
+                '{"sharing":"approximate","noPermanentAddress":false}',
+                NOW(), NOW()
+             )
+             ON CONFLICT (did) DO UPDATE SET
+                notifications = EXCLUDED.notifications,
+                updated_at = NOW()`,
+            [moderatorDid],
+        );
+        await service.registerPush(moderatorDid, {
+            endpoint: 'https://push.example.test/subscription/urgent-moderator',
+            p256dh: 'urgent-moderator-p256dh-key-material',
+            auth: 'urgent-moderator-auth-material',
+        });
+        await pool.query(
+            `INSERT INTO moderation_notification_events (
+                subject_uri, priority, reason_codes, deduplication_key,
+                created_at, retention_until
+             ) VALUES (
+                'at://did:plc:alice/app.patchwork.aid.post/urgent',
+                'urgent', '["emergency-intent"]'::jsonb,
+                'urgent-submission:test', NOW(), NOW() + INTERVAL '30 days'
+             )`,
+        );
+
+        expect(await service.runDeliverySweep()).toMatchObject({
+            processed: 1,
+            delivered: 1,
+        });
+        expect(push.sends).toHaveLength(1);
+        expect(push.sends[0]?.payload).toContain('Urgent moderation review');
+
+        const restarted = new DurableNotificationService(
+            pool,
+            { email, push },
+            { publicWebOrigin: 'https://patchwork.test' },
+        );
+        expect(await restarted.runDeliverySweep()).toEqual({
+            processed: 0,
+            delivered: 0,
+            failed: 0,
+        });
+        expect(push.sends).toHaveLength(1);
+        const consumed = await pool.query<{ consumed_at: Date }>(
+            `SELECT consumed_at FROM moderation_notification_events
+              WHERE deduplication_key = 'urgent-submission:test'`,
+        );
+        expect(consumed.rows[0]?.consumed_at).toBeInstanceOf(Date);
+        await pool.query('DELETE FROM platform_roles WHERE did = $1', [moderatorDid]);
     });
 
     it('prevents endpoint takeover and rejects private notification metadata', async () => {

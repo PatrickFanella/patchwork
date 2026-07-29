@@ -18,6 +18,10 @@ export interface ModerationGateway {
         body: unknown;
     }): Promise<ModerationGatewayResult>;
     readQueue(actorDid: string): Promise<ModerationGatewayResult>;
+    reviewSubmission(input: {
+        actorDid: string;
+        body: unknown;
+    }): Promise<ModerationGatewayResult>;
 }
 
 export const createModerationGateway = (
@@ -62,5 +66,12 @@ export const createModerationGateway = (
         },
         readQueue: actorDid =>
             request('/moderation/queue', actorDid, 'GET'),
+        reviewSubmission: input =>
+            request(
+                '/moderation/submissions/review',
+                input.actorDid,
+                'POST',
+                input.body,
+            ),
     };
 };

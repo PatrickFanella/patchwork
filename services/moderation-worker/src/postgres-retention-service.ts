@@ -3,6 +3,8 @@ import type { Pool } from 'pg';
 export interface ModerationRetentionResult {
     auditRecords: number;
     resolvedCases: number;
+    submissionReviews: number;
+    notificationEvents: number;
 }
 
 export class PostgresModerationRetentionService {
@@ -14,6 +16,16 @@ export class PostgresModerationRetentionService {
             await client.query('BEGIN');
             const auditRecords = await client.query(
                 `DELETE FROM moderation_audit_records
+                 WHERE retention_until <= $1`,
+                [now.toISOString()],
+            );
+            const submissionReviews = await client.query(
+                `DELETE FROM moderation_submission_reviews
+                 WHERE retention_until <= $1`,
+                [now.toISOString()],
+            );
+            const notificationEvents = await client.query(
+                `DELETE FROM moderation_notification_events
                  WHERE retention_until <= $1`,
                 [now.toISOString()],
             );
@@ -32,6 +44,8 @@ export class PostgresModerationRetentionService {
             return {
                 auditRecords: auditRecords.rowCount ?? 0,
                 resolvedCases: resolvedCases.rowCount ?? 0,
+                submissionReviews: submissionReviews.rowCount ?? 0,
+                notificationEvents: notificationEvents.rowCount ?? 0,
             };
         } catch (error) {
             await client.query('ROLLBACK');

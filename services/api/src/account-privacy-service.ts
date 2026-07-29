@@ -387,6 +387,24 @@ export class AccountPrivacyService {
                  WHERE actor_did = $1`,
                 [did, didHash, safetyRetentionUntil],
             );
+            const submissionSafetyReviews = await client.query(
+                `UPDATE moderation_submission_reviews
+                 SET actor_did = 'deactivated:' || $2,
+                     retention_until = LEAST(
+                         retention_until, $3::timestamptz
+                     )
+                 WHERE actor_did = $1`,
+                [did, didHash, safetyRetentionUntil],
+            );
+            const maintenanceAudit = await client.query(
+                `UPDATE platform_maintenance_audit
+                 SET actor_did = 'deactivated:' || $2,
+                     retention_until = LEAST(
+                         retention_until, $3::timestamptz
+                     )
+                 WHERE actor_did = $1`,
+                [did, didHash, auditRetentionUntil],
+            );
 
             const result = {
                 status: 'deactivated',
@@ -449,6 +467,10 @@ export class AccountPrivacyService {
                         moderationCasework.rows[0]?.count ?? 0,
                     moderationActorAudit:
                         moderationActorAudit.rowCount ?? 0,
+                    submissionSafetyReviews:
+                        submissionSafetyReviews.rowCount ?? 0,
+                    maintenanceAudit:
+                        maintenanceAudit.rowCount ?? 0,
                     transferredOrganizations,
                     organizationAudit:
                         organizationAudit.rowCount ?? 0,

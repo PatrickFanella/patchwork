@@ -9,12 +9,14 @@ import { PostgresModerationQueueStore } from './postgres-queue-store.js';
 import { InMemoryQueueStore } from './queue-store.js';
 import { PostgresModerationRetentionService } from './postgres-retention-service.js';
 import { startModerationRetentionScheduler } from './retention-scheduler.js';
+import { SubmissionSafetyService } from './submission-safety-service.js';
 
 export type ModerationRuntime =
     | {
           mode: 'postgres';
           queue: PostgresModerationQueueStore;
           service: DurableModerationWorkerService;
+          submissionSafety: SubmissionSafetyService;
           close(): Promise<void>;
       }
     | {
@@ -90,6 +92,7 @@ export const createModerationRuntime = async (
             queue,
             new PostgresModerationAuditStore(pool),
         ),
+        submissionSafety: new SubmissionSafetyService(pool),
         close: async () => {
             retentionScheduler.stop();
             if (ownsPool) await pool.end();

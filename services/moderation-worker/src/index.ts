@@ -236,6 +236,19 @@ const routeHandlers: Readonly<Record<string, ModerationRouteDefinition>> = {
         });
         return { statusCode: 200, body: { item } };
     } },
+    '/moderation/submissions/review': { method: 'POST', handler: async body => {
+        if (runtime.mode !== 'postgres') {
+            return {
+                statusCode: 503,
+                body: { error: { code: 'DURABLE_MODERATION_REQUIRED' } },
+            };
+        }
+        const review = await runtime.submissionSafety.review(body);
+        return {
+            statusCode: review.decision === 'accepted' ? 200 : 422,
+            body: { review },
+        };
+    } },
     '/moderation/queue': { method: 'GET', handler: async () => {
         if (!durableService) return { statusCode: 503, body: { error: { code: 'DURABLE_MODERATION_REQUIRED' } } };
         const items = await durableService.listQueue();
@@ -304,7 +317,9 @@ export const createModerationServer = () => createServer((request, response) => 
             .then(() => route.method === 'POST' ? readJsonBody(request) : undefined)
             .then(body =>
                 route.handler(
-                    requestUrl.pathname === '/moderation/policy/apply' ?
+                    requestUrl.pathname === '/moderation/policy/apply' ||
+                    requestUrl.pathname ===
+                        '/moderation/submissions/review' ?
                         withAuthenticatedActor(request, body)
                     :   body,
                 ),

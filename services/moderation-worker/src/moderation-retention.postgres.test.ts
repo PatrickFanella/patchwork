@@ -37,7 +37,11 @@ describeWithPostgres('moderation retention enforcement', () => {
 
     beforeEach(async () => {
         await pool.query(
-            'TRUNCATE moderation_audit_records, moderation_queue_items RESTART IDENTITY CASCADE',
+            `TRUNCATE moderation_notification_events,
+                      moderation_submission_reviews,
+                      moderation_audit_records,
+                      moderation_queue_items
+             RESTART IDENTITY CASCADE`,
         );
     });
 
@@ -71,7 +75,12 @@ describeWithPostgres('moderation retention enforcement', () => {
 
         await expect(
             retention.enforce(new Date('2026-07-11T00:00:00Z')),
-        ).resolves.toEqual({ auditRecords: 1, resolvedCases: 1 });
+        ).resolves.toEqual({
+            auditRecords: 1,
+            resolvedCases: 1,
+            submissionReviews: 0,
+            notificationEvents: 0,
+        });
 
         await expect(queue.get(expired.subjectUri)).resolves.toBeNull();
         await expect(audit.getAuditTrail(expired.subjectUri)).resolves.toEqual([]);

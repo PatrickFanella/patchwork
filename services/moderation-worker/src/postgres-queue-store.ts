@@ -36,6 +36,10 @@ interface ModerationQueueRow {
     created_at: Date | string;
     requested_at: Date | string;
     updated_at: Date | string;
+    priority: 'low' | 'normal' | 'high' | 'urgent';
+    reason_codes: string[];
+    safe_preview: Record<string, string>;
+    automated_decision: 'accepted' | 'quarantined' | 'rejected' | null;
 }
 
 const toItem = (row: ModerationQueueRow): ModerationQueueItem => ({
@@ -52,6 +56,10 @@ const toItem = (row: ModerationQueueRow): ModerationQueueItem => ({
     requestedAt: new Date(row.requested_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
     context: row.context,
+    priority: row.priority,
+    reasonCodes: row.reason_codes,
+    safePreview: row.safe_preview,
+    automatedDecision: row.automated_decision,
 });
 
 export class PostgresModerationQueueStore {
@@ -62,10 +70,11 @@ export class PostgresModerationQueueStore {
             `INSERT INTO moderation_queue_items (
                 subject_uri, queue_id, subject_type, reasons, latest_reason,
                 report_count, queue_status, visibility, appeal_state, context,
+                priority, reason_codes, safe_preview, automated_decision,
                 created_at, requested_at, updated_at
              ) VALUES (
                 $1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10::jsonb,
-                $11, $12, $13
+                $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17
              )
              ON CONFLICT (subject_uri) DO UPDATE
              SET reasons = EXCLUDED.reasons,
@@ -75,6 +84,10 @@ export class PostgresModerationQueueStore {
                  visibility = EXCLUDED.visibility,
                  appeal_state = EXCLUDED.appeal_state,
                  context = EXCLUDED.context,
+                 priority = EXCLUDED.priority,
+                 reason_codes = EXCLUDED.reason_codes,
+                 safe_preview = EXCLUDED.safe_preview,
+                 automated_decision = EXCLUDED.automated_decision,
                  requested_at = EXCLUDED.requested_at,
                  updated_at = EXCLUDED.updated_at,
                  retention_until = NULL`,
@@ -89,6 +102,10 @@ export class PostgresModerationQueueStore {
                 item.visibility,
                 item.appealState,
                 JSON.stringify(item.context),
+                item.priority ?? 'normal',
+                JSON.stringify(item.reasonCodes ?? []),
+                JSON.stringify(item.safePreview ?? {}),
+                item.automatedDecision ?? null,
                 item.createdAt,
                 item.requestedAt,
                 item.updatedAt,
