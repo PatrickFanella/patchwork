@@ -1,5 +1,102 @@
 import { expect, test } from '@playwright/test';
 
+test('offline state is explicit and does not promise queued mutations', async ({
+    context,
+    page,
+}) => {
+    await page.goto('/');
+    await context.setOffline(true);
+    await expect(page.getByRole('alert')).toContainText('You are offline.');
+    await expect(page.getByRole('alert')).toContainText(
+        'does not queue mutations offline',
+    );
+    await context.setOffline(false);
+    await expect(page.getByText('You are offline.')).toHaveCount(0);
+});
+
+test('showcase origin is visible and stale retained results are disclosed', async ({
+    page,
+}) => {
+    await page.route('**/api/**', async route => {
+        const requestUrl = new URL(route.request().url());
+        const path = requestUrl.pathname.replace(
+            /^\/api/,
+            '',
+        );
+        if (path === '/status') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    maintenance: {
+                        active: false,
+                        reasonCodes: [],
+                        publicMessage: '',
+                        environmentOverride: false,
+                        declaredAt: null,
+                        declaredBy: null,
+                    },
+                }),
+            });
+            return;
+        }
+        if (path === '/query/feed') {
+            if (requestUrl.searchParams.get('searchText') === 'grocery') {
+                await route.abort('failed');
+                return;
+            }
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    total: 1,
+                    page: 1,
+                    pageSize: 20,
+                    hasNextPage: false,
+                    results: [
+                        {
+                            uri: 'at://did:plc:example/app.patchwork.aid.post/1',
+                            authorDid: 'did:plc:example',
+                            title: 'Synthetic grocery delivery',
+                            summary: 'Fictional showcase request.',
+                            category: 'food',
+                            status: 'open',
+                            urgency: 'medium',
+                            createdAt: '2026-07-28T00:00:00.000Z',
+                            updatedAt: '2026-07-28T00:00:00.000Z',
+                            approximateGeo: {
+                                latitude: 41.88,
+                                longitude: -87.7,
+                                precisionKm: 3,
+                            },
+                            recordOrigin: 'synthetic',
+                        },
+                    ],
+                }),
+            });
+            return;
+        }
+        await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                error: {
+                    code: 'AUTHENTICATION_REQUIRED',
+                    message: 'Authentication required.',
+                },
+            }),
+        });
+    });
+
+    await page.goto('/feed');
+    await expect(page.getByText('Synthetic showcase')).toBeVisible();
+    await page.getByLabel('Search text').fill('grocery');
+    await expect(page.getByRole('alert')).toContainText(
+        'Showing previously loaded results; they may be stale.',
+    );
+    await expect(page.getByText('Synthetic grocery delivery')).toBeVisible();
+});
+
 test('API failure stays visible and never substitutes fixture discovery data', async ({
     page,
 }) => {
@@ -39,6 +136,32 @@ test('public home advertises only implemented alpha capabilities', async ({
     await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Volunteer' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Chat' })).toBeHidden();
+});
+
+test('legal routes show aligned unapproved buyer-ready policy boundaries', async ({
+    page,
+}) => {
+    await page.goto('/legal/terms');
+    await expect(
+        page.getByRole('heading', { name: 'Terms of Service' }),
+    ).toBeVisible();
+    await expect(page.getByText('at least 18')).toBeVisible();
+    await expect(page.getByText('Production chat is not available.')).toBeVisible();
+    await expect(page.getByText(/operationally NO-GO/)).toBeVisible();
+
+    await page.goto('/legal/privacy');
+    await expect(
+        page.getByRole('heading', { name: 'Privacy Policy' }),
+    ).toBeVisible();
+    await expect(page.getByText(/encrypted peer channel/)).toBeVisible();
+    await expect(page.getByText(/clean access is authenticated/)).toBeVisible();
+
+    await page.goto('/legal/community-guidelines');
+    await expect(
+        page.getByRole('heading', { name: 'Community Guidelines' }),
+    ).toBeVisible();
+    await expect(page.getByText(/two business days/)).toBeVisible();
+    await expect(page.getByText(/not an emergency response/)).toBeVisible();
 });
 
 test('authenticated production settings expose durable account controls only', async ({

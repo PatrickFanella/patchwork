@@ -29,9 +29,19 @@ const A11Y_ROUTES = [
     { path: '/resources', label: 'resources' },
     { path: '/volunteer', label: 'volunteer' },
     { path: '/organizations', label: 'organizations' },
+    { path: '/verification', label: 'verification' },
+    { path: '/inbox', label: 'inbox' },
+    { path: '/notifications', label: 'notifications' },
+    { path: '/moderation', label: 'moderation' },
     { path: '/chat', label: 'chat' },
     { path: '/settings', label: 'settings' },
     { path: '/login', label: 'login' },
+    { path: '/legal/terms', label: 'terms' },
+    { path: '/legal/privacy', label: 'privacy policy' },
+    {
+        path: '/legal/community-guidelines',
+        label: 'community guidelines',
+    },
 ] as const;
 
 test.describe('Skip navigation', () => {

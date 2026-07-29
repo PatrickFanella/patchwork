@@ -985,6 +985,7 @@ export interface VolunteerDiscoveryProfile {
         };
     } | null;
     updatedAt: string;
+    recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 export const fetchVolunteerProfilesViaApi = async (

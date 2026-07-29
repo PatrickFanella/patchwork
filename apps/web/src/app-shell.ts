@@ -70,7 +70,7 @@ export const shellSections: readonly ShellSection[] = [
     {
         route: '/inbox',
         title: 'Inbox',
-        description: 'Unified inbox for requests, assignments, messages, and alerts.',
+        description: 'Workflow activity for requests, offers, assignments, outcomes, and alerts — not chat.',
         requiresRole: 'user',
     },
     {

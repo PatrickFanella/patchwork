@@ -711,6 +711,83 @@ interface DashboardRouteProps {
     onPatchDiscovery: (patch: Partial<DiscoveryFilterState>) => void;
 }
 
+const LegalPolicyRoute = ({
+    route,
+}: {
+    route:
+        | '/legal/terms'
+        | '/legal/privacy'
+        | '/legal/community-guidelines';
+}) => {
+    const content =
+        route === '/legal/terms' ?
+            {
+                title: 'Terms of Service',
+                summary:
+                    'Patchwork is peer-to-peer mutual-aid coordination, not an emergency, professional, fulfillment, or identity-guarantee service.',
+                points: [
+                    'You must be at least 18 and accept the current policy version before protected actions.',
+                    'Public aid, volunteer, and directory records can federate through AT Protocol; private offers, connections, evidence, and attachments do not.',
+                    'Production chat is not available. Activity inbox items are workflow events, not messages.',
+                    'Synthetic records are fictional. Public-source organization references do not imply participation or endorsement.',
+                ],
+            }
+        : route === '/legal/privacy' ?
+            {
+                title: 'Privacy Policy',
+                summary:
+                    'Patchwork separates public AT records from private operational state and minimizes location, attachment, notification, and moderation data.',
+                points: [
+                    'Personal and volunteer locations are public only at 1 km precision or coarser.',
+                    'Exact personal coordinates move only over a freshly consented encrypted peer channel and are not persisted by Patchwork.',
+                    'A verified, non-confidential resource address is public only after separate moderator approval.',
+                    'Private attachments are scanned and transformed; clean access is authenticated and short-lived.',
+                    'Exports omit credentials, file bodies, signed URLs, third-party casework, and exact personal coordinates.',
+                ],
+            }
+        :   {
+                title: 'Community Guidelines',
+                summary:
+                    'Use Patchwork in good faith, protect privacy, and report fraud, harassment, discrimination, illegal activity, or attempts to bypass safety controls.',
+                points: [
+                    'Never publish another person’s private contact or exact-location information.',
+                    'Moderators can delist, suspend visibility, restore content, and review appeals with an audit trail.',
+                    'The report-review aim is two business days on a best-effort basis; it is not an emergency response or guaranteed service level.',
+                    'Use emergency and professional services outside Patchwork when the situation requires them.',
+                ],
+            };
+    return (
+        <section className='space-y-6'>
+            <header className='mh-route-header'>
+                <p className='mh-kicker'>Unapproved draft — not in force</p>
+                <h1 className='mh-route-title'>{content.title}</h1>
+                <p className='mt-2 max-w-3xl text-mh-textMuted'>
+                    {content.summary}
+                </p>
+            </header>
+            <Panel title='Buyer-ready policy summary'>
+                <ul className='list-disc space-y-2 pl-5'>
+                    {content.points.map(point => (
+                        <li key={point}>{point}</li>
+                    ))}
+                </ul>
+                <p className='mt-4 text-sm font-bold'>
+                    Patchwork remains operationally NO-GO. These drafts require
+                    legal and product-owner approval before publication as
+                    effective terms.
+                </p>
+            </Panel>
+            <nav aria-label='Policy drafts' className='flex flex-wrap gap-4'>
+                <a className='mh-link' href='/legal/terms'>Terms</a>
+                <a className='mh-link' href='/legal/privacy'>Privacy</a>
+                <a className='mh-link' href='/legal/community-guidelines'>
+                    Community guidelines
+                </a>
+            </nav>
+        </section>
+    );
+};
+
 const DashboardRoute = ({
     appTitle,
     onNavigate,
@@ -847,7 +924,7 @@ const DashboardRoute = ({
                     </Panel>
                 </section>
 
-                <section className='space-y-6 lg:col-span-2'>
+                <section className='lg:col-span-2'>
                     <Card title='Pre-alpha operating boundary'>
                         <ul className='list-disc space-y-1 pl-5 text-sm'>
                             <li>Patchwork is not an emergency service.</li>
@@ -865,9 +942,11 @@ const DashboardRoute = ({
                             before participating.
                         </p>
                     </Card>
+                </section>
 
+                <section className='lg:col-span-5'>
                     <Card title='Quick route handoffs'>
-                        <ul className='space-y-3'>
+                        <ul className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
                             {shellSections
                                 .filter(
                                     section =>
@@ -1004,6 +1083,12 @@ const MapRoute = ({
                         className='mh-alert mt-3 text-xs font-bold'
                     >
                         <p>API sync issue: {errorMessage}</p>
+                        {feedRecords.length > 0 ?
+                            <p>
+                                Showing previously loaded results; they may be
+                                stale.
+                            </p>
+                        :   null}
                         <Button
                             type='button'
                             variant='neutral'
@@ -1745,6 +1830,12 @@ const FeedRoute = ({
                         className='mh-alert mt-3 text-xs font-bold'
                     >
                         <p>API sync issue: {errorMessage}</p>
+                        {feedRecords.length > 0 ?
+                            <p>
+                                Showing previously loaded results; they may be
+                                stale.
+                            </p>
+                        :   null}
                         <Button
                             type='button'
                             variant='neutral'
@@ -3141,6 +3232,12 @@ const ResourceRoute = ({
                         className='mh-alert mt-3 text-xs font-bold'
                     >
                         <p>API sync issue: {errorMessage}</p>
+                        {resourceCards.length > 0 ?
+                            <p>
+                                Showing previously loaded results; they may be
+                                stale.
+                            </p>
+                        :   null}
                         <Button
                             type='button'
                             variant='neutral'
@@ -4048,6 +4145,13 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                 <div className='mt-4 grid gap-3 sm:grid-cols-2'>
                     {profiles.map(profile => (
                         <Card key={profile.uri} title={profile.displayName}>
+                            {profile.recordOrigin === 'synthetic' ?
+                                <Badge tone='info'>Synthetic showcase</Badge>
+                            : profile.recordOrigin === 'sourced-public' ?
+                                <Badge tone='info'>
+                                    Public-source reference
+                                </Badge>
+                            :   null}
                             <p className='text-sm'>{profile.bio}</p>
                             <p className='mt-2 text-xs text-mh-textMuted'>
                                 {profile.capabilities.join(', ')} ·{' '}
@@ -8513,6 +8617,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const [onboardingError, setOnboardingError] = useState<string>();
     const [maintenanceStatus, setMaintenanceStatus] =
         useState<MaintenanceState>();
+    const [isOnline, setIsOnline] = useState(
+        typeof navigator === 'undefined' ? true : navigator.onLine,
+    );
 
     const currentUserDid = auth.session?.did ?? '';
 
@@ -8525,6 +8632,17 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             }
         });
         return () => controller.abort();
+    }, []);
+
+    useEffect(() => {
+        const online = () => setIsOnline(true);
+        const offline = () => setIsOnline(false);
+        window.addEventListener('online', online);
+        window.addEventListener('offline', offline);
+        return () => {
+            window.removeEventListener('online', online);
+            window.removeEventListener('offline', offline);
+        };
     }, []);
 
     useEffect(() => {
@@ -9175,6 +9293,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             webDataMode === 'fixture' ?
                 <SettingsRoute currentUserDid={currentUserDid} />
             :   <AccountPrivacyRoute onDeactivated={auth.restore} />
+        : currentRoute === '/legal/terms' ||
+          currentRoute === '/legal/privacy' ||
+          currentRoute === '/legal/community-guidelines' ?
+            <LegalPolicyRoute route={currentRoute} />
         :   <DashboardRoute
                 appTitle={appTitle}
                 onNavigate={navigate}
@@ -9303,6 +9425,18 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                         {maintenanceStatus.publicMessage} New submissions and
                         exact-location exchange are disabled; public reads and
                         service status remain available.
+                    </div>
+                : null}
+
+                {!isOnline ?
+                    <div
+                        role='alert'
+                        className='mb-4 border-4 border-mh-danger bg-mh-surfaceElev p-4'
+                    >
+                        <strong>You are offline.</strong> Previously rendered
+                        public data may be stale. Patchwork does not queue
+                        mutations offline; reconnect before posting, offering,
+                        or changing account state.
                     </div>
                 : null}
 
