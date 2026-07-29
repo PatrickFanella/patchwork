@@ -146,7 +146,13 @@ export const ExactLocationExchange = ({
             };
             channel.onmessage = event => {
                 try {
-                    const message: unknown = JSON.parse(String(event.data));
+                    if (
+                        typeof event.data !== 'string' ||
+                        event.data.length > 2_048
+                    ) {
+                        throw new Error('Peer payload exceeded its boundary.');
+                    }
+                    const message: unknown = JSON.parse(event.data);
                     if (typeof message !== 'object' || message === null) {
                         throw new Error('Invalid peer payload.');
                     }
