@@ -3,6 +3,8 @@ import {
     type AidPostCreateApiInput,
     type LifecycleTransitionApiInput,
     blockUserViaApi,
+    archiveNotificationViaApi,
+    confirmNotificationEmailViaApi,
     createAidPostViaApi,
     createAtAidPostViaApi,
     createAtDirectoryResourceViaApi,
@@ -10,6 +12,7 @@ import {
     createOrganizationViaApi,
     consentToExactLocationViaApi,
     deactivateAccountViaApi,
+    disableNotificationEmailViaApi,
     deleteAtVolunteerProfileViaApi,
     deleteAtDirectoryResourceViaApi,
     fetchAccountOnboardingViaApi,
@@ -17,18 +20,25 @@ import {
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     fetchMyOrganizationsViaApi,
+    fetchNotificationChannelsViaApi,
+    fetchNotificationsViaApi,
     fetchOrganizationsViaApi,
     fetchPrivateAttachmentsViaApi,
     fetchVolunteerProfilesViaApi,
     exportDataViaApi,
     initiateChatViaApi,
     inviteOrganizationMemberViaApi,
+    markAllNotificationsReadViaApi,
+    markNotificationReadViaApi,
     getAtDirectoryResourceViaApi,
     queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
     requestPrivateAttachmentAccessViaApi,
+    requestNotificationEmailVerificationViaApi,
+    registerPushSubscriptionViaApi,
     reconcileAidPostStatusViaApi,
     revokeExactLocationSessionViaApi,
+    revokePushSubscriptionViaApi,
     sendExactLocationSignalViaApi,
     transitionAidPostViaApi,
     uploadPrivateAttachmentViaApi,
@@ -138,6 +148,159 @@ describe('api client', () => {
         });
         expect(JSON.parse(String(init.body))).toEqual({});
         expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('did:');
+    });
+
+    it('loads durable notification filters and channel state without browser identity', async () => {
+        const notification = {
+            id: '11111111-1111-4111-8111-111111111111',
+            type: 'offer_received',
+            recipientDid: 'did:plc:session-owner',
+            title: 'New offer',
+            body: 'Someone offered to help with your request.',
+            priority: 'normal',
+            read: false,
+            archived: false,
+            actionUrl: '/inbox',
+            metadata: { offerId: 'safe-offer-id' },
+            templateVersion: 'v1',
+            deduplicationKey: 'coordination-event:1',
+            createdAt: '2026-07-28T12:00:00.000Z',
+            updatedAt: '2026-07-28T12:00:00.000Z',
+        };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    items: [notification],
+                    total: 1,
+                    unread: 1,
+                    nextCursor: notification.id,
+                }),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    preferences: {
+                        inApp: true,
+                        email: false,
+                        push: false,
+                    },
+                    email: null,
+                    push: {
+                        supported: true,
+                        publicKey: 'public-vapid-key',
+                        activeSubscriptions: 0,
+                    },
+                }),
+            );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await expect(
+            fetchNotificationsViaApi({
+                filter: 'unread',
+                type: 'offer_received',
+                cursor: notification.id,
+                limit: 10,
+            }),
+        ).resolves.toMatchObject({
+            ok: true,
+            data: { total: 1, unread: 1 },
+        });
+        await expect(fetchNotificationChannelsViaApi()).resolves.toMatchObject({
+            ok: true,
+            data: {
+                push: { supported: true, activeSubscriptions: 0 },
+            },
+        });
+
+        const calls = fetchMock.mock.calls as unknown as Array<
+            [string, RequestInit]
+        >;
+        expect(calls[0]![0]).toContain(
+            '/notifications?filter=unread&type=offer_received',
+        );
+        expect(calls[0]![0]).toContain(`cursor=${notification.id}`);
+        expect(calls[0]![0]).toContain('limit=10');
+        expect(calls[1]![0]).toMatch(/\/notifications\/channels$/u);
+        expect(calls.every(([, init]) => init.credentials === 'include'))
+            .toBe(true);
+        expect(JSON.stringify(calls)).not.toContain('session-owner');
+    });
+
+    it('mutates notification state and explicit external subscriptions with bounded payloads', async () => {
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(createJsonResponse({ updated: true }))
+            .mockResolvedValueOnce(createJsonResponse({ updated: 2 }))
+            .mockResolvedValueOnce(createJsonResponse({ archived: true }))
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    expiresAt: '2026-07-28T12:30:00.000Z',
+                }),
+            )
+            .mockResolvedValueOnce(createJsonResponse({ confirmed: true }))
+            .mockResolvedValueOnce(createJsonResponse({ disabled: true }))
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    id: '22222222-2222-4222-8222-222222222222',
+                }),
+            )
+            .mockResolvedValueOnce(createJsonResponse({ revoked: 1 }));
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        const notificationId =
+            '11111111-1111-4111-8111-111111111111';
+        const endpoint = 'https://push.example.test/subscription';
+
+        await markNotificationReadViaApi(notificationId, true);
+        await markAllNotificationsReadViaApi();
+        await archiveNotificationViaApi(notificationId);
+        await requestNotificationEmailVerificationViaApi(
+            'member@example.test',
+        );
+        await confirmNotificationEmailViaApi('opaque-confirmation-token');
+        await disableNotificationEmailViaApi();
+        await registerPushSubscriptionViaApi({
+            endpoint,
+            keys: {
+                p256dh: 'p256dh-public-key-material',
+                auth: 'auth-secret-material',
+            },
+        });
+        await revokePushSubscriptionViaApi(endpoint);
+
+        const calls = fetchMock.mock.calls as unknown as Array<
+            [string, RequestInit]
+        >;
+        expect(calls.map(([url]) => new URL(url).pathname)).toEqual([
+            '/api/notifications/read',
+            '/api/notifications/read-all',
+            '/api/notifications/archive',
+            '/api/notifications/email',
+            '/api/notifications/email/confirm',
+            '/api/notifications/email',
+            '/api/notifications/push',
+            '/api/notifications/push',
+        ]);
+        expect(calls.map(([, init]) => init.method)).toEqual([
+            'POST',
+            'POST',
+            'POST',
+            'POST',
+            'POST',
+            'DELETE',
+            'POST',
+            'DELETE',
+        ]);
+        expect(JSON.parse(String(calls[6]![1].body))).toEqual({
+            endpoint,
+            keys: {
+                p256dh: 'p256dh-public-key-material',
+                auth: 'auth-secret-material',
+            },
+        });
+        const serialized = JSON.stringify(calls);
+        expect(serialized).not.toMatch(
+            /ownerDid|recipientDid|actorDid|exactLatitude|exactLongitude/u,
+        );
     });
 
     it('keeps exact coordinates out of the location signaling API', async () => {

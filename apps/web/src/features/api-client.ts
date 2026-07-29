@@ -17,6 +17,9 @@ import {
 } from './discovery-runtime';
 import type {
     AccountPreferences,
+    Notification,
+    NotificationFilter,
+    NotificationType,
     SettingsChangeAudit,
     UserSettings,
 } from '@patchwork/shared';
@@ -2749,6 +2752,235 @@ export const markActivityInboxReadViaApi = async (
                 result.data,
                 'readAt',
                 'Inbox update response was malformed.',
+            )
+        :   result;
+};
+
+export interface NotificationChannelState {
+    preferences: {
+        inApp: boolean;
+        email: boolean;
+        push: boolean;
+    };
+    email: {
+        address: string;
+        verified: boolean;
+    } | null;
+    push: {
+        supported: boolean;
+        publicKey: string | null;
+        activeSubscriptions: number;
+    };
+}
+
+export const fetchNotificationsViaApi = async (
+    input: {
+        filter?: NotificationFilter;
+        type?: NotificationType;
+        cursor?: string;
+        limit?: number;
+    } = {},
+    signal?: AbortSignal,
+): Promise<
+    ApiClientResult<{
+        items: Notification[];
+        total: number;
+        unread: number;
+        nextCursor?: string;
+    }>
+> => {
+    const params = new URLSearchParams();
+    if (input.filter) params.set('filter', input.filter);
+    if (input.type) params.set('type', input.type);
+    if (input.cursor) params.set('cursor', input.cursor);
+    if (input.limit) params.set('limit', String(input.limit));
+    const result = await requestJson('/notifications', params, signal);
+    if (
+        !result.ok ||
+        !isRecord(result.data) ||
+        !Array.isArray(result.data['items']) ||
+        typeof result.data['total'] !== 'number' ||
+        typeof result.data['unread'] !== 'number'
+    ) {
+        return result.ok ?
+                invalidResponseFailure(
+                    'Notification response was malformed.',
+                )
+            :   result;
+    }
+    return {
+        ok: true,
+        data: result.data as unknown as {
+            items: Notification[];
+            total: number;
+            unread: number;
+            nextCursor?: string;
+        },
+    };
+};
+
+export const markNotificationReadViaApi = async (
+    notificationId: string,
+    read = true,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ updated: true }>> => {
+    const result = await requestJsonPost(
+        '/notifications/read',
+        { notificationId, read },
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'updated',
+                'Notification update response was malformed.',
+            )
+        :   result;
+};
+
+export const markAllNotificationsReadViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ updated: number }>> => {
+    const result = await requestJsonPost(
+        '/notifications/read-all',
+        {},
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'updated',
+                'Notification update response was malformed.',
+            )
+        :   result;
+};
+
+export const archiveNotificationViaApi = async (
+    notificationId: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ archived: true }>> => {
+    const result = await requestJsonPost(
+        '/notifications/archive',
+        { notificationId },
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'archived',
+                'Notification archive response was malformed.',
+            )
+        :   result;
+};
+
+export const fetchNotificationChannelsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<NotificationChannelState>> => {
+    const result = await requestJson(
+        '/notifications/channels',
+        new URLSearchParams(),
+        signal,
+    );
+    return result.ok && isRecord(result.data) ?
+            {
+                ok: true,
+                data: result.data as unknown as NotificationChannelState,
+            }
+        : result.ok ?
+            invalidResponseFailure(
+                'Notification channel response was malformed.',
+            )
+        :   result;
+};
+
+export const requestNotificationEmailVerificationViaApi = async (
+    email: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ expiresAt: string }>> => {
+    const result = await requestJsonPost(
+        '/notifications/email',
+        { email },
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'expiresAt',
+                'Email verification response was malformed.',
+            )
+        :   result;
+};
+
+export const confirmNotificationEmailViaApi = async (
+    token: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ confirmed: true }>> => {
+    const result = await requestJsonPost(
+        '/notifications/email/confirm',
+        { token },
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'confirmed',
+                'Email confirmation response was malformed.',
+            )
+        :   result;
+};
+
+export const disableNotificationEmailViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ disabled: boolean }>> => {
+    const result = await requestJsonDelete(
+        '/notifications/email',
+        {},
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'disabled',
+                'Email disable response was malformed.',
+            )
+        :   result;
+};
+
+export const registerPushSubscriptionViaApi = async (
+    subscription: {
+        endpoint: string;
+        keys: { p256dh: string; auth: string };
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ id: string }>> => {
+    const result = await requestJsonPost(
+        '/notifications/push',
+        subscription,
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'id',
+                'Push registration response was malformed.',
+            )
+        :   result;
+};
+
+export const revokePushSubscriptionViaApi = async (
+    endpoint?: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ revoked: number }>> => {
+    const result = await requestJsonDelete(
+        '/notifications/push',
+        { endpoint },
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'revoked',
+                'Push revocation response was malformed.',
             )
         :   result;
 };

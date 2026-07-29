@@ -95,6 +95,7 @@ import {
     type CoordinationConnection,
     type CoordinationOffer,
     type MatchCandidate,
+    type NotificationChannelState,
     type OutcomeFeedback,
     type PrivateAttachment,
     type VerificationApplication,
@@ -129,6 +130,8 @@ import {
     fetchOrganizationMembersViaApi,
     fetchOrganizationsViaApi,
     fetchMyOutcomeFeedbackViaApi,
+    fetchNotificationChannelsViaApi,
+    fetchNotificationsViaApi,
     fetchOrganizationStewardshipsViaApi,
     fetchPrivateAttachmentsViaApi,
     fetchExactAddressReviewQueueViaApi,
@@ -147,8 +150,11 @@ import {
     decideVerificationViaApi,
     queryAidPostLifecycleViaApi,
     markActivityInboxReadViaApi,
+    markAllNotificationsReadViaApi,
+    markNotificationReadViaApi,
     matchRequestViaApi,
     reportAidPostViaApi,
+    requestNotificationEmailVerificationViaApi,
     reconcileAidPostStatusViaApi,
     reconfirmOrganizationStewardshipViaApi,
     requestExactPublicAddressViaApi,
@@ -160,6 +166,11 @@ import {
     submitOutcomeFeedbackViaApi,
     submitVerificationAppealViaApi,
     submitVerificationApplicationViaApi,
+    confirmNotificationEmailViaApi,
+    disableNotificationEmailViaApi,
+    archiveNotificationViaApi,
+    registerPushSubscriptionViaApi,
+    revokePushSubscriptionViaApi,
     uploadPrivateAttachmentViaApi,
     deletePrivateAttachmentViaApi,
     reviewPrivateAttachmentViaApi,
@@ -184,6 +195,8 @@ import {
     CURRENT_POLICY_VERSION,
     CHAT_PLACEHOLDER_CONTRACT,
     defaultAccountPreferences,
+    type Notification as DurableNotification,
+    type NotificationFilter,
     requiredPolicyDocuments,
     type AccountPreferences,
     type UserSettings,
@@ -232,7 +245,6 @@ const appRoutes = [
 const deferredFixtureRoutes = new Set<AppRoute>([
     '/chat',
     '/moderation',
-    '/notifications',
     '/scheduling',
     '/feedback',
     '/groups',
@@ -278,7 +290,11 @@ const primaryRoutes: readonly AppRoute[] = [
 ];
 
 const accountRoutes: readonly AppRoute[] = ['/volunteer', '/chat', '/settings'];
-const productionAccountRoutes: readonly AppRoute[] = ['/inbox', '/settings'];
+const productionAccountRoutes: readonly AppRoute[] = [
+    '/inbox',
+    '/notifications',
+    '/settings',
+];
 
 const secondaryRoutes = appRoutes.filter(
     route =>
@@ -5782,6 +5798,466 @@ const outcomeOptions = [
     'cancelled',
 ] as const;
 
+const applicationServerKey = (value: string): ArrayBuffer => {
+    const padding = '='.repeat((4 - value.length % 4) % 4);
+    const base64 = (value + padding).replaceAll('-', '+').replaceAll('_', '/');
+    const decoded = window.atob(base64);
+    const buffer = new ArrayBuffer(decoded.length);
+    const bytes = new Uint8Array(buffer);
+    for (let index = 0; index < decoded.length; index += 1) {
+        bytes[index] = decoded.charCodeAt(index);
+    }
+    return buffer;
+};
+
+const NotificationCenterRoute = () => {
+    const [notifications, setNotifications] =
+        useState<DurableNotification[]>([]);
+    const [filter, setFilter] = useState<NotificationFilter>('all');
+    const [total, setTotal] = useState(0);
+    const [unread, setUnread] = useState(0);
+    const [nextCursor, setNextCursor] = useState<string>();
+    const [channels, setChannels] =
+        useState<NotificationChannelState>();
+    const [email, setEmail] = useState('');
+    const [status, setStatus] = useState('Loading notifications…');
+    const [isLoading, setIsLoading] = useState(true);
+
+    const load = useCallback(async () => {
+        setIsLoading(true);
+        const [items, channelState] = await Promise.all([
+            fetchNotificationsViaApi({ filter }),
+            fetchNotificationChannelsViaApi(),
+        ]);
+        if (!items.ok || !channelState.ok) {
+            setStatus(
+                `Error: ${
+                    !items.ok ? items.error
+                    : !channelState.ok ? channelState.error
+                    : 'Notifications are unavailable.'
+                }`,
+            );
+            setIsLoading(false);
+            return;
+        }
+        setNotifications(items.data.items);
+        setTotal(items.data.total);
+        setUnread(items.data.unread);
+        setNextCursor(items.data.nextCursor);
+        setChannels(channelState.data);
+        setEmail(channelState.data.email?.address ?? '');
+        setStatus(
+            `${items.data.unread} unread notification${
+                items.data.unread === 1 ? '' : 's'
+            }.`,
+        );
+        setIsLoading(false);
+    }, [filter]);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    useEffect(() => {
+        const token = new URLSearchParams(window.location.search).get(
+            'emailToken',
+        );
+        if (!token) return;
+        void confirmNotificationEmailViaApi(token).then(result => {
+            setStatus(
+                result.ok ?
+                    'Notification email confirmed.'
+                :   `Error: ${result.error}`,
+            );
+            window.history.replaceState({}, '', '/notifications');
+            if (result.ok) void load();
+        });
+    }, [load]);
+
+    const updateChannelPreference = async (
+        channel: 'inApp' | 'email' | 'push',
+        enabled: boolean,
+    ) => {
+        const current = await fetchAccountPreferencesViaApi();
+        if (!current.ok) {
+            setStatus(`Error: ${current.error}`);
+            return false;
+        }
+        const updated = await updateAccountPreferencesViaApi({
+            ...current.data,
+            notifications: {
+                ...current.data.notifications,
+                [channel]: enabled,
+            },
+        });
+        if (!updated.ok) {
+            setStatus(`Error: ${updated.error}`);
+            return false;
+        }
+        return true;
+    };
+
+    const markRead = async (
+        notification: DurableNotification,
+        read: boolean,
+    ) => {
+        const result = await markNotificationReadViaApi(
+            notification.id,
+            read,
+        );
+        if (result.ok) await load();
+        setStatus(
+            result.ok ?
+                read ? 'Notification marked read.'
+                :   'Notification marked unread.'
+            :   `Error: ${result.error}`,
+        );
+    };
+
+    const markAllRead = async () => {
+        const result = await markAllNotificationsReadViaApi();
+        if (result.ok) await load();
+        setStatus(
+            result.ok ?
+                `${result.data.updated} notification(s) marked read.`
+            :   `Error: ${result.error}`,
+        );
+    };
+
+    const archive = async (notification: DurableNotification) => {
+        const result = await archiveNotificationViaApi(notification.id);
+        if (result.ok) await load();
+        setStatus(
+            result.ok ?
+                'Notification archived.'
+            :   `Error: ${result.error}`,
+        );
+    };
+
+    const verifyEmail = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const result =
+            await requestNotificationEmailVerificationViaApi(email);
+        const preferenceEnabled =
+            result.ok ?
+                await updateChannelPreference('email', true)
+            :   false;
+        setStatus(
+            result.ok && preferenceEnabled ?
+                'Confirmation email sent. The link expires in 30 minutes.'
+            : !result.ok ?
+                `Error: ${result.error}`
+            :   'Error: Email delivery preference could not be enabled.',
+        );
+    };
+
+    const disableEmail = async () => {
+        const result = await disableNotificationEmailViaApi();
+        if (result.ok) {
+            await updateChannelPreference('email', false);
+            await load();
+        }
+        setStatus(
+            result.ok ?
+                'Email notifications disabled.'
+            :   `Error: ${result.error}`,
+        );
+    };
+
+    const enablePush = async () => {
+        try {
+            if (
+                !channels?.push.supported ||
+                !channels.push.publicKey ||
+                !('serviceWorker' in navigator) ||
+                !('PushManager' in window)
+            ) {
+                setStatus('Error: Browser push is unavailable here.');
+                return;
+            }
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                setStatus('Browser push permission was not granted.');
+                return;
+            }
+            if (!await updateChannelPreference('push', true)) return;
+            await navigator.serviceWorker.register(
+                '/push-service-worker.js',
+                { scope: '/' },
+            );
+            const registration = await navigator.serviceWorker.ready;
+            const existing =
+                await registration.pushManager.getSubscription();
+            const subscription =
+                existing ??
+                await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: applicationServerKey(
+                        channels.push.publicKey,
+                    ),
+                });
+            const serialized = subscription.toJSON();
+            if (
+                !serialized.endpoint ||
+                !serialized.keys?.p256dh ||
+                !serialized.keys.auth
+            ) {
+                throw new Error('The browser returned an incomplete subscription.');
+            }
+            const result = await registerPushSubscriptionViaApi({
+                endpoint: serialized.endpoint,
+                keys: {
+                    p256dh: serialized.keys.p256dh,
+                    auth: serialized.keys.auth,
+                },
+            });
+            if (!result.ok) throw new Error(result.error);
+            await load();
+            setStatus('Browser push enabled by explicit opt-in.');
+        } catch (error) {
+            await updateChannelPreference('push', false);
+            setStatus(
+                `Error: ${
+                    error instanceof Error ?
+                        error.message
+                    :   'Browser push could not be enabled.'
+                }`,
+            );
+        }
+    };
+
+    const disablePush = async () => {
+        try {
+            const registration =
+                'serviceWorker' in navigator ?
+                    await navigator.serviceWorker.getRegistration('/')
+                :   undefined;
+            const subscription =
+                await registration?.pushManager.getSubscription();
+            const result = await revokePushSubscriptionViaApi(
+                subscription?.endpoint,
+            );
+            if (!result.ok) throw new Error(result.error);
+            await subscription?.unsubscribe();
+            await updateChannelPreference('push', false);
+            await load();
+            setStatus('Browser push revoked.');
+        } catch (error) {
+            setStatus(
+                `Error: ${
+                    error instanceof Error ?
+                        error.message
+                    :   'Browser push could not be revoked.'
+                }`,
+            );
+        }
+    };
+
+    const loadMore = async () => {
+        if (!nextCursor) return;
+        const result = await fetchNotificationsViaApi({
+            filter,
+            cursor: nextCursor,
+        });
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        setNotifications(current => [...current, ...result.data.items]);
+        setNextCursor(result.data.nextCursor);
+    };
+
+    return (
+        <section className='space-y-6'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>Notification center</h1>
+                <p className='mt-2 text-sm text-mh-textMuted'>
+                    Durable in-app updates with optional verified email and
+                    explicit browser-push delivery.
+                </p>
+            </header>
+            <Panel title='Delivery preferences'>
+                <p className='text-sm'>
+                    In-app updates are always retained for your account.
+                    External channels never contain exact locations, private
+                    evidence, contact details, or moderation notes.
+                </p>
+                <div className='mt-4 grid gap-4 md:grid-cols-2'>
+                    <form className='space-y-2' onSubmit={verifyEmail}>
+                        <label
+                            htmlFor='notification-email'
+                            className='block text-sm font-bold'
+                        >
+                            Verified notification email
+                        </label>
+                        <Input
+                            id='notification-email'
+                            type='email'
+                            value={email}
+                            onChange={event => setEmail(event.target.value)}
+                            required
+                        />
+                        <p className='text-xs text-mh-textMuted'>
+                            {channels?.email?.verified ?
+                                'Verified and eligible for delivery.'
+                            :   'Not verified. Email remains disabled until confirmation.'}
+                        </p>
+                        <div className='flex flex-wrap gap-2'>
+                            <Button type='submit'>Send confirmation</Button>
+                            {channels?.email ?
+                                <Button
+                                    type='button'
+                                    variant='neutral'
+                                    onClick={() => void disableEmail()}
+                                >
+                                    Disable email
+                                </Button>
+                            :   null}
+                        </div>
+                    </form>
+                    <div className='space-y-2'>
+                        <h3 className='text-sm font-bold'>Browser push</h3>
+                        <p className='text-xs text-mh-textMuted'>
+                            {channels?.push.activeSubscriptions ?? 0} active
+                            browser subscription(s). Permission is requested
+                            only when you choose Enable.
+                        </p>
+                        <div className='flex flex-wrap gap-2'>
+                            <Button
+                                type='button'
+                                onClick={() => void enablePush()}
+                                disabled={!channels?.push.supported}
+                            >
+                                Enable browser push
+                            </Button>
+                            <Button
+                                type='button'
+                                variant='neutral'
+                                onClick={() => void disablePush()}
+                            >
+                                Revoke browser push
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </Panel>
+            <Panel title='Updates'>
+                <div className='mb-4 flex flex-wrap items-end gap-3'>
+                    <label className='text-sm font-bold'>
+                        Show
+                        <select
+                            className='mh-input ml-2 px-3 py-2'
+                            aria-label='Notification filter'
+                            value={filter}
+                            onChange={event =>
+                                setFilter(
+                                    event.target.value as NotificationFilter,
+                                )
+                            }
+                        >
+                            <option value='all'>Active</option>
+                            <option value='unread'>Unread</option>
+                            <option value='read'>Read</option>
+                            <option value='archived'>Archived</option>
+                        </select>
+                    </label>
+                    <Badge tone={unread ? 'info' : 'neutral'}>
+                        {unread} unread · {total} active
+                    </Badge>
+                    <Button
+                        type='button'
+                        variant='neutral'
+                        onClick={() => void markAllRead()}
+                        disabled={unread === 0}
+                    >
+                        Mark all read
+                    </Button>
+                    <Button
+                        type='button'
+                        variant='neutral'
+                        onClick={() => void load()}
+                    >
+                        Refresh
+                    </Button>
+                </div>
+                {isLoading ?
+                    <p role='status'>Loading durable notifications…</p>
+                : notifications.length === 0 ?
+                    <p>No notifications match this filter.</p>
+                :   <div className='space-y-3'>
+                        {notifications.map(notification => (
+                            <Card
+                                key={notification.id}
+                                title={notification.title}
+                            >
+                                <p>{notification.body}</p>
+                                <p className='mt-2 text-xs text-mh-textMuted'>
+                                    {notification.type.replaceAll('_', ' ')} ·{' '}
+                                    {notification.priority} ·{' '}
+                                    {new Date(
+                                        notification.createdAt,
+                                    ).toLocaleString()}
+                                </p>
+                                <div className='mt-3 flex flex-wrap gap-2'>
+                                    <Button
+                                        type='button'
+                                        variant='neutral'
+                                        onClick={() =>
+                                            void markRead(
+                                                notification,
+                                                !notification.read,
+                                            )
+                                        }
+                                    >
+                                        {notification.read ?
+                                            'Mark unread'
+                                        :   'Mark read'}
+                                    </Button>
+                                    {!notification.archived ?
+                                        <Button
+                                            type='button'
+                                            variant='neutral'
+                                            onClick={() =>
+                                                void archive(notification)
+                                            }
+                                        >
+                                            Archive
+                                        </Button>
+                                    :   null}
+                                    {notification.actionUrl ?
+                                        <a
+                                            className='font-bold underline'
+                                            href={notification.actionUrl}
+                                        >
+                                            Open related activity
+                                        </a>
+                                    :   null}
+                                </div>
+                            </Card>
+                        ))}
+                    </div>}
+                {nextCursor ?
+                    <p className='mt-4'>
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            onClick={() => void loadMore()}
+                        >
+                            Load more
+                        </Button>
+                    </p>
+                :   null}
+            </Panel>
+            <p
+                role={status.startsWith('Error:') ? 'alert' : 'status'}
+                className='text-sm'
+            >
+                {status}
+            </p>
+        </section>
+    );
+};
+
 const CoordinationInboxRoute = ({ did }: { did: string }) => {
     const [offers, setOffers] = useState<CoordinationOffer[]>([]);
     const [connections, setConnections] = useState<
@@ -7958,6 +8434,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         currentRoute === '/posting' ||
         currentRoute === '/chat' ||
         currentRoute === '/inbox' ||
+        currentRoute === '/notifications' ||
         currentRoute === '/settings';
     const isDeferredFixtureRoute =
         webDataMode !== 'fixture' && deferredFixtureRoutes.has(currentRoute);
@@ -8172,6 +8649,8 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             <VerificationRoute did={currentUserDid} />
         : currentRoute === '/inbox' ?
             <CoordinationInboxRoute did={currentUserDid} />
+        : currentRoute === '/notifications' ?
+            <NotificationCenterRoute />
         : currentRoute === '/chat' ?
             <ChatRoute
                 currentUserDid={currentUserDid}
