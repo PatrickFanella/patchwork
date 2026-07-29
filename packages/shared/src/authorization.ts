@@ -39,6 +39,11 @@ export const CAPABILITIES = [
     'read:own_profile',
     'edit:own_profile',
     'read:inbox',
+    'organization:administer',
+    'verification:review',
+    'exact_public_address:approve',
+    'attachment:review',
+    'maintenance_mode:manage',
     'moderate:content',
     'moderate:users',
     'admin:manage_roles',
@@ -81,12 +86,17 @@ const VOLUNTEER_CAPABILITIES: readonly Capability[] = [
 
 const MODERATOR_CAPABILITIES: readonly Capability[] = [
     ...VOLUNTEER_CAPABILITIES,
+    'verification:review',
+    'exact_public_address:approve',
+    'attachment:review',
+    'maintenance_mode:manage',
     'moderate:content',
     'moderate:users',
 ];
 
 const ADMIN_CAPABILITIES: readonly Capability[] = [
     ...MODERATOR_CAPABILITIES,
+    'organization:administer',
     'admin:manage_roles',
     'admin:system_config',
     'admin:view_audit',

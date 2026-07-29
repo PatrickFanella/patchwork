@@ -117,6 +117,7 @@ import {
     validateSettings,
 } from '../settings-ux';
 import {
+    CHAT_PLACEHOLDER_CONTRACT,
     type UserSettings,
     geoSharingPrecisions,
     privacyLevels,
@@ -1067,31 +1068,39 @@ const MapRoute = ({
                         <Badge tone='info'>{selectedRecord.recipientDid}</Badge>
                     </div>
                     <div className='mt-4 flex flex-wrap gap-2'>
-                        {drawer.actions.map(action => (
-                            <Button
-                                key={action.action}
-                                variant={
-                                    action.action === 'contact_helper' ?
-                                        'primary'
-                                    :   'neutral'
-                                }
-                                className='px-3 py-1 text-xs'
-                                aria-label={action.ariaLabel}
-                                onClick={() => {
-                                    if (action.action === 'contact_helper') {
-                                        onOpenChat(selectedRecord, 'map');
-                                        return;
+                        {drawer.actions
+                            .filter(
+                                action =>
+                                    webDataMode === 'fixture' ||
+                                    action.action !== 'contact_helper',
+                            )
+                            .map(action => (
+                                <Button
+                                    key={action.action}
+                                    variant={
+                                        action.action === 'contact_helper' ?
+                                            'primary'
+                                        :   'neutral'
                                     }
+                                    className='px-3 py-1 text-xs'
+                                    aria-label={action.ariaLabel}
+                                    onClick={() => {
+                                        if (
+                                            action.action === 'contact_helper'
+                                        ) {
+                                            onOpenChat(selectedRecord, 'map');
+                                            return;
+                                        }
 
-                                    onTriageAction(
-                                        selectedRecord.card.id,
-                                        action.action,
-                                    );
-                                }}
-                            >
-                                {action.label}
-                            </Button>
-                        ))}
+                                        onTriageAction(
+                                            selectedRecord.card.id,
+                                            action.action,
+                                        );
+                                    }}
+                                >
+                                    {action.label}
+                                </Button>
+                            ))}
                         <Button
                             variant='neutral'
                             className='px-3 py-1 text-xs'
@@ -1836,7 +1845,7 @@ const FeedRoute = ({
                                     :   null}
 
                                     <div className='mt-4 flex flex-wrap gap-2'>
-                                        {record ?
+                                        {record && webDataMode === 'fixture' ?
                                             <Button
                                                 className='px-3 py-1 text-xs'
                                                 onClick={() =>
@@ -4871,12 +4880,20 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
 
     const content =
         isDeferredFixtureRoute ?
-            <Panel title='Deferred from the alpha'>
-                <p>
-                    This prototype surface is available only in the explicit
-                    local fixture demo and is not part of the production alpha.
-                </p>
-            </Panel>
+            currentRoute === '/chat' ?
+                <Panel title='Chat is not available'>
+                    <p>{CHAT_PLACEHOLDER_CONTRACT.message}</p>
+                    <p className='mt-2 text-sm text-mh-textMuted'>
+                        This placeholder has no history, initiation, or message
+                        mutation runtime.
+                    </p>
+                </Panel>
+            :   <Panel title='Deferred from the alpha'>
+                    <p>
+                        This prototype surface is available only in the explicit
+                        local fixture demo and is not part of the production alpha.
+                    </p>
+                </Panel>
         : requiresAuthentication && !auth.session ?
             <Panel title='Sign in required'>
                 <p>This action uses your authenticated AT Protocol identity.</p>

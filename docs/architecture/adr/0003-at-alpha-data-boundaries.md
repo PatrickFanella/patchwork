@@ -4,6 +4,7 @@
 - Date: 2026-07-10
 - Owners: Patchwork engineering and trust-and-safety
 - Supersedes: data-placement assumptions in the phase plans where they conflict with this decision
+- Amended: 2026-07-28 for the buyer-ready responsive-web target
 
 ## Context
 
@@ -20,20 +21,55 @@ The alpha also needs an ingestion source. The protocol firehose provides self-ce
 
 ## Decision
 
-### 1. Only aid posts are on-protocol in the alpha
+### 2026-07-28 buyer-ready amendment
 
-The sole alpha write collection is:
+This amendment supersedes the earlier exact-location retention allowance and
+the earlier statement that only aid posts may be written by the runtime. Aid
+posts, directory resources, and volunteer profiles may use their official
+user-owned AT collections once each collection has its complete authenticated
+CRUD, ingestion, projection, deletion, and moderation path. Reports,
+verification evidence, approvals, offers, connections, inbox state,
+notifications, attachments, consent, and organization membership remain
+private PostgreSQL or private-object-store state. Chat remains unavailable.
+
+Personal exact location is transient input. Patchwork must never persist it in
+PostgreSQL, AT records, object storage, logs, analytics, notifications,
+exports, backups, Playwright artifacts, or any fallback transport. It may be
+sent only over an authenticated encrypted WebRTC data channel between the two
+participants of an accepted active connection. Signaling is authenticated and
+authorized against that connection, requires fresh consent from both
+participants, uses a short-lived single-use identifier, contains no
+coordinates, fails closed, and is disabled by expiry, block, disconnect,
+deactivation, authorization loss, or maintenance mode. General telemetry must
+redact both coordinates and signaling identifiers.
+
+An exact public address is a directory-only exception. It is allowed only for
+a public organization or public resource with active verification and a
+separate, active moderator approval. The approval expires and is revocable.
+Confidential facilities, private residences, personal meetup points, stale
+verification, and forged approval state are never eligible. Revocation or
+expiry immediately removes the exact projection and falls back to an approved
+approximate service area or quarantines the listing. Approval and origin
+metadata are immutable server-controlled state; browser and AT payloads cannot
+grant them.
+
+### 1. Approved public collections
+
+The original alpha write collection was:
 
 - `app.patchwork.aid.post`
 
 The signed-in user’s repository is authoritative for the public aid-post document and its public status. Patchwork writes through the user-authorized PDS session and stores the returned AT URI, CID, repository revision where available, and collection in private command/audit metadata.
 
-The following existing lexicons are deferred and must not be written by the alpha runtime:
+The buyer-ready program additionally authorizes complete runtime paths for:
 
 - `app.patchwork.volunteer.profile`
+- `app.patchwork.directory.resource`
+
+The following existing lexicons remain prohibited runtime writes:
+
 - `app.patchwork.conversation.meta`
 - `app.patchwork.moderation.report`
-- `app.patchwork.directory.resource`
 
 Their schemas and tests remain design inputs. Re-enabling any collection requires a separate ADR covering public-data risk, ownership, deletion, moderation, and interoperability.
 
@@ -89,11 +125,14 @@ Patchwork is authoritative for private application workflow state. Separate acce
 - reports, moderation cases, evidence references, decisions, and appeals;
 - rate-limit and abuse-control state that must survive restarts;
 - private operator notes;
-- optional exact-location details explicitly supplied for a fulfilled request.
+- exact-location signaling grants containing no coordinates.
 
 Private state is never emitted to the AT repository or public discovery API. Access is least-privilege and auditable. Application metrics contain aggregates, not raw private fields.
 
-For the alpha, exact-location details are optional. If supplied, they must be encrypted at the application layer, separated from the public projection, readable only by the requester and an explicitly assigned helper, and deleted no later than 30 days after the request becomes `resolved`, `closed`, or deleted. If the exact location is not required for fulfillment, the service must discard it after deriving the coarse public location rather than persist it.
+Exact personal coordinates are never PostgreSQL operational state. The server
+may retain only an audited authorization decision and short-lived signaling
+state without coordinates. That state expires within the signaling window and
+is revoked immediately when the connection becomes unauthorized.
 
 OAuth access and refresh material follows the selected official client’s storage requirements, is encrypted at rest, never logged, never returned to browser JavaScript, and is deleted on logout/account disconnection after any required revocation attempt.
 
@@ -140,12 +179,14 @@ Geoprivacy is enforced at every boundary:
 
 - The web labels public location as approximate before submission.
 - The command API rejects public `precisionKm < 1` and quantizes coordinates before a repository write.
-- Exact inputs, if needed, use a separate private payload and never share a type with the public record.
+- Exact personal inputs use a transient browser-only payload and never share a
+  type with a public record or server signaling payload.
 - The lexicon validator enforces the alpha public minimum.
 - The indexer rejects or quarantines records that violate the public location policy.
 - Query APIs return only quantized/coarse geography.
 - Logs, traces, error payloads, analytics, screenshots, and test artifacts redact exact location.
-- Backups containing private exact-location data are encrypted and expire under the same deletion policy.
+- Backups and exports contain no personal exact-location coordinate because the
+  server never persists one.
 
 ### 8. Jetstream is the alpha live-ingestion source
 
@@ -180,7 +221,8 @@ The full protocol firehose is deferred until one of these conditions is measured
 
 - Public and private lifecycle state require explicit reconciliation and visible partial-failure handling.
 - Jetstream adds provider and non-protocol dependency risk.
-- Exact-location fulfillment requires encryption, authorization, deletion jobs, and backup-aware retention.
+    - Exact-location fulfillment requires browser memory clearing, authenticated
+      WebRTC authorization, revocation, and cross-system absence proofs.
 - Deferred lexicons cannot be presented as current product capabilities.
 - A user may edit an aid post from another client, so Patchwork must accept externally originated valid changes.
 
@@ -190,6 +232,11 @@ A change violates this ADR if it:
 
 - writes any deferred Patchwork collection during the alpha;
 - stores exact coordinates in an AT record or public projection;
+- persists a personal exact coordinate in any server, observability, export,
+  backup, notification, or test-artifact system;
+- accepts browser-supplied origin, verification, or exact-address approval;
+- exposes an exact public-resource address without active verification,
+  separate active moderator approval, and a non-confidential classification;
 - publishes reports, blocks, evidence, casework, tokens, or operator notes;
 - treats a PostgreSQL projection row or internal tombstone as record authority;
 - lets a moderator mutate a user repository without separate explicit authority;
@@ -204,4 +251,3 @@ A change violates this ADR if it:
 - `docs/at-protocol/lexicon-versioning.md`
 - `docs/at-protocol/tombstone-contract.md`
 - `packages/shared/src/privacy.ts`
-

@@ -55,6 +55,10 @@ describe('authorization — role and capability model', () => {
             expect(userCaps).not.toContain('complete:handoff');
             expect(userCaps).not.toContain('moderate:content');
             expect(userCaps).not.toContain('admin:manage_roles');
+            expect(userCaps).not.toContain('verification:review');
+            expect(userCaps).not.toContain('exact_public_address:approve');
+            expect(userCaps).not.toContain('attachment:review');
+            expect(userCaps).not.toContain('maintenance_mode:manage');
         });
 
         it('volunteer inherits user capabilities and adds assignment/handoff', () => {
@@ -70,7 +74,12 @@ describe('authorization — role and capability model', () => {
             expect(modCaps).toContain('accept:assignment');
             expect(modCaps).toContain('moderate:content');
             expect(modCaps).toContain('moderate:users');
+            expect(modCaps).toContain('verification:review');
+            expect(modCaps).toContain('exact_public_address:approve');
+            expect(modCaps).toContain('attachment:review');
+            expect(modCaps).toContain('maintenance_mode:manage');
             expect(modCaps).not.toContain('admin:manage_roles');
+            expect(modCaps).not.toContain('organization:administer');
         });
 
         it('admin inherits moderator capabilities and adds admin capabilities', () => {
@@ -79,6 +88,7 @@ describe('authorization — role and capability model', () => {
             expect(adminCaps).toContain('admin:manage_roles');
             expect(adminCaps).toContain('admin:system_config');
             expect(adminCaps).toContain('admin:view_audit');
+            expect(adminCaps).toContain('organization:administer');
         });
 
         it('super_admin has all capabilities', () => {

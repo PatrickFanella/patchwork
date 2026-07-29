@@ -171,6 +171,22 @@ test.describe('Form accessibility', () => {
         await expect(page.getByText('Deferred from the alpha')).toBeVisible();
         await expect(page.locator('form')).toHaveCount(0);
     });
+
+    test('chat is a truthful non-mutating production placeholder', async ({
+        page,
+    }) => {
+        await page.goto('/chat');
+        await expect(
+            page.getByRole('region', { name: 'Chat is not available' }),
+        ).toBeVisible();
+        await expect(
+            page.getByText(
+                'Chat is not available. Patchwork does not provide messaging.',
+            ),
+        ).toBeVisible();
+        await expect(page.getByRole('button')).toHaveCount(0);
+        await expect(page.locator('form')).toHaveCount(0);
+    });
 });
 
 test.describe('ARIA attributes', () => {

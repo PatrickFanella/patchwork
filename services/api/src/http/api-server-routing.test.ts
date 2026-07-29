@@ -46,6 +46,18 @@ describe('API server method routing', () => {
 
         expect(response.status).toBe(200);
         expect(new Set(body.routes).size).toBe(body.routes.length);
+        expect(body.routes).not.toContain('/chat/initiate');
+        expect(body.routes).not.toContain('/chat/messages');
+    });
+
+    it('keeps fixture chat mutation unreachable from the API runtime', async () => {
+        const response = await fetch(`${origin}/chat/initiate`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{}',
+        });
+
+        expect(response.status).toBe(404);
     });
 
     it('rejects malformed JSON with a stable request-ID error', async () => {
