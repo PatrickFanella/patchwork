@@ -200,6 +200,12 @@ export const SignupPage = () => {
                     Create a new AT Protocol account through Patchwork.
                     You will need an invite code to register.
                 </p>
+                <p className='mt-4 max-w-md text-sm text-mh-textSoft'>
+                    This creates a permanent account hosted by the Subcult PDS,
+                    not a Patchwork-only login. You own the identity and may use
+                    it with compatible AT Protocol services. Deactivating
+                    Patchwork does not delete that independently hosted account.
+                </p>
             </section>
             <form
                 className='mh-card space-y-4 p-6 sm:p-8'
@@ -370,6 +376,12 @@ export const SignupPage = () => {
                     <a href={`/login${returnTo !== '/' ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} className='text-mh-link hover:underline'>
                         Sign in
                     </a>
+                </p>
+                <p className='text-xs leading-relaxed text-mh-textSoft'>
+                    Account recovery belongs to your PDS identity. Keep access
+                    to the recovery email you enter here. Self-service recovery
+                    is not yet available in Patchwork; contact the Subcult PDS
+                    operator if you lose access.
                 </p>
             </form>
             <div aria-live='polite' aria-atomic='true' className='mh-login-status'>

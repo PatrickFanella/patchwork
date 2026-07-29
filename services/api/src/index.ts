@@ -492,6 +492,21 @@ const handleRealAuthRoute = (
                     );
                 }
                 const record = body as Record<string, unknown>;
+                const allowedFields = new Set([
+                    'handle',
+                    'email',
+                    'password',
+                    'inviteCode',
+                ]);
+                if (
+                    Object.keys(record).some(key => !allowedFields.has(key))
+                ) {
+                    throw new PublicHttpError(
+                        400,
+                        'INVALID_SIGNUP_INPUT',
+                        'The signup input is invalid.',
+                    );
+                }
                 const result = await pdsSignupService.createAccount({
                     handle: typeof record.handle === 'string' ? record.handle : '',
                     email: typeof record.email === 'string' ? record.email : '',

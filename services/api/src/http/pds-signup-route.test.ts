@@ -118,6 +118,34 @@ describe('POST /auth/signup', () => {
         });
     });
 
+    it.each([
+        { did: 'did:plc:forged' },
+        { role: 'admin' },
+        { verification: 'approved' },
+        { accountOrigin: 'synthetic' },
+    ])('rejects browser-controlled identity or privilege fields', async field => {
+        const response = await fetch(`${origin}/auth/signup`, {
+            method: 'POST',
+            headers: {
+                origin: 'https://patchwork.test',
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+                handle: 'alice.subcult.tv',
+                email: 'alice@example.com',
+                password: 'password123',
+                inviteCode: 'invite-1',
+                ...field,
+            }),
+        });
+
+        expect(response.status).toBe(400);
+        await expect(response.json()).resolves.toMatchObject({
+            error: { code: 'INVALID_SIGNUP_INPUT' },
+        });
+        expect(createAccount).not.toHaveBeenCalled();
+    });
+
     it('rejects an existing browser session without CSRF proof', async () => {
         const response = await fetch(`${origin}/auth/signup`, {
             method: 'POST',

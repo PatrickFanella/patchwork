@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { didSchema } from '@patchwork/shared';
 import { PublicHttpError } from '../http/error-response.js';
 
 const HANDLE_SUFFIX = '.subcult.tv';
@@ -36,9 +37,9 @@ const MAX_INVITE_CODE_LENGTH = 128;
 const signupInputSchema = z.object({
     handle: z.string().trim().min(1).max(MAX_HANDLE_LENGTH),
     email: z.string().trim().email().max(MAX_EMAIL_LENGTH),
-    password: z.string().min(1).max(MAX_PASSWORD_LENGTH),
+    password: z.string().min(8).max(MAX_PASSWORD_LENGTH),
     inviteCode: z.string().trim().min(1).max(MAX_INVITE_CODE_LENGTH),
-});
+}).strict();
 
 export interface PdsSignupInput {
     handle: string;
@@ -67,6 +68,13 @@ const invalidSignupInput = () => buildPublicError('INVALID_SIGNUP_INPUT', 'The s
 
 const mapUpstreamError = (statusCode: number, errorCode?: string): PublicHttpError => {
     if (statusCode === 408) return buildPublicError('PDS_UNAVAILABLE', 'The account service timed out.', 503);
+    if (statusCode === 429) {
+        return buildPublicError(
+            'PDS_RATE_LIMITED',
+            'The account service is busy.',
+            503,
+        );
+    }
     if (statusCode >= 500) return buildPublicError('PDS_UNAVAILABLE', 'The account service is unavailable.', 503);
 
     switch (errorCode) {
@@ -132,7 +140,11 @@ export const createPdsSignupService = ({ pdsUrl, fetchImpl = fetch, timeoutMs = 
             }
 
             const body = await response.json() as { did?: unknown; handle?: unknown };
-            if (typeof body.did !== 'string' || typeof body.handle !== 'string') {
+            if (
+                typeof body.did !== 'string' ||
+                !didSchema.safeParse(body.did).success ||
+                typeof body.handle !== 'string'
+            ) {
                 throw buildPublicError('PDS_SIGNUP_FAILED', 'Account creation failed.');
             }
             if (body.handle !== handle) {

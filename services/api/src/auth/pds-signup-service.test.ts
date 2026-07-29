@@ -170,6 +170,54 @@ describe('createPdsSignupService', () => {
         });
     });
 
+    it('rejects malformed upstream identity and browser-controlled fields', async () => {
+        const fetchImpl = vi.fn().mockResolvedValue({
+            ok: true,
+            json: vi.fn().mockResolvedValue({
+                did: 'not-a-did',
+                handle: 'alice.subcult.tv',
+            }),
+        });
+        const service = createPdsSignupService({
+            pdsUrl: 'https://pds.subcult.tv',
+            fetchImpl: fetchImpl as unknown as typeof fetch,
+        });
+
+        await expect(service.createAccount(baseInput)).rejects.toMatchObject({
+            code: 'PDS_SIGNUP_FAILED',
+        });
+        await expect(
+            service.createAccount({
+                ...baseInput,
+                did: 'did:plc:forged',
+                role: 'admin',
+                verified: true,
+                accountOrigin: 'synthetic',
+            } as unknown as typeof baseInput),
+        ).rejects.toMatchObject({ code: 'INVALID_SIGNUP_INPUT' });
+    });
+
+    it('maps an upstream HTTP rate limit without reflecting its body', async () => {
+        const fetchImpl = vi.fn().mockResolvedValue({
+            ok: false,
+            status: 429,
+            json: vi.fn().mockResolvedValue({
+                error: 'UnexpectedProviderMessage',
+                message: 'private upstream details',
+            }),
+        });
+        const service = createPdsSignupService({
+            pdsUrl: 'https://pds.subcult.tv',
+            fetchImpl: fetchImpl as unknown as typeof fetch,
+        });
+
+        await expect(service.createAccount(baseInput)).rejects.toMatchObject({
+            code: 'PDS_RATE_LIMITED',
+            statusCode: 503,
+            message: 'The account service is busy.',
+        });
+    });
+
     it('maps a timeout to a public unavailable error', async () => {
         const fetchImpl = vi.fn().mockRejectedValue(
             Object.assign(new Error('Aborted'), { name: 'AbortError' }),
