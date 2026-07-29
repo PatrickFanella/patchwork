@@ -217,6 +217,16 @@ describePostgres('ephemeral exact-location signaling boundary', () => {
         ).resolves.toMatchObject({
             session: null,
         });
+        const durableLocationSchema = await pool.query(
+            `SELECT table_name, column_name
+             FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND (
+                    table_name ~* '(exact_?location|location_?signal)'
+                    OR column_name ~* '(exact_?location|location_?session|exact_?(latitude|longitude))'
+               )`,
+        );
+        expect(durableLocationSchema.rows).toEqual([]);
     });
 
     it('fails closed on maintenance, blocks, inactive connections, revocation, and expiry', async () => {
