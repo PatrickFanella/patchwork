@@ -32,6 +32,7 @@ describeWithPostgres('moderation database migrations', () => {
                 '002_durable_moderation.sql',
                 '003_retention_enforcement.sql',
                 '004_submission_safety_and_urgent_events.sql',
+                '005_showcase_moderation_origin.sql',
             ],
             skipped: [],
         });
@@ -59,6 +60,7 @@ describeWithPostgres('moderation database migrations', () => {
                 '002_durable_moderation.sql',
                 '003_retention_enforcement.sql',
                 '004_submission_safety_and_urgent_events.sql',
+                '005_showcase_moderation_origin.sql',
             ],
         });
     });
