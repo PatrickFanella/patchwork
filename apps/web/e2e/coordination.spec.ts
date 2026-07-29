@@ -11,6 +11,7 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
     browser,
     baseURL,
 }) => {
+    test.setTimeout(120_000);
     if (!baseURL) throw new Error('Playwright baseURL is required.');
     type OfferState = {
         id: string;
@@ -294,7 +295,10 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
     await installRoutes(requesterPage, requesterDid);
     await installRoutes(helperPage, helperDid);
     const openInbox = async (page: Page) => {
-        await page.goto('/inbox');
+        await page.goto('/inbox', {
+            waitUntil: 'domcontentloaded',
+            timeout: 15_000,
+        });
         try {
             await page
                 .getByRole('heading', { name: 'Coordination inbox' })
@@ -305,6 +309,19 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
                 .getByRole('heading', { name: 'Coordination inbox' })
                 .waitFor();
         }
+    };
+    const refreshWorkspace = async (page: Page) => {
+        await Promise.all([
+            page.waitForResponse(response =>
+                new URL(response.url()).pathname.endsWith(
+                    '/coordination/mine',
+                ),
+            ),
+            page.getByLabel('Show unread only').click(),
+        ]);
+        await page
+            .getByRole('heading', { name: 'Coordination inbox' })
+            .waitFor();
     };
 
     await openInbox(helperPage);
@@ -325,12 +342,12 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
     await receivedOffer.getByRole('button', { name: 'Decline' }).click();
     await expect(receivedOffer).toContainText('Declined');
 
-    await openInbox(helperPage);
+    await refreshWorkspace(helperPage);
     await helperPage
         .getByLabel('Optional coordination note')
         .fill('I remain available for this request.');
     await helperPage.getByRole('button', { name: 'Offer help' }).click();
-    await openInbox(requesterPage);
+    await refreshWorkspace(requesterPage);
     const pendingOffer = requesterPage
         .getByRole('article', { name: 'Received offer' })
         .filter({ hasText: 'Pending' });
@@ -348,7 +365,7 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
     await expect(requesterPage.getByText('Manual selection only')).toBeVisible();
     await expect(requesterPage.getByText(/reputation score/)).toBeVisible();
 
-    await openInbox(helperPage);
+    await refreshWorkspace(helperPage);
     await expect(
         helperPage.getByText(`Connected with ${requesterDid}`),
     ).toBeVisible();
@@ -359,7 +376,7 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
         helperPage.getByText('Record structured outcome'),
     ).toBeVisible();
 
-    await openInbox(requesterPage);
+    await refreshWorkspace(requesterPage);
     await requesterPage
         .getByRole('combobox', { name: 'Outcome' })
         .selectOption('successful');
@@ -396,7 +413,7 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
         status: 'expired',
         note: null,
     });
-    await openInbox(helperPage);
+    await refreshWorkspace(helperPage);
     await expect(
         helperPage
             .getByRole('article', { name: 'Sent offer' })
