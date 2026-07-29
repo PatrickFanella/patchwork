@@ -158,8 +158,14 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
                 });
                 return;
             }
-            const body = request.postDataJSON() as Record<string, unknown>;
-            commandBodies.push(body);
+            const parsedBody = request.postDataJSON() as unknown;
+            const body =
+                parsedBody &&
+                typeof parsedBody === 'object' &&
+                !Array.isArray(parsedBody) ?
+                    parsedBody as Record<string, unknown>
+                :   {};
+            if (request.method() !== 'GET') commandBodies.push(body);
             if (path === '/coordination/offers') {
                 const offer: OfferState = {
                     id:

@@ -123,9 +123,13 @@ moderation decisions.
 5. **Notify** -- The user receives a notification with the appeal outcome,
    the reviewer's reasoning, and any next steps.
 
-### Timeline Expectations
+### Best-effort response targets
 
-| Stage              | Target SLA      |
+These are operating targets, not service levels or guarantees. Patchwork aims
+to review reports within two business days when staffing and safety conditions
+permit; urgent flags are routed immediately to configured moderator channels.
+
+| Stage              | Best-effort target |
 | ------------------ | --------------- |
 | Acknowledgement    | Immediate       |
 | Initial review     | 3 business days |
