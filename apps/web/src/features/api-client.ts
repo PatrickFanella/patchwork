@@ -987,6 +987,302 @@ export const fetchVolunteerProfilesViaApi = async (
     };
 };
 
+export type OrganizationRole = 'owner' | 'admin' | 'steward' | 'member';
+
+export interface PublicOrganization {
+    id: string;
+    slug: string;
+    name: string;
+    description: string;
+    origin: 'synthetic' | 'sourced-public' | 'visitor-created';
+    provenance: {
+        sourceUrl: string;
+        retrievedAt: string;
+        lastVerifiedAt: string;
+    } | null;
+    nonEndorsementLabel: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface MyOrganization extends PublicOrganization {
+    membership: {
+        organizationId: string;
+        memberDid: string;
+        role: OrganizationRole;
+        status: 'active';
+        invitedByDid: string;
+        joinedAt: string;
+        updatedAt: string;
+    };
+}
+
+export interface OrganizationMember {
+    organizationId: string;
+    memberDid: string;
+    role: OrganizationRole;
+    status: 'active';
+    invitedByDid: string;
+    joinedAt: string;
+    updatedAt: string;
+}
+
+export interface OrganizationStewardship {
+    id: string;
+    organizationId: string;
+    resourceUri: string;
+    stewardDid: string;
+    status: 'active' | 'due' | 'expired' | 'revoked';
+    lastReconfirmedAt: string;
+    reconfirmDueAt: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+const parseArrayProperty = <T>(
+    payload: unknown,
+    key: string,
+    message: string,
+): ApiClientResult<T[]> => {
+    if (!isRecord(payload) || !Array.isArray(payload[key])) {
+        return invalidResponseFailure(message);
+    }
+    return { ok: true, data: payload[key] as T[] };
+};
+
+export const fetchOrganizationsViaApi = async (
+    searchText = '',
+    signal?: AbortSignal,
+): Promise<ApiClientResult<PublicOrganization[]>> => {
+    const params = new URLSearchParams();
+    if (searchText) params.set('searchText', searchText);
+    const result = await requestJson('/organizations', params, signal);
+    return result.ok ?
+            parseArrayProperty<PublicOrganization>(
+                result.data,
+                'organizations',
+                'Organization discovery response was malformed.',
+            )
+        :   result;
+};
+
+export const fetchMyOrganizationsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<MyOrganization[]>> => {
+    const result = await requestJson(
+        '/organizations/mine',
+        new URLSearchParams(),
+        signal,
+    );
+    return result.ok ?
+            parseArrayProperty<MyOrganization>(
+                result.data,
+                'organizations',
+                'Organization membership response was malformed.',
+            )
+        :   result;
+};
+
+export const createOrganizationViaApi = async (
+    input: { name: string; description: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ organization: PublicOrganization }>> => {
+    const result = await requestJsonPost('/organizations', input, signal);
+    return result.ok && isRecord(result.data) &&
+            isRecord(result.data['organization']) ?
+            {
+                ok: true,
+                data: result.data as unknown as {
+                    organization: PublicOrganization;
+                },
+            }
+        : result.ok ?
+            invalidResponseFailure(
+                'Organization create response was malformed.',
+            )
+        :   result;
+};
+
+export const inviteOrganizationMemberViaApi = async (
+    input: {
+        organizationId: string;
+        inviteeDid: string;
+        role: Exclude<OrganizationRole, 'owner'>;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ token: string }>> => {
+    const result = await requestJsonPost(
+        '/organizations/invitations',
+        input,
+        signal,
+    );
+    return result.ok && isRecord(result.data) &&
+            typeof result.data['token'] === 'string' ?
+            { ok: true, data: { token: result.data['token'] } }
+        : result.ok ?
+            invalidResponseFailure(
+                'Organization invitation response was malformed.',
+            )
+        :   result;
+};
+
+export const acceptOrganizationInvitationViaApi = async (
+    token: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ organizationId: string }>> => {
+    const result = await requestJsonPost(
+        '/organization-invitations/accept',
+        { token },
+        signal,
+    );
+    return result.ok && isRecord(result.data) &&
+            typeof result.data['organizationId'] === 'string' ?
+            {
+                ok: true,
+                data: { organizationId: result.data['organizationId'] },
+            }
+        : result.ok ?
+            invalidResponseFailure(
+                'Organization invitation acceptance was malformed.',
+            )
+        :   result;
+};
+
+export const fetchOrganizationMembersViaApi = async (
+    organizationId: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<OrganizationMember[]>> => {
+    const result = await requestJson(
+        '/organizations/members',
+        new URLSearchParams({ organizationId }),
+        signal,
+    );
+    return result.ok ?
+            parseArrayProperty<OrganizationMember>(
+                result.data,
+                'members',
+                'Organization member response was malformed.',
+            )
+        :   result;
+};
+
+export const updateOrganizationMemberRoleViaApi = async (
+    input: {
+        organizationId: string;
+        memberDid: string;
+        role: Exclude<OrganizationRole, 'owner'>;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ membership: OrganizationMember }>> => {
+    const result = await requestJsonPut(
+        '/organizations/members/role',
+        input,
+        signal,
+    );
+    return result.ok && isRecord(result.data) &&
+            isRecord(result.data['membership']) ?
+            {
+                ok: true,
+                data: result.data as unknown as {
+                    membership: OrganizationMember;
+                },
+            }
+        : result.ok ?
+            invalidResponseFailure(
+                'Organization role response was malformed.',
+            )
+        :   result;
+};
+
+export const removeOrganizationMemberViaApi = async (
+    input: { organizationId: string; memberDid: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ removed: string }>> => {
+    const result = await requestJsonDelete(
+        '/organizations/members',
+        input,
+        signal,
+    );
+    return result.ok && isRecord(result.data) &&
+            typeof result.data['removed'] === 'string' ?
+            { ok: true, data: { removed: result.data['removed'] } }
+        : result.ok ?
+            invalidResponseFailure(
+                'Organization member removal response was malformed.',
+            )
+        :   result;
+};
+
+export const fetchOrganizationStewardshipsViaApi = async (
+    organizationId: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<OrganizationStewardship[]>> => {
+    const result = await requestJson(
+        '/organizations/stewardships',
+        new URLSearchParams({ organizationId }),
+        signal,
+    );
+    return result.ok ?
+            parseArrayProperty<OrganizationStewardship>(
+                result.data,
+                'stewardships',
+                'Organization stewardship response was malformed.',
+            )
+        :   result;
+};
+
+export const assignOrganizationStewardshipViaApi = async (
+    input: {
+        organizationId: string;
+        resourceUri: string;
+        stewardDid: string;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ stewardship: OrganizationStewardship }>> => {
+    const result = await requestJsonPost(
+        '/organizations/stewardships',
+        input,
+        signal,
+    );
+    return result.ok && isRecord(result.data) &&
+            isRecord(result.data['stewardship']) ?
+            {
+                ok: true,
+                data: result.data as unknown as {
+                    stewardship: OrganizationStewardship;
+                },
+            }
+        : result.ok ?
+            invalidResponseFailure(
+                'Organization stewardship response was malformed.',
+            )
+        :   result;
+};
+
+export const reconfirmOrganizationStewardshipViaApi = async (
+    input: { organizationId: string; stewardshipId: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ stewardship: OrganizationStewardship }>> => {
+    const result = await requestJsonPost(
+        '/organizations/stewardships/reconfirm',
+        input,
+        signal,
+    );
+    return result.ok && isRecord(result.data) &&
+            isRecord(result.data['stewardship']) ?
+            {
+                ok: true,
+                data: result.data as unknown as {
+                    stewardship: OrganizationStewardship;
+                },
+            }
+        : result.ok ?
+            invalidResponseFailure(
+                'Organization reconfirmation response was malformed.',
+            )
+        :   result;
+};
+
 // ---------------------------------------------------------------------------
 // Settings API
 // ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ const A11Y_ROUTES = [
     { path: '/posting', label: 'posting' },
     { path: '/resources', label: 'resources' },
     { path: '/volunteer', label: 'volunteer' },
+    { path: '/organizations', label: 'organizations' },
     { path: '/chat', label: 'chat' },
     { path: '/settings', label: 'settings' },
     { path: '/login', label: 'login' },

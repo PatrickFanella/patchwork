@@ -7,6 +7,7 @@ import {
     createAtAidPostViaApi,
     createAtDirectoryResourceViaApi,
     createAtVolunteerProfileViaApi,
+    createOrganizationViaApi,
     deactivateAccountViaApi,
     deleteAtVolunteerProfileViaApi,
     deleteAtDirectoryResourceViaApi,
@@ -14,9 +15,12 @@ import {
     fetchAccountPreferencesViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
+    fetchMyOrganizationsViaApi,
+    fetchOrganizationsViaApi,
     fetchVolunteerProfilesViaApi,
     exportDataViaApi,
     initiateChatViaApi,
+    inviteOrganizationMemberViaApi,
     getAtDirectoryResourceViaApi,
     queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
@@ -972,5 +976,102 @@ describe('api client', () => {
         expect(JSON.stringify(discovery)).not.toContain(
             'alex-private@example.test',
         );
+    });
+
+    it('uses session-derived organization authority and preserves public provenance labels', async () => {
+        const organization = {
+            id: 'b7b8b206-c3c3-4ae7-8f29-6877b5a93531',
+            slug: 'northside-mutual-aid',
+            name: 'Northside Mutual Aid',
+            description: 'Neighborhood resource coordination.',
+            origin: 'visitor-created' as const,
+            provenance: null,
+            nonEndorsementLabel:
+                'Listed for public information. Patchwork does not endorse or guarantee this organization.',
+            createdAt: '2026-07-28T12:00:00.000Z',
+            updatedAt: '2026-07-28T12:00:00.000Z',
+        };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                createJsonResponse({ organization }, true, 201),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({ organizations: [organization] }),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    organizations: [
+                        {
+                            ...organization,
+                            membership: {
+                                organizationId: organization.id,
+                                memberDid: 'did:plc:owner',
+                                role: 'owner',
+                                status: 'active',
+                                invitedByDid: 'did:plc:owner',
+                                joinedAt: organization.createdAt,
+                                updatedAt: organization.updatedAt,
+                            },
+                        },
+                    ],
+                }),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    invitation: { status: 'pending' },
+                    token: 'one-time-invitation-token-that-is-long-enough',
+                }),
+            );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await expect(
+            createOrganizationViaApi({
+                name: organization.name,
+                description: organization.description,
+            }),
+        ).resolves.toMatchObject({
+            ok: true,
+            data: { organization: { origin: 'visitor-created' } },
+        });
+        await expect(fetchOrganizationsViaApi()).resolves.toMatchObject({
+            ok: true,
+            data: [
+                expect.objectContaining({
+                    nonEndorsementLabel:
+                        organization.nonEndorsementLabel,
+                }),
+            ],
+        });
+        await expect(fetchMyOrganizationsViaApi()).resolves.toMatchObject({
+            ok: true,
+            data: [
+                expect.objectContaining({
+                    membership: expect.objectContaining({ role: 'owner' }),
+                }),
+            ],
+        });
+        await expect(
+            inviteOrganizationMemberViaApi({
+                organizationId: organization.id,
+                inviteeDid: 'did:plc:steward',
+                role: 'steward',
+            }),
+        ).resolves.toMatchObject({ ok: true });
+
+        const calls = fetchMock.mock.calls as unknown as Array<
+            [string, RequestInit | undefined]
+        >;
+        const createBody = JSON.parse(String(calls[0]?.[1]?.body));
+        const inviteBody = JSON.parse(String(calls[3]?.[1]?.body));
+        expect(createBody).toEqual({
+            name: organization.name,
+            description: organization.description,
+        });
+        expect(createBody).not.toHaveProperty('ownerDid');
+        expect(createBody).not.toHaveProperty('origin');
+        expect(inviteBody).not.toHaveProperty('actorDid');
+        expect(calls[0]?.[1]?.credentials).toBe('include');
+        expect(calls[3]?.[1]?.credentials).toBe('include');
     });
 });

@@ -86,14 +86,21 @@ import {
     type AtAidPostResult,
     type AtDirectoryResourceResult,
     type AtVolunteerProfileResult,
+    type MyOrganization,
+    type OrganizationMember,
+    type OrganizationStewardship,
+    type PublicOrganization,
     type VolunteerDiscoveryProfile,
     type VolunteerProfileCommandInput,
     acceptCurrentPoliciesViaApi,
+    acceptOrganizationInvitationViaApi,
+    assignOrganizationStewardshipViaApi,
     blockUserViaApi,
     closeAtAidPostViaApi,
     createAidPostViaApi,
     createAtDirectoryResourceViaApi,
     createAtVolunteerProfileViaApi,
+    createOrganizationViaApi,
     deactivateAccountViaApi,
     deleteAtDirectoryResourceViaApi,
     deleteAtVolunteerProfileViaApi,
@@ -103,18 +110,26 @@ import {
     fetchAccountPreferencesViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
+    fetchMyOrganizationsViaApi,
+    fetchOrganizationMembersViaApi,
+    fetchOrganizationsViaApi,
+    fetchOrganizationStewardshipsViaApi,
     fetchSettingsAuditFromApi,
     fetchSettingsFromApi,
     fetchVolunteerProfilesViaApi,
     getAtDirectoryResourceViaApi,
     getAtVolunteerProfileViaApi,
     initiateChatViaApi,
+    inviteOrganizationMemberViaApi,
     queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
     reconcileAidPostStatusViaApi,
+    reconfirmOrganizationStewardshipViaApi,
+    removeOrganizationMemberViaApi,
     updateSettingsViaApi,
     transitionAidPostViaApi,
     updateAccountPreferencesViaApi,
+    updateOrganizationMemberRoleViaApi,
     updateAtDirectoryResourceViaApi,
     updateAtVolunteerProfileViaApi,
 } from './api-client';
@@ -162,6 +177,7 @@ const appRoutes = [
     '/feed',
     '/resources',
     '/volunteer',
+    '/organizations',
     '/posting',
     '/chat',
     '/settings',
@@ -198,6 +214,7 @@ const routeLabels: Readonly<Record<AppRoute, string>> = {
     '/feed': 'Feed',
     '/resources': 'Resources',
     '/volunteer': 'Volunteer',
+    '/organizations': 'Organizations',
     '/posting': 'Posting',
     '/chat': 'Chat',
     '/settings': 'Settings',
@@ -218,6 +235,7 @@ const primaryRoutes: readonly AppRoute[] = [
     '/feed',
     '/resources',
     '/volunteer',
+    '/organizations',
     '/posting',
 ];
 
@@ -4109,6 +4127,581 @@ const VolunteerRoute = ({ did }: { did: string }) => {
     );
 };
 
+const organizationAdminRoles = new Set(['owner', 'admin']);
+
+const OrganizationsRoute = ({ did }: { did: string }) => {
+    const [organizations, setOrganizations] = useState<PublicOrganization[]>([]);
+    const [mine, setMine] = useState<MyOrganization[]>([]);
+    const [members, setMembers] = useState<OrganizationMember[]>([]);
+    const [stewardships, setStewardships] = useState<
+        OrganizationStewardship[]
+    >([]);
+    const [selectedId, setSelectedId] = useState('');
+    const [searchText, setSearchText] = useState('');
+    const [status, setStatus] = useState('Loading organizations…');
+    const [actionStatus, setActionStatus] = useState<string>();
+    const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
+    const [inviteeDid, setInviteeDid] = useState('');
+    const [inviteRole, setInviteRole] = useState<
+        'admin' | 'steward' | 'member'
+    >('steward');
+    const [invitationToken, setInvitationToken] = useState('');
+    const [acceptToken, setAcceptToken] = useState('');
+    const [resourceUri, setResourceUri] = useState('');
+    const [stewardDid, setStewardDid] = useState('');
+
+    const loadPublic = useCallback(async () => {
+        setStatus('Loading organizations…');
+        const result = await fetchOrganizationsViaApi(searchText);
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        setOrganizations(result.data);
+        setStatus(
+            result.data.length ?
+                `${result.data.length} organization${result.data.length === 1 ? '' : 's'}.`
+            :   'No organizations match this search.',
+        );
+    }, [searchText]);
+
+    const loadPrivate = useCallback(async () => {
+        if (!did) {
+            setMine([]);
+            setMembers([]);
+            setStewardships([]);
+            return;
+        }
+        const result = await fetchMyOrganizationsViaApi();
+        if (!result.ok) {
+            setActionStatus(`Error: ${result.error}`);
+            return;
+        }
+        setMine(result.data);
+        const nextSelected =
+            result.data.some(item => item.id === selectedId) ?
+                selectedId
+            :   result.data[0]?.id ?? '';
+        setSelectedId(nextSelected);
+        if (!nextSelected) {
+            setMembers([]);
+            setStewardships([]);
+            return;
+        }
+        const [memberResult, stewardshipResult] = await Promise.all([
+            fetchOrganizationMembersViaApi(nextSelected),
+            fetchOrganizationStewardshipsViaApi(nextSelected),
+        ]);
+        if (memberResult.ok) setMembers(memberResult.data);
+        if (stewardshipResult.ok) setStewardships(stewardshipResult.data);
+    }, [did, selectedId]);
+
+    useEffect(() => {
+        void loadPublic();
+    }, [loadPublic]);
+
+    useEffect(() => {
+        void loadPrivate();
+    }, [loadPrivate]);
+
+    const selected = mine.find(item => item.id === selectedId);
+    const canAdmin =
+        selected ?
+            organizationAdminRoles.has(selected.membership.role)
+        :   false;
+
+    const createOrganization = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setActionStatus('Creating organization…');
+        const result = await createOrganizationViaApi({ name, description });
+        if (!result.ok) {
+            setActionStatus(`Error: ${result.error}`);
+            return;
+        }
+        setName('');
+        setDescription('');
+        setSelectedId(result.data.organization.id);
+        setActionStatus('Organization created.');
+        await Promise.all([loadPublic(), loadPrivate()]);
+    };
+
+    const invite = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!selected) return;
+        setActionStatus('Creating invitation…');
+        const result = await inviteOrganizationMemberViaApi({
+            organizationId: selected.id,
+            inviteeDid,
+            role: inviteRole,
+        });
+        if (!result.ok) {
+            setActionStatus(`Error: ${result.error}`);
+            return;
+        }
+        setInvitationToken(result.data.token);
+        setInviteeDid('');
+        setActionStatus(
+            'Invitation created. Share the one-time token privately with the named AT account.',
+        );
+    };
+
+    const acceptInvitation = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setActionStatus('Accepting invitation…');
+        const result = await acceptOrganizationInvitationViaApi(acceptToken);
+        if (!result.ok) {
+            setActionStatus(`Error: ${result.error}`);
+            return;
+        }
+        setAcceptToken('');
+        setSelectedId(result.data.organizationId);
+        setActionStatus('Organization invitation accepted.');
+        await loadPrivate();
+    };
+
+    const assignStewardship = async (
+        event: FormEvent<HTMLFormElement>,
+    ) => {
+        event.preventDefault();
+        if (!selected) return;
+        setActionStatus('Assigning resource stewardship…');
+        const result = await assignOrganizationStewardshipViaApi({
+            organizationId: selected.id,
+            resourceUri,
+            stewardDid,
+        });
+        if (!result.ok) {
+            setActionStatus(`Error: ${result.error}`);
+            return;
+        }
+        setResourceUri('');
+        setStewardDid('');
+        setActionStatus('Resource stewardship assigned.');
+        await loadPrivate();
+    };
+
+    const reconfirm = async (item: OrganizationStewardship) => {
+        setActionStatus('Reconfirming resource…');
+        const result = await reconfirmOrganizationStewardshipViaApi({
+            organizationId: item.organizationId,
+            stewardshipId: item.id,
+        });
+        if (!result.ok) {
+            setActionStatus(`Error: ${result.error}`);
+            return;
+        }
+        setActionStatus('Resource reconfirmed for 90 days.');
+        await loadPrivate();
+    };
+
+    const updateMemberRole = async (
+        member: OrganizationMember,
+        role: 'admin' | 'steward' | 'member',
+    ) => {
+        setActionStatus('Updating member role…');
+        const result = await updateOrganizationMemberRoleViaApi({
+            organizationId: member.organizationId,
+            memberDid: member.memberDid,
+            role,
+        });
+        if (!result.ok) {
+            setActionStatus(`Error: ${result.error}`);
+            return;
+        }
+        setActionStatus('Organization member role updated.');
+        await loadPrivate();
+    };
+
+    const removeMember = async (member: OrganizationMember) => {
+        setActionStatus('Removing organization member…');
+        const result = await removeOrganizationMemberViaApi({
+            organizationId: member.organizationId,
+            memberDid: member.memberDid,
+        });
+        if (!result.ok) {
+            setActionStatus(`Error: ${result.error}`);
+            return;
+        }
+        setActionStatus('Organization member removed.');
+        await loadPrivate();
+    };
+
+    return (
+        <section className='space-y-6'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>Organizations</h1>
+                <p className='mt-2 text-sm text-mh-textMuted'>
+                    Public listings include their origin and provenance. A
+                    listing is informational and is not a Patchwork
+                    endorsement.
+                </p>
+            </header>
+
+            <Panel title='Find organizations'>
+                <form
+                    className='flex flex-wrap gap-2'
+                    onSubmit={event => {
+                        event.preventDefault();
+                        void loadPublic();
+                    }}
+                >
+                    <label className='grow text-sm font-bold'>
+                        Search organizations
+                        <Input
+                            value={searchText}
+                            onChange={event => setSearchText(event.target.value)}
+                        />
+                    </label>
+                    <Button type='submit'>Search</Button>
+                </form>
+                <p
+                    className='mt-3 text-sm text-mh-textMuted'
+                    role={status.startsWith('Error:') ? 'alert' : 'status'}
+                >
+                    {status}
+                </p>
+                <div className='mt-4 grid gap-3 sm:grid-cols-2'>
+                    {organizations.map(organization => (
+                        <Card key={organization.id} title={organization.name}>
+                            <p className='text-sm'>
+                                {organization.description}
+                            </p>
+                            <p className='mt-2 text-xs font-bold text-mh-textMuted'>
+                                Origin: {formatCategoryLabel(organization.origin)}
+                            </p>
+                            {organization.provenance ?
+                                <p className='mt-1 text-xs text-mh-textMuted'>
+                                    Source:{' '}
+                                    <a
+                                        className='mh-link'
+                                        href={organization.provenance.sourceUrl}
+                                        rel='noreferrer'
+                                        target='_blank'
+                                    >
+                                        authoritative public record
+                                    </a>{' '}
+                                    · last verified{' '}
+                                    {new Date(
+                                        organization.provenance.lastVerifiedAt,
+                                    ).toLocaleDateString()}
+                                </p>
+                            :   null}
+                            <p className='mt-2 text-xs text-mh-textMuted'>
+                                {organization.nonEndorsementLabel}
+                            </p>
+                        </Card>
+                    ))}
+                </div>
+            </Panel>
+
+            {did ?
+                <>
+                    <Panel title='Join with an invitation'>
+                        <form
+                            className='flex flex-wrap gap-2'
+                            onSubmit={acceptInvitation}
+                        >
+                            <label className='grow text-sm font-bold'>
+                                Invitation token
+                                <Input
+                                    value={acceptToken}
+                                    onChange={event =>
+                                        setAcceptToken(event.target.value)
+                                    }
+                                />
+                            </label>
+                            <Button type='submit'>Accept invitation</Button>
+                        </form>
+                    </Panel>
+
+                    <Panel title='Create an organization'>
+                        <form
+                            className='space-y-3'
+                            onSubmit={createOrganization}
+                        >
+                            <label className='block text-sm font-bold'>
+                                Organization name
+                                <Input
+                                    value={name}
+                                    onChange={event => setName(event.target.value)}
+                                />
+                            </label>
+                            <label className='block text-sm font-bold'>
+                                Organization description
+                                <textarea
+                                    className='mh-input mt-1 min-h-24 w-full px-3 py-2'
+                                    value={description}
+                                    onChange={event =>
+                                        setDescription(event.target.value)
+                                    }
+                                />
+                            </label>
+                            <Button type='submit'>Create organization</Button>
+                        </form>
+                    </Panel>
+
+                    {mine.length ?
+                        <Panel title='Manage my organizations'>
+                            <label className='block text-sm font-bold'>
+                                Organization
+                                <select
+                                    className='mh-input mt-1 w-full px-3 py-2'
+                                    value={selectedId}
+                                    onChange={event =>
+                                        setSelectedId(event.target.value)
+                                    }
+                                >
+                                    {mine.map(item => (
+                                        <option key={item.id} value={item.id}>
+                                            {item.name} · {item.membership.role}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            {selected ?
+                                <>
+                                    <p className='mt-3 text-sm'>
+                                        Your role:{' '}
+                                        <strong>
+                                            {formatCategoryLabel(
+                                                selected.membership.role,
+                                            )}
+                                        </strong>
+                                    </p>
+                                    <ul className='mt-3 space-y-2 text-sm'>
+                                        {members.map(member => {
+                                            const canManageMember =
+                                                canAdmin &&
+                                                member.role !== 'owner' &&
+                                                (selected.membership.role ===
+                                                    'owner' ||
+                                                    member.role !== 'admin');
+                                            return (
+                                                <li
+                                                    key={member.memberDid}
+                                                    className='flex flex-wrap items-center gap-2'
+                                                >
+                                                    <span>
+                                                        {member.memberDid} ·{' '}
+                                                        {member.role}
+                                                    </span>
+                                                    {canManageMember ?
+                                                        <>
+                                                            <label className='text-xs font-bold'>
+                                                                Role for{' '}
+                                                                {member.memberDid}
+                                                                <select
+                                                                    className='mh-input ml-2 px-2 py-1'
+                                                                    value={
+                                                                        member.role
+                                                                    }
+                                                                    onChange={event =>
+                                                                        void updateMemberRole(
+                                                                            member,
+                                                                            event
+                                                                                .target
+                                                                                .value as
+                                                                                | 'admin'
+                                                                                | 'steward'
+                                                                                | 'member',
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <option value='admin'>
+                                                                        Admin
+                                                                    </option>
+                                                                    <option value='steward'>
+                                                                        Steward
+                                                                    </option>
+                                                                    <option value='member'>
+                                                                        Member
+                                                                    </option>
+                                                                </select>
+                                                            </label>
+                                                            <Button
+                                                                type='button'
+                                                                variant='neutral'
+                                                                onClick={() =>
+                                                                    void removeMember(
+                                                                        member,
+                                                                    )
+                                                                }
+                                                            >
+                                                                Remove{' '}
+                                                                {member.memberDid}
+                                                            </Button>
+                                                        </>
+                                                    :   null}
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+
+                                    {canAdmin ?
+                                        <div className='mt-5 grid gap-5 lg:grid-cols-2'>
+                                            <form
+                                                className='space-y-3'
+                                                onSubmit={invite}
+                                            >
+                                                <h3 className='font-bold'>
+                                                    Invite a member
+                                                </h3>
+                                                <label className='block text-sm font-bold'>
+                                                    Invitee AT DID
+                                                    <Input
+                                                        value={inviteeDid}
+                                                        onChange={event =>
+                                                            setInviteeDid(
+                                                                event.target.value,
+                                                            )
+                                                        }
+                                                    />
+                                                </label>
+                                                <label className='block text-sm font-bold'>
+                                                    Organization role
+                                                    <select
+                                                        className='mh-input mt-1 w-full px-3 py-2'
+                                                        value={inviteRole}
+                                                        onChange={event =>
+                                                            setInviteRole(
+                                                                event.target
+                                                                    .value as typeof inviteRole,
+                                                            )
+                                                        }
+                                                    >
+                                                        <option value='admin'>
+                                                            Admin
+                                                        </option>
+                                                        <option value='steward'>
+                                                            Steward
+                                                        </option>
+                                                        <option value='member'>
+                                                            Member
+                                                        </option>
+                                                    </select>
+                                                </label>
+                                                <Button type='submit'>
+                                                    Create invitation
+                                                </Button>
+                                                {invitationToken ?
+                                                    <label className='block text-sm font-bold'>
+                                                        One-time invitation token
+                                                        <Input
+                                                            readOnly
+                                                            value={invitationToken}
+                                                        />
+                                                    </label>
+                                                :   null}
+                                            </form>
+
+                                            <form
+                                                className='space-y-3'
+                                                onSubmit={assignStewardship}
+                                            >
+                                                <h3 className='font-bold'>
+                                                    Assign resource stewardship
+                                                </h3>
+                                                <label className='block text-sm font-bold'>
+                                                    Public resource AT URI
+                                                    <Input
+                                                        value={resourceUri}
+                                                        onChange={event =>
+                                                            setResourceUri(
+                                                                event.target.value,
+                                                            )
+                                                        }
+                                                    />
+                                                </label>
+                                                <label className='block text-sm font-bold'>
+                                                    Steward AT DID
+                                                    <Input
+                                                        value={stewardDid}
+                                                        onChange={event =>
+                                                            setStewardDid(
+                                                                event.target.value,
+                                                            )
+                                                        }
+                                                    />
+                                                </label>
+                                                <Button type='submit'>
+                                                    Assign stewardship
+                                                </Button>
+                                            </form>
+                                        </div>
+                                    :   null}
+
+                                    <div className='mt-5 space-y-2'>
+                                        <h3 className='font-bold'>
+                                            Stewarded resources
+                                        </h3>
+                                        {stewardships.length ?
+                                            stewardships.map(item => {
+                                                const mayReconfirm =
+                                                    canAdmin ||
+                                                    (selected.membership.role ===
+                                                        'steward' &&
+                                                        item.stewardDid === did);
+                                                return (
+                                                    <Card
+                                                        key={item.id}
+                                                        title={item.resourceUri}
+                                                    >
+                                                        <p className='text-xs'>
+                                                            {item.status} · due{' '}
+                                                            {new Date(
+                                                                item.reconfirmDueAt,
+                                                            ).toLocaleDateString()}
+                                                        </p>
+                                                        {mayReconfirm ?
+                                                            <p className='mt-2'>
+                                                                <Button
+                                                                    type='button'
+                                                                    variant='neutral'
+                                                                    onClick={() =>
+                                                                        void reconfirm(
+                                                                            item,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Reconfirm resource
+                                                                </Button>
+                                                            </p>
+                                                        :   null}
+                                                    </Card>
+                                                );
+                                            })
+                                        :   <p className='text-sm text-mh-textMuted'>
+                                                No resource stewardship is assigned.
+                                            </p>}
+                                    </div>
+                                </>
+                            :   null}
+                        </Panel>
+                    :   null}
+                    {actionStatus ?
+                        <p
+                            role={
+                                actionStatus.startsWith('Error:') ?
+                                    'alert'
+                                :   'status'
+                            }
+                            className='text-sm'
+                        >
+                            {actionStatus}
+                        </p>
+                    :   null}
+                </>
+            :   <Panel title='Sign in to participate'>
+                    <p>
+                        Sign in with an AT identity to create an organization,
+                        accept an invitation, or manage stewardship.
+                    </p>
+                </Panel>}
+        </section>
+    );
+};
+
 interface ChatRouteProps {
     currentUserDid: string;
     hasPermission: boolean;
@@ -5838,6 +6431,8 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             webDataMode === 'fixture' ?
                 <LegacyFixtureVolunteerRoute did={currentUserDid} />
             :   <VolunteerRoute did={currentUserDid} />
+        : currentRoute === '/organizations' ?
+            <OrganizationsRoute did={currentUserDid} />
         : currentRoute === '/chat' ?
             <ChatRoute
                 currentUserDid={currentUserDid}
