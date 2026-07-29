@@ -55,6 +55,21 @@ groups:
         expr: increase(patchwork_attachment_pipeline_sweep_failures_total{service="api",environment="staging"}[15m]) > 0
         labels: { severity: warning }
         annotations: { runbook_url: "docs/operations/incident-response.md#private-attachment-deletion" }
+      - alert: PatchworkNotificationDeadLetter
+        expr: patchwork_notification_delivery_dead_letters{service="api",environment="staging"} > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations: { runbook_url: "docs/operations/incident-response.md#notification-delivery" }
+      - alert: PatchworkNotificationDeliveryStale
+        expr: patchwork_notification_delivery_oldest_pending_seconds{service="api",environment="staging"} > 900
+        for: 10m
+        labels: { severity: warning }
+        annotations: { runbook_url: "docs/operations/incident-response.md#notification-delivery" }
+      - alert: PatchworkNotificationSweepFailed
+        expr: increase(patchwork_notification_delivery_sweep_failures_total{service="api",environment="staging"}[15m]) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations: { runbook_url: "docs/operations/incident-response.md#notification-delivery" }
       - alert: PatchworkModerationRetentionFailed
         expr: moderation_retention_last_attempt_success{service="moderation-worker",environment="staging"} == 0
         for: 5m

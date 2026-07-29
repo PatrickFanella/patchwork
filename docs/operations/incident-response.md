@@ -173,6 +173,18 @@ check PostgreSQL, ClamAV, and MinIO readiness without copying object keys,
 filenames, upload tokens, signed URLs, or attachment bodies into logs or
 incident notes.
 
+### Notification delivery
+
+In-app intents remain durable while email or push delivery is unavailable.
+Check the pending, retry, dead-letter, oldest-pending, and sweep-failure
+metrics plus bounded error codes. Restore the configured provider or scheduler
+and allow stable provider-idempotency keys to retry; do not recreate intents
+or edit attempt counts manually. Invalid push subscriptions and bounced email
+endpoints are disabled automatically. Never put email addresses, push
+endpoints, subscription keys, notification bodies, exact locations, private
+evidence, moderation notes, or provider credentials in incident notes.
+Provider feedback uses its dedicated bearer-token boundary.
+
 Every game day records UTC timestamps, commands, alert transition and delivery,
 operator decision, recovery observation, and follow-up fixes in the Phase 7
 evidence file. Local simulations do not satisfy the staging alert-delivery gate.
