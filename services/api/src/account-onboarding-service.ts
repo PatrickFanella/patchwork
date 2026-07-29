@@ -12,6 +12,19 @@ import { PublicHttpError } from './http/error-response.js';
 const toIso = (value: Date | string): string =>
     new Date(value).toISOString();
 
+const consentExemptPaths = new Set([
+    '/auth/session',
+    '/auth/refresh',
+    '/account/onboarding',
+    '/account/consent',
+    '/account/preferences',
+    '/account/export',
+    '/account/deactivate',
+]);
+
+export const isConsentExemptPath = (pathname: string): boolean =>
+    consentExemptPaths.has(pathname);
+
 export class AccountOnboardingService {
     constructor(private readonly pool: Pool) {}
 

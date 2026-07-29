@@ -411,8 +411,6 @@ code {
 
 /* Leaflet overrides for Patchwork theme */
 .mh-interactive-map.leaflet-container {
-    height: 100%;
-    min-height: inherit;
     width: 100%;
     border-radius: inherit;
     background: var(--mh-surface);

@@ -35,7 +35,10 @@ import { PostgresLifecycleRepository } from './db/lifecycle-repository.js';
 import { PostgresRoleRepository } from './db/role-repository.js';
 import { BlockService } from './block-service.js';
 import { AccountPrivacyService } from './account-privacy-service.js';
-import { AccountOnboardingService } from './account-onboarding-service.js';
+import {
+    AccountOnboardingService,
+    isConsentExemptPath,
+} from './account-onboarding-service.js';
 import { ReportService } from './report-service.js';
 import {
     AuthorizationError,
@@ -322,13 +325,6 @@ const notificationService =
             { publicWebOrigin: config.API_PUBLIC_ORIGIN.replace(/\/$/, '') },
         )
     :   undefined;
-const consentExemptPaths = new Set([
-    '/account/onboarding',
-    '/account/consent',
-    '/account/preferences',
-    '/account/export',
-    '/account/deactivate',
-]);
 const authenticateApiRequest =
     authenticateSessionRequest ?
         async (request: IncomingMessage) => {
@@ -339,7 +335,7 @@ const authenticateApiRequest =
             ).pathname;
             if (
                 accountOnboardingService &&
-                !consentExemptPaths.has(pathname)
+                !isConsentExemptPath(pathname)
             ) {
                 await accountOnboardingService.requireCurrentConsent(
                     authenticated.principal.did,

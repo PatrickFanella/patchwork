@@ -346,6 +346,12 @@ test.describe('Keyboard tab order across routes (#99)', () => {
         await page.goto('/map');
         await page.waitForLoadState('networkidle');
 
+        const map = page.locator('.mh-interactive-map');
+        await expect(map).toBeVisible();
+        await expect
+            .poll(async () => (await map.boundingBox())?.height ?? 0)
+            .toBeGreaterThanOrEqual(300);
+
         // Press Escape — should not cause errors even if no overlay is open
         await page.keyboard.press('Escape');
 
