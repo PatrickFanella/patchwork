@@ -162,6 +162,31 @@
     background: var(--mh-surface-elev);
 }
 
+.mh-badge--default {
+    background: var(--mh-accent-3);
+    color: var(--mh-text);
+}
+
+.mh-badge--neutral {
+    background: var(--mh-surface-elev);
+    color: var(--mh-text);
+}
+
+.mh-badge--info {
+    background: var(--mh-accent-2);
+    color: var(--mh-text);
+}
+
+.mh-badge--danger {
+    background: var(--mh-danger);
+    color: white;
+}
+
+.mh-badge--success {
+    background: var(--mh-success);
+    color: white;
+}
+
 .mh-button:hover {
     box-shadow: 4px 4px 0 rgb(23 32 25 / 22%);
     filter: saturate(1.08);

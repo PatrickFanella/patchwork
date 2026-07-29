@@ -12,11 +12,11 @@ interface BadgeProps {
 }
 
 const toneMap: Record<NonNullable<BadgeProps['tone']>, string> = {
-    default: 'bg-mh-accent3 text-mh-text',
-    neutral: 'bg-mh-surfaceElev text-mh-text',
-    info: 'bg-mh-accent2 text-mh-text',
-    danger: 'bg-mh-danger text-white',
-    success: 'bg-mh-success text-white',
+    default: 'mh-badge--default',
+    neutral: 'mh-badge--neutral',
+    info: 'mh-badge--info',
+    danger: 'mh-badge--danger',
+    success: 'mh-badge--success',
 };
 
 export const Badge = ({
