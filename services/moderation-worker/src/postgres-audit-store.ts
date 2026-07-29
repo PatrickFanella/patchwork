@@ -39,6 +39,7 @@ interface QueueRow {
     reason_codes: string[];
     safe_preview: Record<string, string>;
     automated_decision: 'accepted' | 'quarantined' | 'rejected' | null;
+    record_origin: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 interface AuditRow {
@@ -69,6 +70,7 @@ const toItem = (row: QueueRow): ModerationQueueItem => ({
     reasonCodes: row.reason_codes,
     safePreview: row.safe_preview,
     automatedDecision: row.automated_decision,
+    recordOrigin: row.record_origin,
     createdAt: new Date(row.created_at).toISOString(),
     requestedAt: new Date(row.requested_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),

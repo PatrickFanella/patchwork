@@ -57,6 +57,17 @@ export class AccountPrivacyService {
                 `SELECT pg_advisory_xact_lock(hashtext('account:' || $1))`,
                 [didHash],
             );
+            const showcaseOrigin = await client.query<{ origin: string }>(
+                `SELECT origin FROM showcase_record_metadata
+                 WHERE entity_type = 'person' AND entity_key = $1`,
+                [did],
+            );
+            if (
+                showcaseOrigin.rows[0] &&
+                showcaseOrigin.rows[0].origin !== 'visitor-created'
+            ) {
+                throw new Error('SHOWCASE_ACCOUNT_IMMUTABLE');
+            }
             const duplicate = await client.query<{ result: Record<string, unknown> }>(
                 `SELECT result FROM account_deactivations WHERE did_hash = $1`,
                 [didHash],
@@ -499,6 +510,13 @@ export class AccountPrivacyService {
         client: PoolClient,
         did: string,
     ): Promise<Record<string, unknown>> {
+        const personOrigin = await client.query<{
+            origin: 'synthetic' | 'sourced-public' | 'visitor-created';
+        }>(
+            `SELECT origin FROM showcase_record_metadata
+             WHERE entity_type = 'person' AND entity_key = $1`,
+            [did],
+        );
         const oauth = await client.query<{
                 handle: string | null;
                 token_expires_at: Date | string | null;
@@ -541,10 +559,11 @@ export class AccountPrivacyService {
                 precision_km: number;
                 record_created_at: Date | string;
                 record_updated_at: Date | string;
+                record_origin: 'synthetic' | 'sourced-public' | 'visitor-created';
             }>(
             `SELECT uri, cid, title, description, category, urgency, status,
                     latitude, longitude, precision_km, record_created_at,
-                    record_updated_at
+                    record_updated_at, record_origin
              FROM indexer_aid_post_projections
              WHERE author_did_hash = $1
              ORDER BY record_created_at, uri`,
@@ -569,11 +588,13 @@ export class AccountPrivacyService {
                 operational_status: string;
                 record_created_at: Date | string;
                 record_updated_at: Date | string;
+                record_origin: 'synthetic' | 'sourced-public' | 'visitor-created';
             }>(
             `SELECT uri, cid, name, service_area, category,
                     verification_status, contact, latitude, longitude,
                     precision_km, open_hours, eligibility_notes,
-                    operational_status, record_created_at, record_updated_at
+                    operational_status, record_created_at, record_updated_at,
+                    record_origin
              FROM indexer_directory_resource_projections
              WHERE author_did_hash = $1
              ORDER BY record_created_at, uri`,
@@ -596,12 +617,13 @@ export class AccountPrivacyService {
             precision_km: number | null;
             record_created_at: Date | string;
             record_updated_at: Date | string;
+            record_origin: 'synthetic' | 'sourced-public' | 'visitor-created';
         }>(
             `SELECT uri, cid, display_name, bio, capabilities, availability,
                     contact_preference, skills, languages,
                     service_area_label, no_permanent_address, latitude,
                     longitude, precision_km, record_created_at,
-                    record_updated_at
+                    record_updated_at, record_origin
              FROM indexer_volunteer_profile_projections
              WHERE author_did_hash = $1
              ORDER BY record_created_at, uri`,
@@ -1002,6 +1024,8 @@ export class AccountPrivacyService {
             generatedAt: new Date().toISOString(),
             subject: {
                 did,
+                recordOrigin:
+                    personOrigin.rows[0]?.origin ?? 'visitor-created',
                 ...(oauthRow?.handle ? { handle: oauthRow.handle } : {}),
             },
             data: {
@@ -1039,6 +1063,7 @@ export class AccountPrivacyService {
                     },
                     createdAt: iso(row.record_created_at),
                     updatedAt: iso(row.record_updated_at),
+                    recordOrigin: row.record_origin,
                 })),
                 publicDirectoryResources: publicDirectoryResources.rows.map(
                     row => ({
@@ -1065,6 +1090,7 @@ export class AccountPrivacyService {
                         operationalStatus: row.operational_status,
                         createdAt: iso(row.record_created_at),
                         updatedAt: iso(row.record_updated_at),
+                        recordOrigin: row.record_origin,
                     }),
                 ),
                 publicVolunteerProfiles:
@@ -1105,6 +1131,7 @@ export class AccountPrivacyService {
                             :   null,
                         createdAt: iso(row.record_created_at),
                         updatedAt: iso(row.record_updated_at),
+                        recordOrigin: row.record_origin,
                     })),
                 privateVolunteerProfile:
                     privateVolunteerProfile.rows[0] ?

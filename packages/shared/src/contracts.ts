@@ -67,6 +67,7 @@ export interface AidRecordSummary {
         trustScore: number;
         finalScore: number;
     };
+    recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 export interface ApiQueryAidResponse {
@@ -120,6 +121,7 @@ export interface DirectoryRecordSummary {
     operationalStatus: 'open' | 'limited' | 'closed';
     createdAt: string;
     updatedAt: string;
+    recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 export interface VolunteerVerificationCheckpointState {

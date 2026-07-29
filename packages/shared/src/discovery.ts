@@ -75,6 +75,7 @@ export interface RankedAidCard {
     updatedAt: string;
     distanceKm: number;
     ranking: RankingBreakdown;
+    recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 export interface DirectoryCard {
@@ -102,6 +103,7 @@ export interface DirectoryCard {
     operationalStatus: 'open' | 'limited' | 'closed';
     createdAt: string;
     updatedAt: string;
+    recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 const MAX_PAGE_SIZE = 100;

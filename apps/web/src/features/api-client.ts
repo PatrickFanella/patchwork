@@ -2046,6 +2046,7 @@ const mapAidPayloadToRecords = (
             const status = readString(row, 'status');
             const urgency = readString(row, 'urgency');
             const updatedAt = readString(row, 'updatedAt');
+            const recordOrigin = readString(row, 'recordOrigin');
             if (
                 !uri ||
                 !authorDid ||
@@ -2083,6 +2084,11 @@ const mapAidPayloadToRecords = (
                 aidPostUri: uri,
                 recipientDid: authorDid,
                 ...(cid ? { cid } : {}),
+                ...(recordOrigin === 'synthetic' ||
+                recordOrigin === 'sourced-public' ||
+                recordOrigin === 'visitor-created' ?
+                    { recordOrigin }
+                :   {}),
                 card: createFeedCard({
                     id: parseRecordIdFromUri(uri, `remote-${index}`),
                     title,
@@ -2204,6 +2210,15 @@ const mapDirectoryPayloadToCards = (
             ),
             createdAt: readString(row, 'createdAt'),
             updatedAt: readString(row, 'updatedAt'),
+            recordOrigin:
+                readString(row, 'recordOrigin') === 'synthetic' ||
+                readString(row, 'recordOrigin') === 'sourced-public' ||
+                readString(row, 'recordOrigin') === 'visitor-created' ?
+                    (readString(row, 'recordOrigin') as
+                        | 'synthetic'
+                        | 'sourced-public'
+                        | 'visitor-created')
+                :   undefined,
             location: {
                 lat,
                 lng,

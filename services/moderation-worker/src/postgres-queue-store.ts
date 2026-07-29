@@ -40,6 +40,7 @@ interface ModerationQueueRow {
     reason_codes: string[];
     safe_preview: Record<string, string>;
     automated_decision: 'accepted' | 'quarantined' | 'rejected' | null;
+    record_origin: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 const toItem = (row: ModerationQueueRow): ModerationQueueItem => ({
@@ -60,6 +61,7 @@ const toItem = (row: ModerationQueueRow): ModerationQueueItem => ({
     reasonCodes: row.reason_codes,
     safePreview: row.safe_preview,
     automatedDecision: row.automated_decision,
+    recordOrigin: row.record_origin,
 });
 
 export class PostgresModerationQueueStore {

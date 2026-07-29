@@ -20,6 +20,7 @@
         "db:down": "docker compose -f docker-compose.postgres.yml down",
         "db:migrate": "npm run db:migrate -w @patchwork/api",
         "db:seed": "npm run db:seed -w @patchwork/api",
+        "db:seed:showcase": "npm run db:seed:showcase -w @patchwork/api",
         "build": "npm run build --workspaces --if-present",
         "lint": "npm run lint --workspaces --if-present",
         "typecheck": "npm run typecheck --workspaces --if-present",

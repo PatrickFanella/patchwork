@@ -45,6 +45,7 @@ export interface ApiVolunteerProfile {
           }
         | null;
     updatedAt: string;
+    recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 export interface ApiVolunteerQueryResponse {
@@ -260,6 +261,7 @@ interface ProjectionRow {
     record_updated_at: Date | string;
     source_cursor: string | number;
     projected_at: Date | string;
+    record_origin: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 interface DirectoryProjectionRow {
@@ -284,6 +286,7 @@ interface DirectoryProjectionRow {
     record_updated_at: Date | string;
     source_cursor: string | number;
     projected_at: Date | string;
+    record_origin: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 interface ProjectionStateRow {
@@ -309,6 +312,7 @@ interface VolunteerProjectionQueryRow {
     searchable_text: string;
     record_updated_at: Date | string;
     projected_at: Date | string;
+    record_origin: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 const volunteerQuerySchema = z
@@ -451,6 +455,8 @@ export class PostgresProjectionQueryService {
                 ...body,
                 results: body.results.map(row => ({
                     ...row,
+                    recordOrigin:
+                        snapshot.origins.get(row.uri) ?? 'visitor-created',
                     ...(exactByUri.has(row.uri) ?
                         { exactPublicAddress: exactByUri.get(row.uri) }
                     :   {}),
@@ -480,7 +486,7 @@ export class PostgresProjectionQueryService {
                             languages, service_area_label,
                             no_permanent_address, latitude, longitude,
                             precision_km, searchable_text,
-                            record_updated_at, projected_at
+                            record_updated_at, projected_at, record_origin
                      FROM indexer_volunteer_profile_projections
                      ORDER BY record_updated_at DESC, uri`,
                 ),
@@ -577,6 +583,7 @@ export class PostgresProjectionQueryService {
                             updatedAt: new Date(
                                 row.record_updated_at,
                             ).toISOString(),
+                            recordOrigin: row.record_origin,
                         };
                     }),
                     projectionFreshness: freshnessForRows(
@@ -610,10 +617,16 @@ export class PostgresProjectionQueryService {
         const result =
             scope === 'map' ? service.queryMap(params) : service.queryFeed(params);
         if ('error' in result.body) return result;
+        const body = result.body as ApiQueryAidResponse;
         return {
             ...result,
             body: {
-                ...result.body,
+                ...body,
+                results: body.results.map(row => ({
+                    ...row,
+                    recordOrigin:
+                        snapshot.origins.get(row.uri) ?? 'visitor-created',
+                })),
                 projectionFreshness: snapshot.freshness,
             },
         };
@@ -622,13 +635,17 @@ export class PostgresProjectionQueryService {
     private async loadSnapshot(viewerDid?: string): Promise<{
         events: NormalizedFirehoseEvent[];
         freshness: ProjectionFreshness;
+        origins: Map<
+            string,
+            'synthetic' | 'sourced-public' | 'visitor-created'
+        >;
     }> {
         const [result, stateResult, blockResult] = await Promise.all([
             this.pool.query<ProjectionRow>(
             `SELECT uri, cid, title, description, category, urgency, status,
                     searchable_text, latitude, longitude, precision_km,
                     record_created_at, record_updated_at, source_cursor,
-                    projected_at
+                    projected_at, record_origin
              FROM indexer_aid_post_projections
              ORDER BY source_cursor, uri`,
             ),
@@ -686,12 +703,19 @@ export class PostgresProjectionQueryService {
         return {
             events,
             freshness: freshnessForRows(result.rows, stateResult.rows[0]),
+            origins: new Map(
+                result.rows.map(row => [row.uri, row.record_origin]),
+            ),
         };
     }
 
     private async loadDirectorySnapshot(): Promise<{
         events: NormalizedFirehoseEvent[];
         freshness: ProjectionFreshness;
+        origins: Map<
+            string,
+            'synthetic' | 'sourced-public' | 'visitor-created'
+        >;
     }> {
         const [result, stateResult] = await Promise.all([
             this.pool.query<DirectoryProjectionRow>(
@@ -700,7 +724,7 @@ export class PostgresProjectionQueryService {
                         latitude, longitude, precision_km, open_hours,
                         eligibility_notes, operational_status,
                         record_created_at, record_updated_at, source_cursor,
-                        projected_at
+                        projected_at, record_origin
                  FROM indexer_directory_resource_projections
                  ORDER BY source_cursor, uri`,
             ),
@@ -756,6 +780,9 @@ export class PostgresProjectionQueryService {
         return {
             events,
             freshness: freshnessForRows(result.rows, stateResult.rows[0]),
+            origins: new Map(
+                result.rows.map(row => [row.uri, row.record_origin]),
+            ),
         };
     }
 }

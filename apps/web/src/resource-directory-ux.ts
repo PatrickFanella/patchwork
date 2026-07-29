@@ -50,6 +50,7 @@ export interface ResourceDirectoryCard {
         approvalExpiresAt: string;
     };
     distanceMeters?: number;
+    recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 export interface ResourceOverlayMarker {

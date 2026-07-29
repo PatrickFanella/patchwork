@@ -78,6 +78,8 @@ export interface ModerationQueueItem {
     reasonCodes?: string[];
     safePreview?: Record<string, string>;
     automatedDecision?: AutomatedModerationDecision | null;
+    /** Server-assigned provenance; never accepted from public submissions. */
+    recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 export interface ModerationAuditStateSnapshot {

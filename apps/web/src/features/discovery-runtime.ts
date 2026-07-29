@@ -5,6 +5,7 @@ export interface FeedRecordEnvelope {
     recipientDid: string;
     cid?: string;
     card: FeedAidCard;
+    recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
 export const defaultDiscoveryCenter = {

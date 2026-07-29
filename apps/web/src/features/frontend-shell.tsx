@@ -1898,6 +1898,17 @@ const FeedRoute = ({
                                                             }
                                                         </Badge>
                                                     :   null}
+                                                    {record?.recordOrigin ===
+                                                    'synthetic' ?
+                                                        <Badge tone='info'>
+                                                            Synthetic showcase
+                                                        </Badge>
+                                                    : record?.recordOrigin ===
+                                                      'sourced-public' ?
+                                                        <Badge tone='info'>
+                                                            Public-source reference
+                                                        </Badge>
+                                                    :   null}
                                                 </>
                                             :   null}
                                         </div>
@@ -3238,6 +3249,15 @@ const ResourceRoute = ({
                                     <Badge tone='info'>
                                         {formatCategoryLabel(card.category)}
                                     </Badge>
+                                    {card.recordOrigin === 'synthetic' ?
+                                        <Badge tone='info'>
+                                            Synthetic showcase
+                                        </Badge>
+                                    : card.recordOrigin === 'sourced-public' ?
+                                        <Badge tone='info'>
+                                            Public-source reference
+                                        </Badge>
+                                    :   null}
                                 </div>
                                 <p className='mt-1 text-xs text-mh-textSoft'>
                                     {card.location.areaLabel ?? 'Area pending'}{' '}
@@ -8329,7 +8349,8 @@ const ModeratorConsoleRoute = ({
                                 </span>
                                 <span className='mt-1 block text-xs uppercase'>
                                     {item.priority ?? 'normal'} · {item.subjectType} ·
-                                    {' '}{item.queueStatus}
+                                    {' '}{item.queueStatus} ·{' '}
+                                    {item.recordOrigin ?? 'visitor-created'}
                                 </span>
                                 <span className='mt-2 block text-sm'>
                                     {(item.reasonCodes ?? [item.latestReason]).join(', ')}
