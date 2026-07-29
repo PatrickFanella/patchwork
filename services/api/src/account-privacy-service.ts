@@ -69,6 +69,15 @@ export class AccountPrivacyService {
                  WHERE author_did_hash = $1`,
                 [didHash],
             );
+            const publicVolunteerProfiles = await client.query(
+                `DELETE FROM indexer_volunteer_profile_projections
+                 WHERE author_did_hash = $1`,
+                [didHash],
+            );
+            const privateVolunteerProfile = await client.query(
+                `DELETE FROM volunteer_private_profiles WHERE did = $1`,
+                [did],
+            );
             const legacyDiscoveryEvents = await client.query(
                 `DELETE FROM discovery_events WHERE author_did = $1`,
                 [did],
@@ -169,6 +178,10 @@ export class AccountPrivacyService {
                     publicAidPosts: publicAidPosts.rowCount ?? 0,
                     publicDirectoryResources:
                         publicDirectoryResources.rowCount ?? 0,
+                    publicVolunteerProfiles:
+                        publicVolunteerProfiles.rowCount ?? 0,
+                    privateVolunteerProfile:
+                        privateVolunteerProfile.rowCount ?? 0,
                     legacyDiscoveryEvents: legacyDiscoveryEvents.rowCount ?? 0,
                     workflows: workflows.rowCount ?? 0,
                     platformRoles: platformRoles.rowCount ?? 0,
@@ -292,6 +305,47 @@ export class AccountPrivacyService {
              WHERE author_did_hash = $1
              ORDER BY record_created_at, uri`,
             [hash(did)],
+        );
+        const publicVolunteerProfiles = await client.query<{
+            uri: string;
+            cid: string | null;
+            display_name: string;
+            bio: string | null;
+            capabilities: string[];
+            availability: string;
+            contact_preference: string;
+            skills: string[];
+            languages: string[];
+            service_area_label: string | null;
+            no_permanent_address: boolean;
+            latitude: number | null;
+            longitude: number | null;
+            precision_km: number | null;
+            record_created_at: Date | string;
+            record_updated_at: Date | string;
+        }>(
+            `SELECT uri, cid, display_name, bio, capabilities, availability,
+                    contact_preference, skills, languages,
+                    service_area_label, no_permanent_address, latitude,
+                    longitude, precision_km, record_created_at,
+                    record_updated_at
+             FROM indexer_volunteer_profile_projections
+             WHERE author_did_hash = $1
+             ORDER BY record_created_at, uri`,
+            [hash(did)],
+        );
+        const privateVolunteerProfile = await client.query<{
+            contact_email: string | null;
+            contact_phone: string | null;
+            availability_windows: string[];
+            matching_preferences: unknown;
+            created_at: Date | string;
+            updated_at: Date | string;
+        }>(
+            `SELECT contact_email, contact_phone, availability_windows,
+                    matching_preferences, created_at, updated_at
+             FROM volunteer_private_profiles WHERE did = $1`,
+            [did],
         );
         const workflows = await client.query<{
                 post_uri: string;
@@ -486,6 +540,70 @@ export class AccountPrivacyService {
                         updatedAt: iso(row.record_updated_at),
                     }),
                 ),
+                publicVolunteerProfiles:
+                    publicVolunteerProfiles.rows.map(row => ({
+                        uri: row.uri,
+                        cid: row.cid,
+                        displayName: row.display_name,
+                        bio: row.bio,
+                        capabilities: row.capabilities,
+                        availability: row.availability,
+                        contactPreference: row.contact_preference,
+                        skills: row.skills,
+                        languages: row.languages,
+                        serviceArea:
+                            row.service_area_label ?
+                                {
+                                    areaLabel: row.service_area_label,
+                                    noPermanentAddress:
+                                        row.no_permanent_address,
+                                    ...(row.latitude !== null &&
+                                    row.longitude !== null &&
+                                    row.precision_km !== null ?
+                                        {
+                                            approximateGeo: {
+                                                latitude: Number(
+                                                    row.latitude,
+                                                ),
+                                                longitude: Number(
+                                                    row.longitude,
+                                                ),
+                                                precisionKm: Number(
+                                                    row.precision_km,
+                                                ),
+                                            },
+                                        }
+                                    :   {}),
+                                }
+                            :   null,
+                        createdAt: iso(row.record_created_at),
+                        updatedAt: iso(row.record_updated_at),
+                    })),
+                privateVolunteerProfile:
+                    privateVolunteerProfile.rows[0] ?
+                        {
+                            contactEmail:
+                                privateVolunteerProfile.rows[0]
+                                    .contact_email,
+                            contactPhone:
+                                privateVolunteerProfile.rows[0]
+                                    .contact_phone,
+                            availabilityWindows:
+                                privateVolunteerProfile.rows[0]
+                                    .availability_windows,
+                            matchingPreferences:
+                                privateVolunteerProfile.rows[0]
+                                    .matching_preferences,
+                            createdAt: iso(
+                                privateVolunteerProfile.rows[0]
+                                    .created_at,
+                            ),
+                            updatedAt: iso(
+                                privateVolunteerProfile.rows[0]
+                                    .updated_at,
+                            ),
+                        }
+                    :   null,
                 workflows: workflows.rows.map(row => ({
                     postUri: row.post_uri,
                     currentStatus: row.current_status,

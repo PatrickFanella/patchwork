@@ -49,54 +49,108 @@ export const aidPostSchema = z.object({
     updatedAt: isoDateTimeSchema.optional(),
 }).strict();
 
-export const volunteerProfileSchema = z.object({
-    $type: z.literal(recordNsid.volunteerProfile),
-    version: z.enum(['1.0.0', '1.1.0']),
-    displayName: z.string().min(1).max(80),
-    capabilities: z
-        .array(
-            z.enum([
-                'transport',
-                'food-delivery',
-                'translation',
-                'first-aid',
-                'childcare',
-                'other',
-            ]),
-        )
-        .min(1),
-    availability: z.enum([
-        'immediate',
-        'within-24h',
-        'scheduled',
-        'unavailable',
-    ]),
-    contactPreference: z.enum(['chat-only', 'chat-or-call']),
-    skills: z.array(z.string().min(1).max(64)).min(1).max(50).optional(),
-    availabilityWindows: z
-        .array(z.string().min(1).max(64))
-        .min(1)
-        .max(50)
-        .optional(),
-    verificationCheckpoints: z
-        .object({
-            identityCheck: z.enum(['pending', 'approved', 'rejected']),
-            safetyTraining: z.enum(['pending', 'approved', 'rejected']),
-            communityReference: z.enum(['pending', 'approved', 'rejected']),
-        })
-        .optional(),
-    matchingPreferences: z
-        .object({
-            preferredCategories: z.array(z.enum(aidCategoryValues)).min(1),
-            preferredUrgencies: z.array(z.enum(aidUrgencyValues)).min(1),
-            maxDistanceKm: z.number().min(1).max(250),
-            acceptsLateNight: z.boolean().optional(),
-        })
-        .optional(),
-    notes: z.string().max(500).optional(),
-    createdAt: isoDateTimeSchema,
-    updatedAt: isoDateTimeSchema.optional(),
-});
+const volunteerServiceAreaSchema = z
+    .object({
+        areaLabel: z.string().min(1).max(120),
+        noPermanentAddress: z.boolean(),
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
+        precisionKm: z.number().min(1).max(50).optional(),
+    })
+    .strict()
+    .superRefine((value, context) => {
+        const coordinateFields = [
+            value.latitude,
+            value.longitude,
+            value.precisionKm,
+        ];
+        const count = coordinateFields.filter(
+            item => item !== undefined,
+        ).length;
+        if (count !== 0 && count !== coordinateFields.length) {
+            context.addIssue({
+                code: 'custom',
+                message:
+                    'Approximate service-area coordinates must be supplied together.',
+            });
+        }
+    });
+
+export const volunteerProfileSchema = z
+    .object({
+        $type: z.literal(recordNsid.volunteerProfile),
+        version: z.enum(['1.0.0', '1.1.0', '1.2.0']),
+        displayName: z.string().min(1).max(80),
+        bio: z.string().max(500).optional(),
+        capabilities: z
+            .array(
+                z.enum([
+                    'transport',
+                    'food-delivery',
+                    'translation',
+                    'first-aid',
+                    'childcare',
+                    'other',
+                ]),
+            )
+            .min(1),
+        availability: z.enum([
+            'immediate',
+            'within-24h',
+            'scheduled',
+            'unavailable',
+        ]),
+        contactPreference: z.enum(['chat-only', 'chat-or-call']),
+        skills: z.array(z.string().min(1).max(64)).min(1).max(50).optional(),
+        languages: z
+            .array(
+                z
+                    .string()
+                    .min(2)
+                    .max(35)
+                    .regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/),
+            )
+            .min(1)
+            .max(20)
+            .optional(),
+        serviceArea: volunteerServiceAreaSchema.optional(),
+        // Legacy fields remain readable for repository compatibility. New
+        // Patchwork writes keep these private and never publish them.
+        availabilityWindows: z
+            .array(z.string().min(1).max(64))
+            .min(1)
+            .max(50)
+            .optional(),
+        verificationCheckpoints: z
+            .object({
+                identityCheck: z.enum(['pending', 'approved', 'rejected']),
+                safetyTraining: z.enum(['pending', 'approved', 'rejected']),
+                communityReference: z.enum([
+                    'pending',
+                    'approved',
+                    'rejected',
+                ]),
+            })
+            .strict()
+            .optional(),
+        matchingPreferences: z
+            .object({
+                preferredCategories: z
+                    .array(z.enum(aidCategoryValues))
+                    .min(1),
+                preferredUrgencies: z
+                    .array(z.enum(aidUrgencyValues))
+                    .min(1),
+                maxDistanceKm: z.number().min(1).max(250),
+                acceptsLateNight: z.boolean().optional(),
+            })
+            .strict()
+            .optional(),
+        notes: z.string().max(500).optional(),
+        createdAt: isoDateTimeSchema,
+        updatedAt: isoDateTimeSchema.optional(),
+    })
+    .strict();
 
 export const conversationMetaSchema = z.object({
     $type: z.literal(recordNsid.conversationMeta),
@@ -185,6 +239,22 @@ type AtDirectoryResourceRecord = Omit<DirectoryResourceRecord, 'location'> & {
     location?: AtLocation;
 };
 
+type AtVolunteerProfileRecord = Omit<
+    VolunteerProfileRecord,
+    'serviceArea'
+> & {
+    serviceArea?:
+        | Omit<
+              NonNullable<VolunteerProfileRecord['serviceArea']>,
+              'latitude' | 'longitude' | 'precisionKm'
+          >
+        | (Omit<
+              NonNullable<VolunteerProfileRecord['serviceArea']>,
+              'latitude' | 'longitude' | 'precisionKm'
+          > &
+              AtLocation);
+};
+
 const encodeLocation = (
     location: AidPostRecord['location'],
 ): AtLocation => ({
@@ -271,6 +341,62 @@ export const decodeDirectoryResourceFromAt = (
     });
 };
 
+export const encodeVolunteerProfileForAt = (
+    record: VolunteerProfileRecord,
+): AtVolunteerProfileRecord => {
+    const { serviceArea, ...rest } = record;
+    if (
+        !serviceArea ||
+        serviceArea.latitude === undefined ||
+        serviceArea.longitude === undefined ||
+        serviceArea.precisionKm === undefined
+    ) {
+        return {
+            ...rest,
+            ...(serviceArea ? { serviceArea } : {}),
+        };
+    }
+    return {
+        ...rest,
+        serviceArea: {
+            noPermanentAddress: serviceArea.noPermanentAddress,
+            ...encodeLocation({
+                latitude: serviceArea.latitude,
+                longitude: serviceArea.longitude,
+                precisionKm: serviceArea.precisionKm,
+                areaLabel: serviceArea.areaLabel,
+            }),
+            areaLabel: serviceArea.areaLabel,
+        },
+    };
+};
+
+export const decodeVolunteerProfileFromAt = (
+    input: unknown,
+): VolunteerProfileRecord => {
+    if (typeof input !== 'object' || input === null) {
+        return volunteerProfileSchema.parse(input);
+    }
+    const record = input as Record<string, unknown>;
+    const serviceArea = record['serviceArea'];
+    if (typeof serviceArea !== 'object' || serviceArea === null) {
+        return volunteerProfileSchema.parse(record);
+    }
+    const encoded = serviceArea as Record<string, unknown>;
+    const decoded = decodeLocation(serviceArea);
+    return volunteerProfileSchema.parse({
+        ...record,
+        serviceArea:
+            decoded === serviceArea ?
+                serviceArea
+            :   {
+                    ...(decoded as Record<string, unknown>),
+                    noPermanentAddress:
+                        encoded['noPermanentAddress'] === true,
+                },
+    });
+};
+
 export const decodeRecordFromAt = (
     collection: RecordNsid,
     input: unknown,
@@ -280,6 +406,9 @@ export const decodeRecordFromAt = (
     }
     if (collection === recordNsid.directoryResource) {
         return decodeDirectoryResourceFromAt(input);
+    }
+    if (collection === recordNsid.volunteerProfile) {
+        return decodeVolunteerProfileFromAt(input);
     }
     return input;
 };

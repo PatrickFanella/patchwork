@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
     type AidPostRecord,
     type DirectoryResourceRecord,
+    type VolunteerProfileRecord,
     type RecordByNsid,
     recordNsid,
     type RecordNsid,
@@ -80,6 +81,26 @@ export interface NormalizedDirectoryResource {
     trustScore: number;
 }
 
+export interface NormalizedVolunteerProfile {
+    kind: 'volunteer-profile';
+    displayName: string;
+    bio?: string;
+    capabilities: VolunteerProfileRecord['capabilities'];
+    availability: VolunteerProfileRecord['availability'];
+    contactPreference: VolunteerProfileRecord['contactPreference'];
+    skills: string[];
+    languages: string[];
+    serviceArea?: {
+        areaLabel: string;
+        noPermanentAddress: boolean;
+        approximateGeo?: ApproximateGeoPoint;
+    };
+    createdAt: string;
+    updatedAt: string;
+    searchableText: string;
+    trustScore: number;
+}
+
 export interface NormalizedOpaqueRecord {
     kind: 'opaque-record';
     createdAt: string;
@@ -91,6 +112,7 @@ export interface NormalizedOpaqueRecord {
 export type NormalizedRecordPayload =
     | NormalizedAidPost
     | NormalizedDirectoryResource
+    | NormalizedVolunteerProfile
     | NormalizedOpaqueRecord;
 
 export interface NormalizedFirehoseEvent {
@@ -295,6 +317,50 @@ const normalizeRecordPayload = (
                 directoryRecord.eligibilityNotes ?? '',
                 directoryRecord.location?.areaLabel ?? '',
                 directoryRecord.operationalStatus ?? 'open',
+            ),
+            trustScore,
+        };
+    }
+
+    if (collection === recordNsid.volunteerProfile) {
+        const volunteer = validated as VolunteerProfileRecord;
+        const serviceArea = volunteer.serviceArea;
+        return {
+            kind: 'volunteer-profile',
+            displayName: volunteer.displayName,
+            bio: volunteer.bio,
+            capabilities: [...volunteer.capabilities],
+            availability: volunteer.availability,
+            contactPreference: volunteer.contactPreference,
+            skills: [...(volunteer.skills ?? [])],
+            languages: [...(volunteer.languages ?? [])],
+            serviceArea:
+                serviceArea ?
+                    {
+                        areaLabel: serviceArea.areaLabel,
+                        noPermanentAddress:
+                            serviceArea.noPermanentAddress,
+                        approximateGeo:
+                            serviceArea.latitude !== undefined &&
+                            serviceArea.longitude !== undefined &&
+                            serviceArea.precisionKm !== undefined ?
+                                quantizeCoordinate(
+                                    serviceArea.latitude,
+                                    serviceArea.longitude,
+                                    serviceArea.precisionKm,
+                                )
+                            :   undefined,
+                    }
+                :   undefined,
+            createdAt: volunteer.createdAt,
+            updatedAt: volunteer.updatedAt ?? volunteer.createdAt,
+            searchableText: normalizeSearchableText(
+                volunteer.displayName,
+                volunteer.bio ?? '',
+                ...volunteer.capabilities,
+                ...(volunteer.skills ?? []),
+                ...(volunteer.languages ?? []),
+                serviceArea?.areaLabel ?? '',
             ),
             trustScore,
         };

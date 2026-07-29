@@ -1,4 +1,4 @@
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import {
     DiscoveryIndexStore,
     FirehoseConsumer,
@@ -18,7 +18,42 @@ export interface ApiRouteResult {
     body:
         | ApiQueryAidResponse
         | ApiQueryDirectoryResponse
+        | ApiVolunteerQueryResponse
         | ApiQueryErrorResponse;
+}
+
+export interface ApiVolunteerProfile {
+    uri: string;
+    cid: string | null;
+    authorDid: string;
+    displayName: string;
+    bio: string | null;
+    capabilities: string[];
+    availability: string;
+    contactPreference: string;
+    skills: string[];
+    languages: string[];
+    serviceArea:
+        | {
+              areaLabel: string;
+              noPermanentAddress: boolean;
+              approximateGeo?: {
+                  latitude: number;
+                  longitude: number;
+                  precisionKm: number;
+              };
+          }
+        | null;
+    updatedAt: string;
+}
+
+export interface ApiVolunteerQueryResponse {
+    total: number;
+    page: number;
+    pageSize: number;
+    hasNextPage: boolean;
+    results: ApiVolunteerProfile[];
+    projectionFreshness?: ProjectionFreshness;
 }
 
 const readNumber = (
@@ -180,6 +215,19 @@ export class ApiDiscoveryQueryService {
             throw error;
         }
     }
+
+    queryVolunteers(_params: URLSearchParams): ApiRouteResult {
+        return {
+            statusCode: 200,
+            body: {
+                total: 0,
+                page: 1,
+                pageSize: 20,
+                hasNextPage: false,
+                results: [],
+            },
+        };
+    }
 }
 
 const createQueryServiceFromNormalizedEvents = (
@@ -242,6 +290,44 @@ interface ProjectionStateRow {
     latest_cursor: string | number | null;
     heartbeat_at: Date | string;
 }
+
+interface VolunteerProjectionQueryRow {
+    uri: string;
+    cid: string | null;
+    display_name: string;
+    bio: string | null;
+    capabilities: string[];
+    availability: string;
+    contact_preference: string;
+    skills: string[];
+    languages: string[];
+    service_area_label: string | null;
+    no_permanent_address: boolean;
+    latitude: number | null;
+    longitude: number | null;
+    precision_km: number | null;
+    searchable_text: string;
+    record_updated_at: Date | string;
+    projected_at: Date | string;
+}
+
+const volunteerQuerySchema = z
+    .object({
+        capability: z.string().min(1).max(64).optional(),
+        language: z.string().min(2).max(35).optional(),
+        availability: z
+            .enum([
+                'immediate',
+                'within-24h',
+                'scheduled',
+                'unavailable',
+            ])
+            .optional(),
+        searchText: z.string().max(200).optional(),
+        page: z.number().int().min(1).default(1),
+        pageSize: z.number().int().min(1).max(100).default(20),
+    })
+    .strict();
 
 const authorDidFromUri = (uri: string): string => {
     const match = /^at:\/\/([^/]+)\//.exec(uri);
@@ -316,6 +402,142 @@ export class PostgresProjectionQueryService {
                 projectionFreshness: snapshot.freshness,
             },
         };
+    }
+
+    async queryVolunteers(
+        params: URLSearchParams,
+        viewerDid?: string,
+    ): Promise<ApiRouteResult> {
+        try {
+            const input = volunteerQuerySchema.parse({
+                capability: readString(params, 'capability'),
+                language: readString(params, 'language'),
+                availability: readString(params, 'availability'),
+                searchText: readString(params, 'searchText'),
+                page: readNumber(params, 'page') ?? 1,
+                pageSize: readNumber(params, 'pageSize') ?? 20,
+            });
+            const [result, stateResult, blockResult] = await Promise.all([
+                this.pool.query<VolunteerProjectionQueryRow>(
+                    `SELECT uri, cid, display_name, bio, capabilities,
+                            availability, contact_preference, skills,
+                            languages, service_area_label,
+                            no_permanent_address, latitude, longitude,
+                            precision_km, searchable_text,
+                            record_updated_at, projected_at
+                     FROM indexer_volunteer_profile_projections
+                     ORDER BY record_updated_at DESC, uri`,
+                ),
+                this.pool.query<ProjectionStateRow>(
+                    `SELECT latest_cursor, heartbeat_at
+                     FROM indexer_projection_state
+                     WHERE singleton = TRUE`,
+                ),
+                viewerDid ?
+                    this.pool.query<{ excluded_did: string }>(
+                        `SELECT CASE
+                             WHEN blocker_did = $1 THEN subject_did
+                             ELSE blocker_did
+                         END AS excluded_did
+                         FROM user_blocks
+                         WHERE (blocker_did = $1 OR subject_did = $1)
+                           AND deleted_at IS NULL
+                           AND (
+                               retention_until IS NULL
+                               OR retention_until > NOW()
+                           )`,
+                        [viewerDid],
+                    )
+                :   Promise.resolve({
+                        rows: [] as { excluded_did: string }[],
+                    }),
+            ]);
+            const excluded = new Set(
+                blockResult.rows.map(row => row.excluded_did),
+            );
+            const search = input.searchText?.toLowerCase();
+            const filtered = result.rows.filter(row => {
+                const authorDid = authorDidFromUri(row.uri);
+                return (
+                    !excluded.has(authorDid) &&
+                    (!input.capability ||
+                        row.capabilities.includes(input.capability)) &&
+                    (!input.language ||
+                        row.languages.includes(input.language)) &&
+                    (!input.availability ||
+                        row.availability === input.availability) &&
+                    (!search || row.searchable_text.includes(search))
+                );
+            });
+            const start = (input.page - 1) * input.pageSize;
+            const pageRows = filtered.slice(start, start + input.pageSize);
+            return {
+                statusCode: 200,
+                body: {
+                    total: filtered.length,
+                    page: input.page,
+                    pageSize: input.pageSize,
+                    hasNextPage: start + input.pageSize < filtered.length,
+                    results: pageRows.map(row => {
+                        const hasGeo =
+                            row.latitude !== null &&
+                            row.longitude !== null &&
+                            row.precision_km !== null;
+                        return {
+                            uri: row.uri,
+                            cid: row.cid,
+                            authorDid: authorDidFromUri(row.uri),
+                            displayName: row.display_name,
+                            bio: row.bio,
+                            capabilities: row.capabilities,
+                            availability: row.availability,
+                            contactPreference: row.contact_preference,
+                            skills: row.skills,
+                            languages: row.languages,
+                            serviceArea:
+                                row.service_area_label ?
+                                    {
+                                        areaLabel:
+                                            row.service_area_label,
+                                        noPermanentAddress:
+                                            row.no_permanent_address,
+                                        ...(hasGeo ?
+                                            {
+                                                approximateGeo: {
+                                                    latitude: Number(
+                                                        row.latitude,
+                                                    ),
+                                                    longitude: Number(
+                                                        row.longitude,
+                                                    ),
+                                                    precisionKm: Number(
+                                                        row.precision_km,
+                                                    ),
+                                                },
+                                            }
+                                        :   {}),
+                                    }
+                                :   null,
+                            updatedAt: new Date(
+                                row.record_updated_at,
+                            ).toISOString(),
+                        };
+                    }),
+                    projectionFreshness: freshnessForRows(
+                        result.rows,
+                        stateResult.rows[0],
+                    ),
+                },
+            };
+        } catch (error) {
+            if (error instanceof ZodError) {
+                return {
+                    statusCode: 400,
+                    body: formatValidationError(error),
+                };
+            }
+            throw error;
+        }
     }
 
     async getFreshness(): Promise<ProjectionFreshness> {

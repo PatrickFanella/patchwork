@@ -193,6 +193,58 @@ describe('P3.1 firehose consumer + normalization', () => {
         }
     });
 
+    it('normalizes volunteer public discovery fields and drops legacy private authority claims', () => {
+        const normalized = normalizeFirehoseEvent({
+            seq: 52,
+            action: 'create',
+            uri: 'at://did:example:alex/app.patchwork.volunteer.profile/main',
+            collection: recordNsid.volunteerProfile,
+            authorDid: 'did:example:alex',
+            record: {
+                $type: recordNsid.volunteerProfile,
+                version: '1.2.0',
+                displayName: 'Alex Rivera',
+                bio: 'Neighborhood delivery volunteer.',
+                capabilities: ['food-delivery'],
+                availability: 'within-24h',
+                contactPreference: 'chat-only',
+                skills: ['meal delivery'],
+                languages: ['en', 'es'],
+                serviceArea: {
+                    areaLabel: 'Near North Side',
+                    noPermanentAddress: true,
+                    latitude: 41.9,
+                    longitude: -87.64,
+                    precisionKm: 2,
+                },
+                createdAt: '2026-07-28T12:00:00.000Z',
+            },
+        });
+
+        expect(normalized).toMatchObject({
+            success: true,
+            event: {
+                payload: {
+                    kind: 'volunteer-profile',
+                    displayName: 'Alex Rivera',
+                    languages: ['en', 'es'],
+                    serviceArea: {
+                        noPermanentAddress: true,
+                        approximateGeo: { precisionKm: 2 },
+                    },
+                },
+            },
+        });
+        if (normalized.success) {
+            expect(normalized.event.payload).not.toHaveProperty(
+                'verificationCheckpoints',
+            );
+            expect(normalized.event.payload).not.toHaveProperty(
+                'matchingPreferences',
+            );
+        }
+    });
+
     it('redacts sensitive ingestion log fields and avoids raw AT URIs', () => {
         const consumer = new FirehoseConsumer();
         const result = consumer.ingest(buildPhase3FixtureFirehoseEvents());

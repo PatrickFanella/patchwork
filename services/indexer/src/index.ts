@@ -295,7 +295,11 @@ export const startIndexerServer = async () => {
     const { pipeline, pool, projectionStore } = await createPipeline();
     const source = new JetstreamEventSource({
         url: config.INDEXER_FIREHOSE_URL,
-        collections: [recordNsid.aidPost, recordNsid.directoryResource],
+        collections: [
+            recordNsid.aidPost,
+            recordNsid.directoryResource,
+            recordNsid.volunteerProfile,
+        ],
     });
     const runtime = new IndexerRuntime({
         pipeline,

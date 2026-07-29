@@ -1,8 +1,8 @@
 {
     "lexicon": 1,
     "id": "app.patchwork.volunteer.profile",
-    "revision": "1.1.0",
-    "description": "Volunteer profile and availability metadata.",
+    "revision": "1.2.0",
+    "description": "Public volunteer profile and approximate service-area metadata. Private matching and verification state is not authoritative here.",
     "defs": {
         "main": {
             "type": "record",
@@ -25,13 +25,16 @@
                     },
                     "version": {
                         "type": "string",
-                        "enum": ["1.0.0", "1.1.0"]
+                        "enum": ["1.0.0", "1.1.0", "1.2.0"]
                     },
                     "displayName": { "type": "string", "maxLength": 80 },
+                    "bio": { "type": "string", "maxLength": 500 },
                     "capabilities": { "type": "array" },
                     "availability": { "type": "string" },
                     "contactPreference": { "type": "string" },
                     "skills": { "type": "array" },
+                    "languages": { "type": "array" },
+                    "serviceArea": { "type": "object" },
                     "availabilityWindows": { "type": "array" },
                     "verificationCheckpoints": { "type": "object" },
                     "matchingPreferences": { "type": "object" },

@@ -92,6 +92,7 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             '0012_retention_enforcement.sql',
             '0013_account_deactivation.sql',
             '0014_account_onboarding.sql',
+            '0015_volunteer_private_profiles.sql',
         ]) {
             await pool.query(
                 await readFile(
@@ -110,6 +111,15 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             await readFile(
                 new URL(
                     '../../../indexer/src/migrations/0004_directory_projection_store.sql',
+                    import.meta.url,
+                ),
+                'utf8',
+            ),
+        );
+        await pool.query(
+            await readFile(
+                new URL(
+                    '../../../indexer/src/migrations/0005_volunteer_profile_projection.sql',
                     import.meta.url,
                 ),
                 'utf8',
@@ -142,6 +152,8 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                       indexer_projection_tombstones,
                       indexer_aid_post_projections,
                       indexer_directory_resource_projections
+                      , indexer_volunteer_profile_projections
+                      , volunteer_private_profiles
                       RESTART IDENTITY CASCADE`,
         );
         await pool.query(
@@ -265,6 +277,38 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
              )`,
             [viewerDid],
         );
+        await pool.query(
+            `INSERT INTO indexer_volunteer_profile_projections (
+                uri, collection, cid, author_did_hash, display_name, bio,
+                capabilities, availability, contact_preference, skills,
+                languages, service_area_label, no_permanent_address,
+                latitude, longitude, precision_km, searchable_text,
+                record_created_at, record_updated_at, source_cursor,
+                source_event_id
+             ) VALUES (
+                'at://did:plc:privacyviewer/app.patchwork.volunteer.profile/main',
+                'app.patchwork.volunteer.profile', 'volunteer-cid', $1,
+                'Viewer Volunteer', 'Public bio', '["food-delivery"]',
+                'within-24h', 'chat-only', '["meal delivery"]', '["en"]',
+                'Viewer district', TRUE, 0, 0, 5,
+                'viewer volunteer public bio', NOW(), NOW(), 5,
+                'privacy-volunteer-event'
+             )`,
+            [hash(viewerDid)],
+        );
+        await pool.query(
+            `INSERT INTO volunteer_private_profiles (
+                did, contact_email, contact_phone, availability_windows,
+                matching_preferences, created_at, updated_at
+             ) VALUES (
+                $1, 'viewer@example.test', NULL, '["weekday_evenings"]',
+                '{"preferredCategories":["food"],
+                  "preferredUrgencies":["medium"],
+                  "maxDistanceKm":10,"acceptsLateNight":false}',
+                NOW(), NOW()
+             )`,
+            [viewerDid],
+        );
     });
 
     afterAll(async () => {
@@ -307,6 +351,14 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                     privacy: 'private',
                     visibility: 'hidden',
                     language: 'es',
+                }),
+                publicVolunteerProfiles: [
+                    expect.objectContaining({
+                        displayName: 'Viewer Volunteer',
+                    }),
+                ],
+                privateVolunteerProfile: expect.objectContaining({
+                    contactEmail: 'viewer@example.test',
                 }),
             },
             exclusions: expect.arrayContaining([
@@ -356,6 +408,8 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 publicAidPosts: 1,
                 publicDirectoryResources: 1,
                 workflows: 1,
+                publicVolunteerProfiles: 1,
+                privateVolunteerProfile: 1,
                 policyConsents: 1,
                 preferences: 1,
             },
@@ -409,11 +463,15 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 publicAidPosts: unknown[];
                 publicDirectoryResources: unknown[];
                 workflows: unknown[];
+                publicVolunteerProfiles: unknown[];
+                privateVolunteerProfile: unknown;
             };
         };
         expect(viewerExport.data.publicAidPosts).toEqual([]);
         expect(viewerExport.data.publicDirectoryResources).toEqual([]);
         expect(viewerExport.data.workflows).toEqual([]);
+        expect(viewerExport.data.publicVolunteerProfiles).toEqual([]);
+        expect(viewerExport.data.privateVolunteerProfile).toBeNull();
 
         const otherExport = (await fetch(`${running.origin}/account/export`, {
             headers: { cookie: 'patchwork_session=other-session' },

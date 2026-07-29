@@ -48,6 +48,30 @@ export interface DirectoryResourceProjection {
     sourceCursor: number;
 }
 
+export interface VolunteerProfileProjection {
+    uri: string;
+    collection: string;
+    cid: string | null;
+    revision: string | null;
+    authorDidHash: string;
+    displayName: string;
+    bio: string | null;
+    capabilities: string[];
+    availability: string;
+    contactPreference: string;
+    skills: string[];
+    languages: string[];
+    serviceAreaLabel: string | null;
+    noPermanentAddress: boolean;
+    latitude: number | null;
+    longitude: number | null;
+    precisionKm: number | null;
+    searchableText: string;
+    createdAt: string;
+    updatedAt: string;
+    sourceCursor: number;
+}
+
 interface ProjectionRow {
     uri: string;
     collection: string;
@@ -89,6 +113,30 @@ interface DirectoryProjectionRow {
     open_hours: string | null;
     eligibility_notes: string | null;
     operational_status: string;
+    record_created_at: Date | string;
+    record_updated_at: Date | string;
+    source_cursor: number | string;
+}
+
+interface VolunteerProjectionRow {
+    uri: string;
+    collection: string;
+    cid: string | null;
+    revision: string | null;
+    author_did_hash: string;
+    display_name: string;
+    bio: string | null;
+    capabilities: string[];
+    availability: string;
+    contact_preference: string;
+    skills: string[];
+    languages: string[];
+    service_area_label: string | null;
+    no_permanent_address: boolean;
+    latitude: number | null;
+    longitude: number | null;
+    precision_km: number | null;
+    searchable_text: string;
     record_created_at: Date | string;
     record_updated_at: Date | string;
     source_cursor: number | string;
@@ -142,16 +190,43 @@ const toDirectoryProjection = (
     sourceCursor: Number(row.source_cursor),
 });
 
+const toVolunteerProjection = (
+    row: VolunteerProjectionRow,
+): VolunteerProfileProjection => ({
+    uri: row.uri,
+    collection: row.collection,
+    cid: row.cid,
+    revision: row.revision,
+    authorDidHash: row.author_did_hash,
+    displayName: row.display_name,
+    bio: row.bio,
+    capabilities: row.capabilities,
+    availability: row.availability,
+    contactPreference: row.contact_preference,
+    skills: row.skills,
+    languages: row.languages,
+    serviceAreaLabel: row.service_area_label,
+    noPermanentAddress: row.no_permanent_address,
+    latitude: row.latitude === null ? null : Number(row.latitude),
+    longitude: row.longitude === null ? null : Number(row.longitude),
+    precisionKm: row.precision_km === null ? null : Number(row.precision_km),
+    searchableText: row.searchable_text,
+    createdAt: new Date(row.record_created_at).toISOString(),
+    updatedAt: new Date(row.record_updated_at).toISOString(),
+    sourceCursor: Number(row.source_cursor),
+});
+
 export class PostgresProjectionStore {
     constructor(private readonly pool: Pool) {}
 
     async apply(event: NormalizedFirehoseEvent): Promise<void> {
         if (
             event.collection !== recordNsid.aidPost &&
-            event.collection !== recordNsid.directoryResource
+            event.collection !== recordNsid.directoryResource &&
+            event.collection !== recordNsid.volunteerProfile
         ) {
             throw new Error(
-                'Projection store only accepts aid-post and directory-resource events.',
+                'Projection store only accepts aid-post, directory-resource, and volunteer-profile events.',
             );
         }
         const client = await this.pool.connect();
@@ -196,9 +271,17 @@ export class PostgresProjectionStore {
                          WHERE uri = $1 AND source_cursor <= $2`,
                         [event.uri, event.seq],
                     );
-                } else {
+                } else if (
+                    event.collection === recordNsid.directoryResource
+                ) {
                     await client.query(
                         `DELETE FROM indexer_directory_resource_projections
+                         WHERE uri = $1 AND source_cursor <= $2`,
+                        [event.uri, event.seq],
+                    );
+                } else {
+                    await client.query(
+                        `DELETE FROM indexer_volunteer_profile_projections
                          WHERE uri = $1 AND source_cursor <= $2`,
                         [event.uri, event.seq],
                     );
@@ -216,9 +299,17 @@ export class PostgresProjectionStore {
                         `DELETE FROM indexer_aid_post_projections WHERE uri = $1`,
                         [event.uri],
                     );
-                } else {
+                } else if (
+                    event.collection === recordNsid.directoryResource
+                ) {
                     await client.query(
                         `DELETE FROM indexer_directory_resource_projections
+                         WHERE uri = $1`,
+                        [event.uri],
+                    );
+                } else {
+                    await client.query(
+                        `DELETE FROM indexer_volunteer_profile_projections
                          WHERE uri = $1`,
                         [event.uri],
                     );
@@ -298,7 +389,9 @@ export class PostgresProjectionStore {
                         event.eventId,
                     ],
                 );
-            } else {
+            } else if (
+                event.collection === recordNsid.directoryResource
+            ) {
                 if (event.payload?.kind !== 'directory-resource') {
                     throw new Error(
                         'Directory-resource create and update events require a normalized payload.',
@@ -359,6 +452,78 @@ export class PostgresProjectionStore {
                         payload.openHours ?? null,
                         payload.eligibilityNotes ?? null,
                         payload.operationalStatus,
+                        payload.createdAt,
+                        payload.updatedAt,
+                        event.seq,
+                        event.eventId,
+                    ],
+                );
+            } else {
+                if (event.payload?.kind !== 'volunteer-profile') {
+                    throw new Error(
+                        'Volunteer-profile create and update events require a normalized payload.',
+                    );
+                }
+                const payload = event.payload;
+                await client.query(
+                    `INSERT INTO indexer_volunteer_profile_projections (
+                        uri, collection, cid, revision, author_did_hash,
+                        display_name, bio, capabilities, availability,
+                        contact_preference, skills, languages,
+                        service_area_label, no_permanent_address,
+                        latitude, longitude, precision_km, searchable_text,
+                        record_created_at, record_updated_at, source_cursor,
+                        source_event_id
+                     ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10,
+                        $11::jsonb, $12::jsonb, $13, $14, $15, $16, $17,
+                        $18, $19, $20, $21, $22
+                     )
+                     ON CONFLICT (uri) DO UPDATE SET
+                        collection = EXCLUDED.collection,
+                        cid = EXCLUDED.cid,
+                        revision = EXCLUDED.revision,
+                        author_did_hash = EXCLUDED.author_did_hash,
+                        display_name = EXCLUDED.display_name,
+                        bio = EXCLUDED.bio,
+                        capabilities = EXCLUDED.capabilities,
+                        availability = EXCLUDED.availability,
+                        contact_preference = EXCLUDED.contact_preference,
+                        skills = EXCLUDED.skills,
+                        languages = EXCLUDED.languages,
+                        service_area_label = EXCLUDED.service_area_label,
+                        no_permanent_address =
+                            EXCLUDED.no_permanent_address,
+                        latitude = EXCLUDED.latitude,
+                        longitude = EXCLUDED.longitude,
+                        precision_km = EXCLUDED.precision_km,
+                        searchable_text = EXCLUDED.searchable_text,
+                        record_created_at = EXCLUDED.record_created_at,
+                        record_updated_at = EXCLUDED.record_updated_at,
+                        source_cursor = EXCLUDED.source_cursor,
+                        source_event_id = EXCLUDED.source_event_id,
+                        projected_at = NOW()
+                     WHERE indexer_volunteer_profile_projections.source_cursor
+                        < EXCLUDED.source_cursor`,
+                    [
+                        event.uri,
+                        event.collection,
+                        event.cid ?? null,
+                        event.revision ?? null,
+                        authorDidHash,
+                        payload.displayName,
+                        payload.bio ?? null,
+                        JSON.stringify(payload.capabilities),
+                        payload.availability,
+                        payload.contactPreference,
+                        JSON.stringify(payload.skills),
+                        JSON.stringify(payload.languages),
+                        payload.serviceArea?.areaLabel ?? null,
+                        payload.serviceArea?.noPermanentAddress ?? false,
+                        payload.serviceArea?.approximateGeo?.latitude ?? null,
+                        payload.serviceArea?.approximateGeo?.longitude ?? null,
+                        payload.serviceArea?.approximateGeo?.precisionKm ?? null,
+                        payload.searchableText,
                         payload.createdAt,
                         payload.updatedAt,
                         event.seq,
@@ -450,6 +615,37 @@ export class PostgresProjectionStore {
         return result.rows.map(toDirectoryProjection);
     }
 
+    async getVolunteer(
+        uri: string,
+    ): Promise<VolunteerProfileProjection | null> {
+        const result = await this.pool.query<VolunteerProjectionRow>(
+            `SELECT uri, collection, cid, revision, author_did_hash,
+                    display_name, bio, capabilities, availability,
+                    contact_preference, skills, languages,
+                    service_area_label, no_permanent_address, latitude,
+                    longitude, precision_km, searchable_text,
+                    record_created_at, record_updated_at, source_cursor
+             FROM indexer_volunteer_profile_projections
+             WHERE uri = $1`,
+            [uri],
+        );
+        return result.rows[0] ? toVolunteerProjection(result.rows[0]) : null;
+    }
+
+    async listVolunteers(): Promise<VolunteerProfileProjection[]> {
+        const result = await this.pool.query<VolunteerProjectionRow>(
+            `SELECT uri, collection, cid, revision, author_did_hash,
+                    display_name, bio, capabilities, availability,
+                    contact_preference, skills, languages,
+                    service_area_label, no_permanent_address, latitude,
+                    longitude, precision_km, searchable_text,
+                    record_created_at, record_updated_at, source_cursor
+             FROM indexer_volunteer_profile_projections
+             ORDER BY uri`,
+        );
+        return result.rows.map(toVolunteerProjection);
+    }
+
     async resetForRebuild(): Promise<void> {
         const client = await this.pool.connect();
         try {
@@ -461,7 +657,8 @@ export class PostgresProjectionStore {
                 `TRUNCATE indexer_projection_events,
                           indexer_projection_tombstones,
                           indexer_aid_post_projections,
-                          indexer_directory_resource_projections`,
+                          indexer_directory_resource_projections,
+                          indexer_volunteer_profile_projections`,
             );
             await client.query('COMMIT');
         } catch (error) {

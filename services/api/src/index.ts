@@ -23,6 +23,8 @@ import { createAtAuthRuntime } from './auth/runtime.js';
 import { serializeSessionCookie } from './auth/at-auth-service.js';
 import { AidPostCommandService } from './records/aid-post-command-service.js';
 import { DirectoryResourceCommandService } from './records/directory-resource-command-service.js';
+import { VolunteerProfileCommandService } from './records/volunteer-profile-command-service.js';
+import { PostgresVolunteerPrivateProfileStore } from './db/volunteer-private-profile-store.js';
 import { ZodError } from 'zod';
 import { createLifecycleService } from './lifecycle-service.js';
 import { getCorsHeaders } from './cors.js';
@@ -274,6 +276,21 @@ const createDirectoryResourceCommandService =
             const client =
                 await atAuthRuntime.directoryResourceClient(sessionToken);
             return new DirectoryResourceCommandService(async () => client);
+        }
+    :   undefined;
+const volunteerPrivateProfileStore =
+    postgresPool ?
+        new PostgresVolunteerPrivateProfileStore(postgresPool)
+    :   undefined;
+const createVolunteerProfileCommandService =
+    atAuthRuntime && volunteerPrivateProfileStore ?
+        async (sessionToken: string) => {
+            const client =
+                await atAuthRuntime.volunteerProfileClient(sessionToken);
+            return new VolunteerProfileCommandService(
+                async () => client,
+                volunteerPrivateProfileStore,
+            );
         }
     :   undefined;
 
@@ -1102,6 +1119,114 @@ const handleDirectoryResourceCommandRoute = (
     return true;
 };
 
+const handleVolunteerProfileCommandRoute = (
+    request: IncomingMessage,
+    response: ServerResponse,
+    requestUrl: URL,
+): boolean => {
+    if (!createVolunteerProfileCommandService) return false;
+    if (requestUrl.pathname !== '/at/volunteer-profile') return false;
+
+    void (async () => {
+        try {
+            const authenticated = await authenticateApiRequest!(request);
+            const sessionToken = authenticated.sessionToken;
+            const ownerDid = authenticated.principal.did;
+            const service =
+                await createVolunteerProfileCommandService(sessionToken);
+
+            if (request.method === 'GET') {
+                const uri = requestUrl.searchParams.get('uri');
+                if (!uri) {
+                    writeJson(response, 400, {
+                        error: {
+                            code: 'INVALID_COMMAND',
+                            message: 'uri is required.',
+                        },
+                    });
+                    return;
+                }
+                writeJson(
+                    response,
+                    200,
+                    await service.get(sessionToken, ownerDid, uri),
+                );
+                return;
+            }
+
+            if (request.method === 'POST') {
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    ownerDid,
+                    body,
+                    async (commandBody, idempotencyKey) => ({
+                        statusCode: 201,
+                        body: await service.create(
+                            sessionToken,
+                            ownerDid,
+                            commandBody,
+                            idempotencyKey,
+                        ),
+                    }),
+                    null,
+                );
+                writeJson(response, result.statusCode, result.body);
+                return;
+            }
+
+            if (request.method === 'PUT') {
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    ownerDid,
+                    body,
+                    async commandBody => ({
+                        statusCode: 200,
+                        body: await service.update(
+                            sessionToken,
+                            ownerDid,
+                            commandBody,
+                        ),
+                    }),
+                    null,
+                );
+                writeJson(response, result.statusCode, result.body);
+                return;
+            }
+
+            if (request.method === 'DELETE') {
+                const body = await readJsonBody(request);
+                const result = await executeIdempotentMutation(
+                    request,
+                    ownerDid,
+                    body,
+                    async commandBody => {
+                        await service.delete(
+                            sessionToken,
+                            ownerDid,
+                            commandBody,
+                        );
+                        return { statusCode: 204, body: null };
+                    },
+                    null,
+                );
+                response.writeHead(result.statusCode);
+                response.end();
+                return;
+            }
+
+            response.writeHead(405, {
+                allow: 'GET, POST, PUT, DELETE',
+            });
+            response.end();
+        } catch (error) {
+            writeDirectoryResourceCommandError(response, error);
+        }
+    })();
+    return true;
+};
+
 const moderationApiRoutes = new Map<string, 'GET' | 'POST'>([
     ['/moderation/queue', 'GET'],
     ['/moderation/policy/apply', 'POST'],
@@ -1195,9 +1320,11 @@ const contractRoutes = [
     '/at/aid-posts/close',
     '/at/aid-posts/status/reconcile',
     '/at/directory-resources',
+    '/at/volunteer-profile',
     '/query/map',
     '/query/feed',
     '/query/directory',
+    '/query/volunteers',
     '/aid/post/transition',
     '/aid/post/lifecycle',
     '/aid/post/assign',
@@ -1274,6 +1401,8 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
         queryService.queryFeed(requestUrl.searchParams),
     '/query/directory': requestUrl =>
         queryService.queryDirectory(requestUrl.searchParams),
+    '/query/volunteers': requestUrl =>
+        queryService.queryVolunteers(requestUrl.searchParams),
 };
 
 const readPaths = new Set([
@@ -1284,6 +1413,7 @@ const readPaths = new Set([
     '/query/map',
     '/query/feed',
     '/query/directory',
+    '/query/volunteers',
     '/account/export',
 ]);
 
@@ -1378,6 +1508,16 @@ export const createApiServer = () => {
         }
 
         if (handleAidPostCommandRoute(request, response, requestUrl)) {
+            return;
+        }
+
+        if (
+            handleVolunteerProfileCommandRoute(
+                request,
+                response,
+                requestUrl,
+            )
+        ) {
             return;
         }
 

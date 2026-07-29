@@ -5,11 +5,14 @@ import { describe, expect, it } from 'vitest';
 import {
     LEXICON_SCHEMA_REVISIONS,
     LEXICON_SET_VERSION,
+    decodeVolunteerProfileFromAt,
+    encodeVolunteerProfileForAt,
     isSemver,
     lexiconDocs,
     recordNsid,
     safeValidateRecordPayload,
     type RecordNsid,
+    type VolunteerProfileRecord,
 } from './index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -93,5 +96,41 @@ describe('P2.1 lexicon schemas', () => {
             );
             expect(parsed.success).toBe(false);
         }
+    });
+
+    it('round-trips only approximate volunteer service areas through the AT wire shape', () => {
+        const record = validFixtures[
+            recordNsid.volunteerProfile
+        ] as VolunteerProfileRecord;
+        const encoded = encodeVolunteerProfileForAt(record);
+        expect(encoded.serviceArea).toEqual({
+            areaLabel: 'Near North Side',
+            noPermanentAddress: false,
+            latitudeE6: 41_900_000,
+            longitudeE6: -87_640_000,
+            precisionMeters: 2_000,
+        });
+        expect(decodeVolunteerProfileFromAt(encoded)).toEqual(record);
+    });
+
+    it('rejects exact and undeclared private volunteer profile fields', () => {
+        const record = validFixtures[
+            recordNsid.volunteerProfile
+        ] as VolunteerProfileRecord;
+        expect(
+            safeValidateRecordPayload(recordNsid.volunteerProfile, {
+                ...record,
+                privatePhone: 'do-not-publish',
+            }).success,
+        ).toBe(false);
+        expect(
+            safeValidateRecordPayload(recordNsid.volunteerProfile, {
+                ...record,
+                serviceArea: {
+                    ...record.serviceArea,
+                    precisionKm: 0.25,
+                },
+            }).success,
+        ).toBe(false);
     });
 });

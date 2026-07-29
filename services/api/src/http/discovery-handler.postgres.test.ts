@@ -61,6 +61,7 @@ describePostgres('session-aware durable discovery HTTP boundary', () => {
                       indexer_projection_tombstones,
                       indexer_aid_post_projections,
                       indexer_directory_resource_projections,
+                      indexer_volunteer_profile_projections,
                       indexer_dead_letters
              RESTART IDENTITY CASCADE`,
         );
@@ -126,6 +127,36 @@ describePostgres('session-aware durable discovery HTTP boundary', () => {
                 now,
             ],
         );
+        await pool.query(
+            `INSERT INTO indexer_volunteer_profile_projections (
+                uri, collection, cid, revision, author_did_hash,
+                display_name, bio, capabilities, availability,
+                contact_preference, skills, languages, service_area_label,
+                no_permanent_address, latitude, longitude, precision_km,
+                searchable_text, record_created_at, record_updated_at,
+                source_cursor, source_event_id, projected_at
+             ) VALUES
+                ($1, $3, 'cid-volunteer-blocked', 'rev-volunteer-blocked', $4,
+                 'Blocked Volunteer', 'Private to the viewer block boundary',
+                 '["food-delivery"]', 'within-24h', 'chat-only',
+                 '["meal delivery"]', '["en"]', 'North side', FALSE,
+                 41.91, -87.68, 2, 'blocked volunteer meal delivery',
+                 $6, $6, 4, 'volunteer-blocked-event', $6),
+                ($2, $3, 'cid-volunteer-visible', 'rev-volunteer-visible', $5,
+                 'Visible Volunteer', 'Public volunteer profile',
+                 '["translation"]', 'scheduled', 'chat-only',
+                 '["interpretation"]', '["en","es"]', 'West side', TRUE,
+                 41.88, -87.72, 3, 'visible volunteer interpretation',
+                 $6, $6, 5, 'volunteer-visible-event', $6)`,
+            [
+                `at://${blockedDid}/${recordNsid.volunteerProfile}/blocked`,
+                `at://${visibleDid}/${recordNsid.volunteerProfile}/visible`,
+                recordNsid.volunteerProfile,
+                hash(blockedDid),
+                hash(visibleDid),
+                now,
+            ],
+        );
     });
 
     afterAll(async () => pool.end());
@@ -168,6 +199,44 @@ describePostgres('session-aware durable discovery HTTP boundary', () => {
         await expect(response.json()).resolves.toMatchObject({
             error: { code: 'SESSION_EXPIRED' },
         });
+    });
+
+    it('serves public volunteer profiles and applies bilateral blocks from the authenticated session only', async () => {
+        const running = await startServer(pool);
+        const anonymous = await fetch(
+            `${running.origin}/query/volunteers?page=1&pageSize=20`,
+        );
+        const authenticated = await fetch(
+            `${running.origin}/query/volunteers?page=1&pageSize=20&viewerDid=${encodeURIComponent(visibleDid)}`,
+            { headers: { cookie: 'patchwork_session=viewer-session' } },
+        );
+        await stopServer(running.server);
+
+        expect(anonymous.status).toBe(200);
+        const anonymousBody = (await anonymous.json()) as {
+            total: number;
+            results: Array<Record<string, unknown>>;
+        };
+        expect(anonymousBody.total).toBe(2);
+        expect(JSON.stringify(anonymousBody)).not.toContain('contactEmail');
+        expect(JSON.stringify(anonymousBody)).not.toContain(
+            'matchingPreferences',
+        );
+
+        expect(authenticated.status).toBe(200);
+        const authenticatedBody = (await authenticated.json()) as {
+            total: number;
+            results: Array<{ authorDid: string }>;
+        };
+        expect(authenticatedBody).toEqual(
+            expect.objectContaining({
+                total: 1,
+                results: [
+                    expect.objectContaining({ authorDid: visibleDid }),
+                ],
+            }),
+        );
+        expect(JSON.stringify(authenticatedBody)).not.toContain(blockedDid);
     });
 
     it('serves durable directory resources through the public discovery boundary', async () => {

@@ -11,7 +11,7 @@ export const LEXICON_VERSION_POLICY = {
 
 export const LEXICON_SCHEMA_REVISIONS = {
     'app.patchwork.aid.post': '1.0.0',
-    'app.patchwork.volunteer.profile': '1.1.0',
+    'app.patchwork.volunteer.profile': '1.2.0',
     'app.patchwork.conversation.meta': '1.0.0',
     'app.patchwork.moderation.report': '1.0.0',
     'app.patchwork.directory.resource': '1.1.0',

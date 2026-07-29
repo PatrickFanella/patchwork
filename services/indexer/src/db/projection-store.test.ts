@@ -77,6 +77,43 @@ const createDirectoryEvent = (
     ...overrides,
 });
 
+const createVolunteerEvent = (
+    overrides: Partial<NormalizedFirehoseEvent> = {},
+): NormalizedFirehoseEvent => ({
+    eventId: '300:volunteer-profile:create',
+    seq: 300,
+    action: 'create',
+    uri: `at://did:plc:volunteer/${recordNsid.volunteerProfile}/main`,
+    collection: recordNsid.volunteerProfile,
+    authorDid: 'did:plc:volunteer',
+    receivedAt: '2026-07-11T12:00:00.000Z',
+    payload: {
+        kind: 'volunteer-profile',
+        displayName: 'Alex Rivera',
+        bio: 'Neighborhood delivery volunteer.',
+        capabilities: ['food-delivery'],
+        availability: 'within-24h',
+        contactPreference: 'chat-only',
+        skills: ['meal delivery'],
+        languages: ['en', 'es'],
+        serviceArea: {
+            areaLabel: 'Near North Side',
+            noPermanentAddress: true,
+            approximateGeo: {
+                latitude: 41.9,
+                longitude: -87.64,
+                precisionKm: 2,
+            },
+        },
+        createdAt: '2026-07-11T11:00:00.000Z',
+        updatedAt: '2026-07-11T11:00:00.000Z',
+        searchableText:
+            'alex rivera neighborhood delivery volunteer food delivery',
+        trustScore: 0.5,
+    },
+    ...overrides,
+});
+
 describePostgres('PostgresProjectionStore', () => {
     const pool = new Pool({ connectionString: databaseUrl });
 
@@ -90,6 +127,7 @@ describePostgres('PostgresProjectionStore', () => {
                       indexer_projection_tombstones,
                       indexer_aid_post_projections,
                       indexer_directory_resource_projections,
+                      indexer_volunteer_profile_projections,
                       indexer_dead_letters,
                       account_deactivations`,
         );
@@ -182,6 +220,39 @@ describePostgres('PostgresProjectionStore', () => {
         expect(await store.getDirectory(created.uri)).toBeNull();
     });
 
+    it('persists public volunteer profiles without private matching or verification state', async () => {
+        const store = new PostgresProjectionStore(pool);
+        const created = createVolunteerEvent();
+        await store.apply(created);
+
+        const projection = await store.getVolunteer(created.uri);
+        expect(projection).toMatchObject({
+            displayName: 'Alex Rivera',
+            capabilities: ['food-delivery'],
+            languages: ['en', 'es'],
+            serviceAreaLabel: 'Near North Side',
+            noPermanentAddress: true,
+            precisionKm: 2,
+            sourceCursor: 300,
+        });
+        expect(projection?.authorDidHash).toMatch(/^[a-f0-9]{64}$/);
+        expect(projection).not.toHaveProperty('contactEmail');
+        expect(projection).not.toHaveProperty('matchingPreferences');
+        expect(projection).not.toHaveProperty(
+            'verificationCheckpoints',
+        );
+
+        await store.apply(
+            createVolunteerEvent({
+                eventId: '310:volunteer-profile:delete',
+                seq: 310,
+                action: 'delete',
+                payload: undefined,
+            }),
+        );
+        expect(await store.getVolunteer(created.uri)).toBeNull();
+    });
+
     it('suppresses future projections and rebuild replay for a deactivated account', async () => {
         const store = new PostgresProjectionStore(pool);
         const event = createEvent();
@@ -203,8 +274,14 @@ describePostgres('PostgresProjectionStore', () => {
             authorDid: 'did:plc:alice',
         });
         await store.apply(directoryEvent);
+        const volunteerEvent = createVolunteerEvent({
+            uri: `at://did:plc:alice/${recordNsid.volunteerProfile}/main`,
+            authorDid: 'did:plc:alice',
+        });
+        await store.apply(volunteerEvent);
         expect(await store.get(event.uri)).toBeNull();
         expect(await store.getDirectory(directoryEvent.uri)).toBeNull();
+        expect(await store.getVolunteer(volunteerEvent.uri)).toBeNull();
 
         await store.resetForRebuild();
         await store.apply({ ...event, eventId: '101:aid-post:rebuild', seq: 101 });
@@ -213,8 +290,14 @@ describePostgres('PostgresProjectionStore', () => {
             eventId: '201:directory-resource:rebuild',
             seq: 201,
         });
+        await store.apply({
+            ...volunteerEvent,
+            eventId: '301:volunteer-profile:rebuild',
+            seq: 301,
+        });
         expect(await store.get(event.uri)).toBeNull();
         expect(await store.getDirectory(directoryEvent.uri)).toBeNull();
+        expect(await store.getVolunteer(volunteerEvent.uri)).toBeNull();
     });
 
     it('applies a newer update once and ignores stale revisions', async () => {

@@ -16,6 +16,10 @@ interface DiscoveryQueryService {
     queryDirectory(
         params: URLSearchParams,
     ): ApiRouteResult | Promise<ApiRouteResult>;
+    queryVolunteers(
+        params: URLSearchParams,
+        viewerDid?: string,
+    ): ApiRouteResult | Promise<ApiRouteResult>;
 }
 
 export interface DiscoveryHandlerDependencies {
@@ -29,6 +33,7 @@ const discoveryPaths = new Set([
     '/query/map',
     '/query/feed',
     '/query/directory',
+    '/query/volunteers',
 ]);
 
 export const createDiscoveryHandler = (
@@ -57,6 +62,11 @@ export const createDiscoveryHandler = (
                         )
                     : requestUrl.pathname === '/query/feed' ?
                         await dependencies.service.queryFeed(
+                            requestUrl.searchParams,
+                            authenticated?.principal.did,
+                        )
+                    : requestUrl.pathname === '/query/volunteers' ?
+                        await dependencies.service.queryVolunteers(
                             requestUrl.searchParams,
                             authenticated?.principal.did,
                         )

@@ -13,13 +13,20 @@ describePostgres('PostgresProjectionQueryService', () => {
         const schema = await pool.query<{
             aid_table: string | null;
             directory_table: string | null;
+            volunteer_table: string | null;
         }>(
             `SELECT
                 to_regclass('indexer_aid_post_projections')::TEXT AS aid_table,
                 to_regclass('indexer_directory_resource_projections')::TEXT
-                    AS directory_table`,
+                    AS directory_table,
+                to_regclass('indexer_volunteer_profile_projections')::TEXT
+                    AS volunteer_table`,
         );
-        if (!schema.rows[0]?.aid_table || !schema.rows[0]?.directory_table) {
+        if (
+            !schema.rows[0]?.aid_table ||
+            !schema.rows[0]?.directory_table ||
+            !schema.rows[0]?.volunteer_table
+        ) {
             throw new Error('Indexer projection migrations are required.');
         }
     });
@@ -30,6 +37,7 @@ describePostgres('PostgresProjectionQueryService', () => {
                       indexer_projection_tombstones,
                       indexer_aid_post_projections,
                       indexer_directory_resource_projections,
+                      indexer_volunteer_profile_projections,
                       indexer_dead_letters`,
         );
         const now = new Date();
@@ -99,6 +107,29 @@ describePostgres('PostgresProjectionQueryService', () => {
                 now,
                 `at://did:plc:legal/${recordNsid.directoryResource}/b`,
                 'e'.repeat(64),
+            ],
+        );
+        await pool.query(
+            `INSERT INTO indexer_volunteer_profile_projections (
+                uri, collection, cid, revision, author_did_hash,
+                display_name, bio, capabilities, availability,
+                contact_preference, skills, languages, service_area_label,
+                no_permanent_address, latitude, longitude, precision_km,
+                searchable_text, record_created_at, record_updated_at,
+                source_cursor, source_event_id, projected_at
+             ) VALUES
+                ($1, $2, 'volunteer-cid-a', 'volunteer-rev-a', $3,
+                 'Alex Rivera', 'Neighborhood delivery volunteer',
+                 '["food-delivery","translation"]', 'within-24h',
+                 'chat-only', '["meal delivery"]', '["en","es"]',
+                 'Near North Side', TRUE, 41.9, -87.64, 2,
+                 'alex rivera neighborhood delivery volunteer food delivery',
+                 $4, $4, 300, 'volunteer-event-a', $4)`,
+            [
+                `at://did:plc:alex/${recordNsid.volunteerProfile}/main`,
+                recordNsid.volunteerProfile,
+                'f'.repeat(64),
+                now,
             ],
         );
     });
@@ -273,5 +304,41 @@ describePostgres('PostgresProjectionQueryService', () => {
             ).results.find(row => row.name === 'Regional Legal Line')
                 ?.approximateGeo,
         ).toBeUndefined();
+    });
+
+    it('queries only public volunteer projection fields with deterministic filters', async () => {
+        const service = new PostgresProjectionQueryService(pool);
+        const result = await service.queryVolunteers(
+            new URLSearchParams({
+                capability: 'translation',
+                language: 'es',
+                availability: 'within-24h',
+                searchText: 'delivery',
+            }),
+        );
+
+        expect(result).toMatchObject({
+            statusCode: 200,
+            body: {
+                total: 1,
+                results: [
+                    {
+                        authorDid: 'did:plc:alex',
+                        displayName: 'Alex Rivera',
+                        capabilities: ['food-delivery', 'translation'],
+                        languages: ['en', 'es'],
+                        serviceArea: {
+                            areaLabel: 'Near North Side',
+                            noPermanentAddress: true,
+                            approximateGeo: { precisionKm: 2 },
+                        },
+                    },
+                ],
+            },
+        });
+        expect(JSON.stringify(result.body)).not.toContain('contactEmail');
+        expect(JSON.stringify(result.body)).not.toContain(
+            'matchingPreferences',
+        );
     });
 });
