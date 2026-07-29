@@ -8,6 +8,21 @@ the change.
 
 ## Version History
 
+### v1.1.0-draft -- 2026-07-28
+
+**Buyer-ready product-alignment draft; unapproved and not in force.**
+
+- Raised eligibility from 16+ to 18+ and aligned the durable consent
+  assertion.
+- Replaced production-chat claims with the truthful non-mutating placeholder.
+- Documented synthetic and attributed public-source records.
+- Documented approximate public location, ephemeral peer-to-peer exact
+  location, and separately approved public-resource addresses.
+- Documented private attachment processing and in-app, email, and browser-push
+  notification channels.
+- Replaced guaranteed moderation timing with best-effort targets and retained
+  the non-emergency boundary.
+
 ### v1.0.0 -- [DATE]
 
 **Initial publication of all policy documents.**
@@ -21,7 +36,8 @@ the change.
 
 Key decisions for v1.0.0:
 
-- Minimum age set to 16.
+- Minimum age was initially set to 16; the superseding v1.1.0 draft raises it
+  to 18.
 - Moderation log retention set to 7 days (aligned with
   `MODERATION_LOG_RETENTION_DAYS` in `packages/shared/src/privacy.ts`).
 - Geo-privacy minimum precision enforced at 1 km (aligned with

@@ -30,7 +30,7 @@ must not use the platform.
 
 ## 3. Eligibility
 
-You must be at least 16 years of age to use Patchwork. By using the platform
+You must be at least 18 years of age to use Patchwork. By using the platform
 you represent that you meet this requirement.
 
 ## 4. User Accounts
@@ -78,19 +78,31 @@ For a full list of prohibited activities, see the
 ### 6.1 Your Content
 
 You retain ownership of all content you create on Patchwork, including aid
-requests, offers, messages, and profile information. By posting content you
+requests, offers, outcome feedback, attachments, and profile information. By posting content you
 grant Patchwork a limited, non-exclusive, royalty-free license to display,
 distribute, and store your content solely for the purpose of operating the
 platform.
 
-### 6.2 AT Protocol Federation
+Patchwork does not currently provide production chat or direct messaging.
+Activity inbox items describe workflow events; they are not messages.
 
-Content posted on Patchwork is published via the AT Protocol and may be
-federated to other services and indexers in the AT Protocol network. You
-acknowledge that federated content may be cached or indexed by third parties
-outside Patchwork's control.
+### 6.2 Synthetic and public-source showcase content
 
-### 6.3 Removal
+Records labeled **synthetic** are fictional product-demonstration data, not
+real people, needs, offers, or service availability. Records labeled
+**public-source reference** come from an attributed public source and do not
+imply that the named organization participates in or endorses Patchwork.
+Always confirm real service details with the organization.
+
+### 6.3 AT Protocol Federation
+
+Public aid requests, volunteer profiles, and directory resources are published
+via the AT Protocol and may be federated to other services and indexers.
+Private offers, connections, verification evidence, and attachments are not
+published as AT records. You acknowledge that federated public content may be
+cached or indexed by third parties outside Patchwork's control.
+
+### 6.4 Removal
 
 You may delete your content at any time. Patchwork will remove deleted content
 from its own systems promptly. However, federated copies on other AT Protocol
@@ -107,6 +119,7 @@ Patchwork provides a coordination platform only. We do not:
   published verification tiers (see
   [verification appeals](../operations/verification-appeals.md)).
 - Guarantee that any aid request will be fulfilled.
+- Provide emergency dispatch or monitor the service as an emergency channel.
 - Provide professional advice (medical, legal, financial, or otherwise).
 
 ### 7.2 Use at Your Own Risk

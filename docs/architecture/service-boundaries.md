@@ -1,88 +1,102 @@
 # Patchwork service boundaries
 
-This document defines the target boundaries for the continuation alpha. ADR 0003 governs data placement; the current-state matrix records how far the implementation is from these boundaries.
+Updated: 2026-07-28
+
+ADR 0003 governs data placement. These are implemented buyer-ready boundaries,
+not evidence of public-launch approval.
 
 ## `apps/web`
 
-- Initiates AT OAuth through `services/api`; it does not handle refresh tokens.
-- Sends authenticated aid-post and directory-resource commands and renders
-  map/feed/directory queries.
-- Collects public approximate location separately from optional private fulfillment location.
-- Never talks directly to the indexer, moderation worker, database, or Jetstream.
-- Does not fall back to fixtures in staging or production.
+- Uses the API for OAuth, session-derived commands, discovery, private
+  workflows, account controls, and moderator controls.
+- Never receives OAuth refresh material and never accepts a DID/role/origin as
+  browser authority.
+- Holds an exact personal coordinate only in bounded memory during a mutually
+  authorized encrypted peer exchange.
+- Shows loading, empty, error/retry, stale retained-data, offline, and
+  maintenance states. Offline mutations are not queued.
+- Has no fixture fallback in a production build. Production Chat has no
+  history, initiation form, or mutation.
 
 ## `services/api`
 
-- Terminates the Patchwork HTTP boundary and derives principals from real AT sessions.
-- Owns encrypted session persistence and authenticated command authorization.
-- Writes aid-post and directory-resource records to the user’s PDS through
-  `packages/at-client`.
-- Reads rebuildable discovery projections but does not edit them as record authority.
-- Owns private lifecycle, block, report, exact-location, idempotency, and audit repositories.
-- Sends durable moderation work through a PostgreSQL-backed queue.
-- Exposes no token, exact-location, report-evidence, or operator-note data in public responses.
+- Terminates HTTP authentication, authorization, CSRF, idempotency, input
+  limits, consent, pre-publication safety, and maintenance boundaries.
+- Writes public aid, directory, and volunteer records through the official AT
+  client to the user's PDS; it does not treat PostgreSQL as public-record
+  authority.
+- Owns private lifecycle, organizations, verification/appeals,
+  exact-public-address approvals, offers/connections/inbox/outcomes,
+  attachment metadata/jobs, notification outbox, maintenance, and account
+  privacy state.
+- Authorizes coordinate-free, short-lived exact-location signaling; it has no
+  coordinate field or persisted fallback.
+- Exposes only safe moderator previews and short-lived clean-object access.
 
 ## `services/indexer`
 
-- Consumes filtered `app.patchwork.aid.post` and
-  `app.patchwork.directory.resource` operations from Jetstream through a
-  provider-neutral event-source interface.
-- Reconciles/backfills repository state rather than treating a stream cursor as complete authority.
-- Validates lexicons and geoprivacy policy before writing projections.
-- Transactionally stores normalized projections, delete state, dead letters, and cursor progress.
-- Does not own sessions, private request workflow, moderation decisions, or exact location.
+- Consumes the three supported public record families from Jetstream through a
+  provider-neutral event-source adapter.
+- Validates lexicons/geoprivacy and transactionally stores projections,
+  tombstones, dead letters, reconciliation, freshness, and cursor progress.
+- Defaults live projections to `visitor-created`; only the privileged
+  deterministic showcase seed can assign `synthetic`.
+- Does not own sessions, private workflows, moderation decisions, attachment
+  bytes, or exact personal location.
 
 ## `services/moderation-worker`
 
-- Claims durable moderation jobs with crash-safe leases and idempotent decisions.
-- Owns private case processing and append-only moderation audit entries.
-- Changes Patchwork visibility and safety state, not user repository records.
-- Emits aggregate/redacted metrics and never exposes raw evidence through health endpoints.
+- Claims durable work with leases, idempotent decisions, and bounded retries.
+- Runs replaceable fail-closed submission checks and stores hashes, stable
+  reason codes, and evidence-safe previews rather than raw submissions.
+- Owns private queue/review/audit/appeal and urgent-notification event state.
+- Changes Patchwork visibility, not user repository records.
 
-## `packages/at-client`
+## `packages/at-client`, `packages/at-lexicons`, and `packages/shared`
 
-- Wraps the official AT OAuth and repository clients.
-- Resolves session/PDS operations and performs aid-post and directory-resource
-  create, get, update, and delete.
-- Returns Patchwork-owned result and error types so AT SDK types do not leak across the codebase.
-- Contains no product workflow, projection, moderation, or UI logic.
+- `at-client` wraps official OAuth/repository clients and returns
+  Patchwork-owned result/error types.
+- `at-lexicons` holds strict canonical public record definitions and the
+  integer microdegree/metre wire codec.
+- `shared` owns transport-neutral contracts, validation, privacy/redaction,
+  authorization capability names, ranking, and configuration schemas.
+- None of these packages owns database connections, browser state, or product
+  operator authority.
 
-## `packages/at-lexicons`
-
-- Stores canonical public record definitions and validators.
-- Enforces the alpha public-location constraints and the integer
-  microdegree/metre wire codec for aid-post and directory-resource records.
-- Retains deferred schemas for compatibility/design history without enabling runtime writes.
-
-## `packages/shared`
-
-- Owns transport-neutral domain contracts, validation helpers, privacy/redaction rules, and configuration schemas.
-- Contains no database clients, HTTP server state, official AT clients, or browser framework code.
-- Keeps public and private data contracts structurally distinct.
-
-## PostgreSQL ownership
-
-Logical schemas or clearly separated table groups enforce ownership:
+## Storage ownership
 
 | Data | Writer | Reader |
 | --- | --- | --- |
-| OAuth sessions | API | API only |
-| Command/idempotency audit | API | API and authorized operators |
-| Public discovery projection | Indexer | API |
-| Stream cursor and dead letters | Indexer | Indexer and authorized operators |
-| Private lifecycle, blocks, reports, exact location | API | API and narrowly authorized moderation paths |
-| Moderation queue and case audit | API enqueue; moderation worker decisions | Moderation worker and authorized operator API |
+| OAuth/browser sessions, consent, preferences | API | API only |
+| Public AT records | User PDS through API commands | Federation/indexer and AT clients |
+| Public projections, cursor, tombstones | Indexer (showcase seed only for labeled demo records) | API |
+| Organizations, verification, coordination, inbox, outcomes | API | API and narrowly authorized moderator paths |
+| Exact personal coordinate | Peer browser only | The other authorized peer browser |
+| Exact public-resource approval | API/moderator workflow | API discovery query |
+| Attachment bytes | API/worker through private object store | API-issued clean-object access only |
+| Attachment metadata/jobs | API/worker | Owner and authorized moderator/API workers |
+| Notification intents/attempts | API triggers and notification worker | Recipient/API and authorized operators |
+| Moderation queue/reviews/audit | API enqueue and moderation worker | Moderation worker and capability-gated console |
+| Showcase provenance | Privileged deterministic seed; live origin defaults are server-set | Discovery, moderation, export, refresh/deletion logic |
 
-Services use separate database roles in staging and production. A service must not gain write access to another service’s tables merely because the alpha uses one PostgreSQL cluster.
+One PostgreSQL cluster may host these table groups, but production roles must
+not gain cross-service write access merely because storage is co-located.
 
-## Cross-service contracts
+## Cross-service failure rules
 
-- API-to-PDS writes are synchronous commands with idempotency and explicit partial-failure results.
-- Repository-to-indexer delivery is asynchronous and eventually consistent.
-- API-to-moderation delivery is a durable database queue until a separate broker is justified.
-- Indexer-to-API discovery integration is PostgreSQL read-model access with projection-freshness metadata.
-- No service infers successful downstream work from an in-memory event or an HTTP `200` health response.
+- Public PDS writes and private workflow changes expose explicit partial-sync
+  state; a local success never invents downstream success.
+- Repository delivery is asynchronous, replayable, and reconciled against
+  repository authority.
+- Moderation and notification work is durable before processing.
+- Required safety, storage, signaling, or provider checks fail closed.
+- Declared privacy, authorization, abuse, integrity, backlog, monitoring, or
+  backup failures put new submissions and exact exchange into read-only mode.
+- Fixture construction is permitted only in explicit local/test mode and is
+  rejected by production builds.
 
-## Deferred services and topology
+## Deferred topology
 
-The existing mobile, multi-region, connector, notification, scheduling, group, matching, reputation, organization, and richer chat models do not define deployed alpha services. Reintroducing one requires an evidence-backed post-alpha slice with explicit persistence, authorization, privacy, and operational ownership.
+There is no production chat service, offline-sync service, native client,
+multi-region router, external connector worker, scheduling/group service, or
+reputation service in the buyer-ready program.

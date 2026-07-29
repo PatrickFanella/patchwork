@@ -1,38 +1,83 @@
 # Patchwork domain map
 
-The alpha data-placement authority is ADR 0003: `docs/architecture/adr/0003-at-alpha-data-boundaries.md`. Current implementation maturity is tracked separately in `docs/architecture/current-state-matrix.md`.
+Updated: 2026-07-28
 
-## Alpha bounded contexts
+ADR 0003 is the data-placement authority. The
+[current-state matrix](./current-state-matrix.md) records demonstrated
+maturity; this map does not imply operational launch approval.
 
-| Domain | Authority | Primary runtime owner | Public interface | Alpha notes |
-| --- | --- | --- | --- | --- |
-| Identity | User account/PDS for DID identity; Patchwork PostgreSQL for encrypted session material | `services/api` | OAuth login, callback, current session, logout | Browser never receives refresh material; fixture auth is test-only. |
-| Aid-post record | User AT repository | `services/api` command boundary | Authenticated create/update/close/delete | Only `app.patchwork.aid.post` is written on-protocol in alpha. |
-| Ingestion | Repository authority observed through Jetstream plus reconciliation | `services/indexer` | Internal event-source interface and health/metrics | Jetstream is a live delivery source, not historical authority. |
-| Discovery projection | Rebuildable Patchwork PostgreSQL read model | `services/indexer` writes; `services/api` reads | Map and feed queries | Contains public coarse location only; projection can be dropped and rebuilt. |
-| Private request workflow | Patchwork PostgreSQL | `services/api` | Authenticated lifecycle commands and user views | Triage, assignment, audit, idempotency, and synchronization state are private. |
-| Geoprivacy | Public record policy plus encrypted private store when exact location is essential | `services/api`, `services/indexer`, `packages/shared` | Separate public and private location inputs | Public minimum precision is 1 km. Exact location never enters AT or public projection. |
-| Blocks and reports | Patchwork PostgreSQL | `services/api` | Authenticated block/report commands | Never published through the moderation-report lexicon in alpha. |
-| Moderation | Patchwork PostgreSQL queue, case, and audit state | `services/moderation-worker` | Private operator APIs and user-safe outcomes | Moderation controls Patchwork visibility; it does not silently rewrite user repositories. |
-| Observability | Metrics backend and redacted operational logs | All runtime services | Health, readiness, metrics, alerts | Aggregates and redacted references only. |
+## Buyer-ready bounded contexts
+
+| Domain | Authority | Runtime owner | Public/product boundary |
+| --- | --- | --- | --- |
+| Identity and consent | User PDS for DID identity; PostgreSQL for encrypted OAuth/session state, versioned consent, and preferences | API | Managed account creation and existing-account OAuth converge on cookie-backed sessions; browser identity and privilege fields are ignored |
+| Public aid, directory, and volunteer records | User AT repository | API command boundary and AT client | Authenticated owner CRUD; only approximate personal/service-area location is accepted |
+| Ingestion and discovery | Repository authority observed through Jetstream; rebuildable PostgreSQL projections | Indexer writes, API reads | Anonymous map/feed/directory/volunteer queries with projection freshness and authenticated block filtering |
+| Organizations and verification | PostgreSQL | API | Membership/stewardship, private evidence metadata, annual decisions/appeals, and separate exact-public-address approval |
+| Private request coordination | PostgreSQL | API | Lifecycle, advisory matching, offers, connections, activity inbox, and outcomes; participant identity stays private until authorized |
+| Exact personal location | Browser memory and an authenticated encrypted WebRTC peer channel | Web peers; API authorizes short-lived signaling | Fresh mutual consent on an active connection; coordinates never enter signaling, PostgreSQL, AT records, exports, notifications, logs, or backups |
+| Attachments | Private S3-compatible object store for bytes; PostgreSQL for metadata/jobs | API and attachment workers | Authenticated purpose/ownership, type detection, 10 MB limit, malware scanning, transforms, clean-only short-lived access, and deletion reconciliation |
+| Notifications | PostgreSQL durable outbox and delivery attempts | API/notification worker | In-app center plus opted-in email and browser push; private payload fields are forbidden |
+| Moderation and maintenance | PostgreSQL queue, review, urgent-event, audit, appeal, and maintenance state | Moderation worker and API | Pre-publication fail-closed gate, capability-gated console, read-only shutdown, and audited resume |
+| Showcase provenance | Server-controlled PostgreSQL metadata plus projection origin columns | Showcase seed and normal runtime defaults | `synthetic`, `sourced-public`, and `visitor-created` remain distinct; sourced organizations carry provenance and non-participation copy |
+| Observability | Metrics backend, redacted logs, and bounded operational records | All services | Health/readiness/status/metrics; no credential, exact-person-location, private evidence, or raw moderation content |
 
 ## Data flow
 
-1. The user authenticates through AT OAuth; encrypted session material is stored privately.
-2. The API validates an aid-post command, separates private location input, quantizes the public location, and writes the public record to the user’s PDS.
-3. Jetstream delivers the repository operation to the indexer.
-4. The indexer validates the record and transactionally updates the PostgreSQL projection and cursor.
-5. The API serves map/feed results from the projection and private workflow views from operational tables.
-6. Delete events remove the public projection and trigger deletion of fulfillment secrets while retaining only policy-approved private audit metadata.
+```mermaid
+flowchart LR
+    B["Browser"] -->|"OAuth, commands, private workflows"| A["API"]
+    A -->|"Public owner records"| P["User PDS"]
+    P -->|"Repository events"| J["Jetstream"]
+    J --> I["Indexer"]
+    I -->|"Approximate public projections"| D[("PostgreSQL")]
+    A --> D
+    A -->|"Private bytes"| O[("Object store")]
+    A -->|"Review request"| M["Moderation worker"]
+    M --> D
+    A -->|"Delivery attempts"| N["Email / Web Push providers"]
+    B <-->|"Encrypted peer data channel; exact coordinate only"| B2["Authorized peer browser"]
+```
+
+1. Authentication establishes a server-restored DID; current consent gates
+   protected actions.
+2. Public owner records pass the pre-publication safety gate and are written
+   to the owner's PDS.
+3. The indexer validates repository events and transactionally updates
+   approximate discovery projections and its cursor.
+4. Private workflow, organization, verification, attachment, notification,
+   moderation, and maintenance state remains in PostgreSQL/object storage.
+5. Exact personal coordinates can move only between freshly authorized peer
+   browsers and disappear when the exchange closes.
+
+## Location contracts
+
+```mermaid
+flowchart TD
+    L["Location input"] --> P1["Personal or volunteer service area"]
+    L --> P2["Connected peers request exact exchange"]
+    L --> P3["Public resource address"]
+    P1 -->|"minimum 1 km precision"| AP["Public approximate AT record"]
+    P2 -->|"fresh mutual consent + active connection"| RTC["Ephemeral encrypted peer channel"]
+    P3 -->|"organization + resource verification, stewardship, moderator approval, non-confidential"| EA["Approved exact public-resource response"]
+```
 
 ## Anti-corruption boundaries
 
-- `packages/at-client` adapts official AT client/OAuth types into Patchwork command and session interfaces.
-- `services/indexer/src/stream` adapts Jetstream or future firehose frames into one normalized event-source interface.
-- `packages/at-lexicons` validates public record payloads before domain code consumes them.
-- `packages/shared` owns transport-neutral domain contracts; it must not import service persistence or AT SDK types.
-- Public record models and private location/report/case models use separate types so sensitive fields cannot be spread into public payloads.
+- `packages/at-client` adapts official OAuth/repository APIs and contains no
+  product authority.
+- `packages/at-lexicons` validates public AT shapes; private evidence,
+  connection state, notification delivery, and moderation casework have no
+  public lexicon.
+- `packages/shared` owns transport-neutral schemas and redaction rules without
+  importing service persistence.
+- The API derives the actor from its session for every authenticated command.
+- Origin, verification, moderation, exact-address approval, and role fields
+  are server-controlled and cannot be asserted by a browser or AT record.
 
-## Deferred contexts
+## Deliberately deferred contexts
 
-Chat, volunteer profiles, directory partners, verification, notifications, scheduling, groups, organizations, reputation, matching, offline sync, native mobile, multi-region tenancy, and external connectors are outside the alpha. Their existing code remains prototype/design material and cannot introduce alpha runtime dependencies.
+Production chat, offline mutation synchronization/PWA, native mobile,
+multi-region tenancy, external partner connectors, groups, scheduling, and
+reputation are outside this roadmap. The production Chat route is a truthful
+non-mutating placeholder.

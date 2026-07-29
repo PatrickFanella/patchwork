@@ -1,5 +1,8 @@
 # Acceptable Use Policy
 
+> **Unapproved draft — not in force.** Patchwork remains operationally
+> `NO-GO`; legal and product-owner approval is required before publication.
+
 **Effective date:** [DATE]
 **Last updated:** [DATE]
 
@@ -21,8 +24,8 @@ Patchwork is designed for mutual aid coordination. Permitted uses include:
 - Offering help, resources, or skills to others in your community.
 - Discovering and responding to nearby aid requests.
 - Coordinating volunteer activities and community resource sharing.
-- Communicating with other users about aid coordination through the platform's
-  messaging features.
+- Coordinating through durable offers, connections, activity items, and
+  outcome feedback. Patchwork does not provide production chat.
 - Providing feedback on completed aid interactions.
 - Managing community resource directory listings for organisations.
 
@@ -89,12 +92,12 @@ The following are considered spam and are prohibited:
 
 Patchwork enforces rate limits to ensure fair access and platform stability.
 Users who exceed rate limits may experience temporary restrictions on their
-ability to post, message, or perform certain actions.
+ability to post, offer, or perform certain actions.
 
 ### 5.2 Automated Access
 
 - **Bots and scripts** are not permitted to create accounts, post content, or
-  send messages without prior written authorisation.
+  create offers without prior written authorisation.
 - **API access** for legitimate integrations must comply with published API
   rate limits and usage guidelines.
 - **Scraping** user data, content, or platform resources is prohibited.

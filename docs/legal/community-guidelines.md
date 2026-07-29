@@ -1,5 +1,8 @@
 # Community Guidelines
 
+> **Unapproved draft — not in force.** Patchwork remains operationally
+> `NO-GO`; legal and product-owner approval is required before publication.
+
 **Effective date:** [DATE]
 **Last updated:** [DATE]
 
@@ -141,8 +144,8 @@ If you encounter content or behaviour that violates these guidelines:
 ### 6.2 What Happens After a Report
 
 1. The report enters the moderation queue for triage.
-2. A moderator reviews the report within the target SLA (initial triage within
-   4 hours).
+2. Patchwork aims to review reports within two business days. This is a
+   best-effort target, not a guaranteed service level or emergency response.
 3. The moderator takes action or escalates as appropriate.
 4. You may receive a notification about the outcome, depending on the nature
    of the report.
@@ -169,20 +172,22 @@ restricted, you have the right to appeal the decision.
 
 ### 7.3 Appeal Review
 
-1. A lead moderator or admin reviews the appeal within 3 business days.
+1. A lead moderator or admin reviews the appeal as capacity permits; the
+   current best-effort initial target is three business days.
 2. If additional information is needed, the appeal moves to "under review" and
    you will be notified.
 3. The reviewer either upholds the original decision or reverses it.
-4. Final decision target: 5 business days.
+4. The current best-effort final-decision target is five business days. It is
+   not guaranteed.
 
 ### 7.4 Escalation
 
 If you disagree with the appeal outcome, you may escalate further:
 
 1. **First escalation** -- Request review by a senior Trust & Safety reviewer.
-   Target: 5 business days.
+   Best-effort target: 5 business days.
 2. **Second escalation** -- The case is forwarded to the Platform Governance
-   Board. Target: 15 business days.
+   Board. Best-effort target: 15 business days.
 3. **Final decision** -- The Governance Board's decision is final.
 
 For full details, see

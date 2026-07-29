@@ -38,16 +38,28 @@ your data.
 
 - **Aid requests and offers** -- the content of requests and offers you post,
   including category, description, urgency, and status.
-- **Messages** -- direct messages and conversation content exchanged through
-  the platform's chat features.
+- **Offers and coordination state** -- offers, accept/decline state,
+  connections, activity-inbox events, and structured outcome feedback.
+- **No production chat** -- Patchwork does not provide chat or store direct
+  message history. The Chat route is a non-mutating placeholder.
+- **Private attachments** -- files you deliberately attach for an allowed
+  verification or request purpose, plus scan, transformation, access, and
+  deletion metadata. File bodies are held in private object storage, not in
+  public AT records.
 - **Feedback** -- post-handoff outcome feedback and reports you submit.
 
 ### 2.3 Location Data
 
-- **Approximate location** -- when you enable geo-sharing, we collect location
-  data at the precision level you choose (neighbourhood, city, or region).
-  Exact coordinates are never exposed publicly; a minimum precision of 1 km is
-  enforced (see `PUBLIC_MIN_PRECISION_KM` in the codebase).
+- **Approximate personal location** -- when you enable geo-sharing, public
+  records enforce a minimum precision of 1 km.
+- **Ephemeral exact personal location** -- after both participants in an
+  active connection consent, browsers may exchange an exact coordinate over
+  an encrypted peer data channel. Patchwork signaling does not contain the
+  coordinate, and Patchwork does not persist it or provide a server fallback.
+- **Approved public-resource address** -- a verified organization may request
+  a separate moderator approval for a non-confidential facility address.
+  Approved addresses are intentionally public until approval expires or is
+  revoked.
 - **You may disable geo-sharing entirely** in your privacy settings.
 
 ### 2.4 Usage and Technical Data
@@ -66,7 +78,7 @@ We use your data for the following purposes:
 | **Matching and discovery**     | Aid requests, location, profile, categories|
 | **Moderation and safety**      | Content, reports, audit trail, identity     |
 | **Platform operation**         | Account data, technical logs               |
-| **Communication**              | Messages, notifications, contact preferences|
+| **Communication**              | Workflow notifications and contact preferences|
 | **Platform improvement**       | Aggregated and anonymised usage data       |
 | **Verification**               | Identity, profile, verification records    |
 
@@ -77,10 +89,12 @@ do **not** build behavioural profiles for marketing purposes.
 
 ### 4.1 AT Protocol Federation
 
-Patchwork operates on the AT Protocol, which is a federated network. Content
-you publish (aid requests, offers, profile information) is made available to
-other services on the AT Protocol network. Federated data is subject to the
-privacy policies of those receiving services.
+Patchwork operates on the AT Protocol, which is a federated network. Public AT
+records you publish (aid requests, volunteer profiles, and directory
+resources) are available to other services on the AT Protocol network.
+Private offers, connections, evidence, and attachments are not published as
+AT records. Federated data is subject to the privacy policies of receiving
+services.
 
 ### 4.2 Moderator Access
 
@@ -101,6 +115,12 @@ monitoring, or operational purposes. Any such services are bound by data
 processing agreements. We do not share personal data with third parties for
 their own independent use.
 
+Private attachments are sent to configured object-storage, malware-scanning,
+and supported file-transformation services. If you opt in, email and browser
+push providers receive the minimum delivery payload. External notification
+payloads exclude exact location, private evidence, private contact details,
+and attachment bodies.
+
 ## 5. Data Retention
 
 We retain your data only as long as necessary for the purposes described in
@@ -110,6 +130,10 @@ this policy:
 | --------------------- | -------------------------------------------- |
 | Patchwork account/session data | Until deactivation; a hash-only suppression marker remains while the account is deactivated |
 | Patchwork aid-post projections and workflows | Until deletion or account deactivation |
+| Offers, connections, inbox items, and outcomes | Until deletion, policy expiry, or account deactivation, subject to bounded safety retention |
+| Private attachments | Until content deletion, account deactivation, purpose expiry, or moderator removal |
+| Notifications and delivery records | Until archive, channel cleanup, policy expiry, or account deactivation |
+| Verification evidence metadata | Through the decision/appeal period and bounded policy retention; file bodies follow attachment deletion |
 | Independently hosted AT records | Controlled by the user's PDS and AT repository, not Patchwork deactivation |
 | Moderation audit logs and resolved casework | 7 days from the policy decision |
 | Server/technical logs | 30 days                                      |
@@ -169,10 +193,12 @@ platform.
 ### 6.4 Data Portability
 
 You may export Patchwork-held data in a machine-readable format using the data
-export function in Settings. The current narrow-alpha export includes account
-metadata, public aid-post projections, workflows, and your own operational
-actions. Deferred profile, offer, and messaging systems are not represented as
-durable alpha data and are not claimed as export contents.
+export function in Settings. The export includes account metadata and durable
+data owned by or addressed to you: public profiles and projections,
+organization/verification state, workflows, offers, connections, inbox items,
+outcomes, notifications, and safe attachment metadata. It never includes file
+bodies, signed object URLs, credentials, private third-party casework, or exact
+personal coordinates.
 
 ### 6.5 Withdraw Consent
 
@@ -192,7 +218,7 @@ Patchwork uses local storage and session storage in your browser for:
 - **Authentication state** -- keeping you signed in.
 - **User preferences** -- your privacy settings, notification preferences, and
   UI state.
-- **Offline queue** -- pending actions stored locally for offline sync.
+- **UI state** -- non-sensitive route and presentation preferences.
 
 We do not use third-party tracking cookies. We do not use analytics cookies
 that track you across websites.
@@ -204,8 +230,9 @@ data, including:
 
 - Sensitive identifiers (DIDs, AT URIs) are redacted in public diagnostic and
   log views.
-- Exact geo coordinates are not exposed in public API responses or map
-  markers.
+- Exact personal coordinates are not exposed in public API responses or map
+  markers. A separately approved, non-confidential public-resource address is
+  intentionally public while its approval is active.
 - Moderation and ingestion logs follow a short retention window.
 - Secrets rotation procedures are documented in
   [secrets rotation](../operations/secrets-rotation.md).
@@ -215,24 +242,32 @@ please report it to [SECURITY_CONTACT_EMAIL].
 
 ## 9. Children's Privacy
 
-Patchwork is not intended for users under the age of 16. We do not knowingly
-collect data from children. If you believe a child under 16 has provided data
+Patchwork is not intended for users under the age of 18. We do not knowingly
+collect data from children. If you believe a child under 18 has provided data
 to us, please contact us and we will delete it.
 
-## 10. International Data Transfers
+## 10. Showcase Data
+
+Synthetic records are generated from fictional identities and non-routable
+contact data. Public-source organization references include provenance,
+retrieval/verification dates, and a non-participation disclosure. Server-owned
+origin labels keep these records separate from visitor-created content during
+refresh, moderation, export, and deletion.
+
+## 11. International Data Transfers
 
 If you access Patchwork from outside [JURISDICTION], your data may be
 transferred to and processed in [JURISDICTION]. By using the platform you
 consent to this transfer. We ensure appropriate safeguards are in place for
 international transfers.
 
-## 11. Changes to This Policy
+## 12. Changes to This Policy
 
 We may update this Privacy Policy from time to time. Material changes will be
 communicated through the platform at least 30 days before taking effect. All
 changes are recorded in the [policy changelog](./changelog.md).
 
-## 12. Contact
+## 13. Contact
 
 For questions about this Privacy Policy or to exercise your data rights,
 contact:

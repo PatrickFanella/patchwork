@@ -2,8 +2,9 @@
 
 Date: 2026-07-28
 
-Scope: home, map, feed, posting, resources, volunteer, chat, settings, and
-login routes in the local production-data-mode web application, plus a manual
+Scope: production-mode home, map, feed, posting, resources, volunteer,
+organizations, verification, inbox, notifications, moderation, chat, settings,
+login, and three legal-policy routes, plus the previously recorded manual
 public-route review of the deployed home-staging web application.
 
 Result: **no locally detected launch-blocking violation; independent review
@@ -11,30 +12,29 @@ still required**.
 
 ## Automated evidence
 
-`@axe-core/playwright` is a committed browser dependency. Each critical route
+`@axe-core/playwright` is a committed browser dependency. Each included route
 is scanned without exclusions or impact filtering using WCAG 2 A/AA, 2.1
-A/AA, and 2.2 AA rule tags. All nine route scans report zero violations.
+A/AA, and 2.2 AA rule tags.
 
 One cross-route reflow case renders every route at 320 CSS pixels and proves
 that document content does not create page-level horizontal scrolling. A
 second cross-route case applies 200% root text sizing with
 `prefers-reduced-motion: reduce`, proves that page-level horizontal overflow
 does not appear, and verifies that animation and transition duration collapse
-to the reduced-motion budget. The full Chromium suite now passes 56 runnable
-cases with only the authorized real OAuth/PDS journey skipped.
+to the reduced-motion budget. A focused Phase 8 accessibility/presentation run
+passed 70 cases before the three legal-policy routes were added. The final
+feature-completion evidence records the superseding full-suite count.
 
 Playwright now starts Patchwork on the dedicated strict port `41739` with
 server reuse disabled. During this audit, the former port-5173 configuration
 reused an unrelated Roberts Rules development server; a failure screenshot
-exposed the mismatch. Results from that run were discarded. The isolated
-56-pass runnable suite reported above is the current authoritative browser
-evidence.
+exposed the mismatch. Results from that run were discarded. Current runs keep
+the same isolated server boundary.
 
-The repository unit/contract gate passes all 897 tests. The disposable
-PostgreSQL gate separately passes all 301 API, 51 indexer, and 64 moderation
-cases plus 9 direct-service integration cases. Current database-free diagnostic
-coverage is 57.49% statements, 46.48% branches, 50.98% functions, and 58.60%
-lines.
+The repository, disposable PostgreSQL, service-integration, build, coverage,
+and complete Chromium counts change as the feature program advances. The
+Phase 9 feature-completion evidence is the authoritative final gate rather than
+these earlier audit-era totals.
 
 ## Manual repository/browser review
 
@@ -47,8 +47,10 @@ lines.
 | Dynamic state | Polite/assertive announcers, status and alert roles, loading live regions | Pass locally |
 | Contrast | axe route scans include applicable WCAG contrast rules | No detected violation |
 | Motion | `prefers-reduced-motion` disables animation and transition duration | Pass in Chromium |
-| Reflow | Nine routes at 320 CSS pixels and at 200% text sizing | Pass in Chromium |
+| Reflow | All included routes at 320 CSS pixels and at 200% text sizing | Pass in Chromium |
 | Account controls | Export and deactivation have named controls, busy/error status, and an explicit confirmation dialog | Pass in Chromium |
+| Offline/stale state | Offline is announced, mutations are explicitly not queued, retained data is labeled potentially stale, and retry remains available | Pass in Chromium |
+| Policy routes | 18+, no-chat, location, attachment, best-effort review, draft, and NO-GO boundaries are readable without authentication | Pass in Chromium |
 
 The deployed-browser review also found a product-scope defect rather than a
 WCAG rule failure: the public home screen advertised fabricated activity
