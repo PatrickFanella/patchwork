@@ -7,6 +7,13 @@ import { resolveWebDataMode } from './src/features/data-mode';
 
 export default defineConfig(({ command, mode }) => {
     resolveWebDataMode(loadEnv(mode, process.cwd(), ''), { command, mode });
+    const apiProxy = {
+        '/api': {
+            target: 'http://localhost:4000',
+            changeOrigin: false,
+            rewrite: (path: string) => path.replace(/^\/api/, ''),
+        },
+    };
     return {
         plugins: [react(), tailwindcss()],
         resolve: {
@@ -21,13 +28,10 @@ export default defineConfig(({ command, mode }) => {
         },
         server: {
             port: 5173,
-            proxy: {
-                '/api': {
-                    target: 'http://localhost:4000',
-                    changeOrigin: false,
-                    rewrite: path => path.replace(/^\/api/, ''),
-                },
-            },
+            proxy: apiProxy,
+        },
+        preview: {
+            proxy: apiProxy,
         },
         test: {
             exclude: ['e2e/**', 'node_modules/**'],

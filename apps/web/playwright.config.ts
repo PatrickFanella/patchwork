@@ -43,9 +43,14 @@ export default defineConfig({
     ],
     webServer:
         externalBaseUrl ? undefined : {
-            command: `npm run dev -- --host localhost --port ${localPort} --strictPort`,
+            command: `npm run build && npm run preview -- --host localhost --port ${localPort} --strictPort`,
             url: localBaseUrl,
             reuseExistingServer: false,
             timeout: 60_000,
+            env: {
+                VITE_MAP_TILE_URL:
+                    process.env['VITE_MAP_TILE_URL'] ??
+                    `/tiles/us.${'0'.repeat(64)}.pmtiles`,
+            },
         },
 });
