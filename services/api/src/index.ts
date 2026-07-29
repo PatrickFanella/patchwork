@@ -66,6 +66,11 @@ import {
 } from './http/coordination-handler.js';
 import { CoordinationService } from './coordination-service.js';
 import {
+    createExactLocationSignalHandler,
+    isExactLocationSignalRoute,
+} from './http/exact-location-signal-handler.js';
+import { ExactLocationSignalService } from './exact-location-signal-service.js';
+import {
     createDurableSafetyHandler,
     isDurableSafetyRoute,
 } from './http/durable-safety-handler.js';
@@ -208,6 +213,13 @@ const verificationCaseService =
     postgresPool ? new VerificationCaseService(postgresPool) : undefined;
 const coordinationService =
     postgresPool ? new CoordinationService(postgresPool) : undefined;
+const exactLocationSignalService =
+    postgresPool ?
+        new ExactLocationSignalService(
+            postgresPool,
+            () => process.env['PATCHWORK_MAINTENANCE_MODE'] === 'true',
+        )
+    :   undefined;
 const consentExemptPaths = new Set([
     '/account/onboarding',
     '/account/consent',
@@ -401,6 +413,13 @@ const coordinationHandler =
             service: coordinationService,
             authenticate: authenticateApiRequest,
             executeIdempotent: executeIdempotentMutation,
+        })
+    :   undefined;
+const exactLocationSignalHandler =
+    authenticateApiRequest && exactLocationSignalService ?
+        createExactLocationSignalHandler({
+            service: exactLocationSignalService,
+            authenticate: authenticateApiRequest,
         })
     :   undefined;
 const discoveryHandler = createDiscoveryHandler({
@@ -1431,6 +1450,10 @@ const contractRoutes = [
     '/inbox/read',
     '/outcomes',
     '/outcomes/mine',
+    '/location/session',
+    '/location/consent',
+    '/location/signal',
+    '/location/revoke',
     '/health',
     '/health/ready',
     '/metrics',
@@ -1645,6 +1668,20 @@ export const createApiServer = () => {
             return;
         }
         if (coordinationHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (
+            exactLocationSignalHandler?.(request, response, requestUrl)
+        ) {
+            return;
+        }
+        if (isExactLocationSignalRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'LOCATION_SIGNAL_SERVICE_UNAVAILABLE',
+                    message: 'Location exchange is unavailable.',
+                },
+            });
             return;
         }
         if (isCoordinationRoute(request, requestUrl)) {
@@ -1910,6 +1947,7 @@ export const startApiServer = () => {
     let organizationScheduler: RetentionScheduler | undefined;
     let verificationScheduler: RetentionScheduler | undefined;
     let coordinationScheduler: RetentionScheduler | undefined;
+    let exactLocationScheduler: RetentionScheduler | undefined;
     if (postgresPool) {
         const retention = new PostgresRetentionService(postgresPool);
         retentionScheduler = startRetentionScheduler({
@@ -2007,6 +2045,22 @@ export const startApiServer = () => {
                 },
             });
         }
+        if (exactLocationSignalService) {
+            exactLocationScheduler = startRetentionScheduler({
+                intervalMs: 60 * 1_000,
+                enforce: async () => {
+                    exactLocationSignalService.sweep();
+                },
+                onError: () => {
+                    console.error(
+                        JSON.stringify({
+                            level: 'error',
+                            event: 'location_signal_sweep_failed',
+                        }),
+                    );
+                },
+            });
+        }
     }
     server.listen(config.API_PORT, config.API_HOST, () => {
         console.log(
@@ -2018,6 +2072,7 @@ export const startApiServer = () => {
         organizationScheduler?.stop();
         verificationScheduler?.stop();
         coordinationScheduler?.stop();
+        exactLocationScheduler?.stop();
     });
     return server;
 };
