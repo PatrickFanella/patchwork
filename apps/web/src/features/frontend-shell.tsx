@@ -1,6 +1,7 @@
 import {
     lazy,
     Suspense,
+    useCallback,
     useEffect,
     useMemo,
     useRef,
@@ -84,13 +85,18 @@ import {
     type ApiDataOrigin,
     type AtAidPostResult,
     type AtDirectoryResourceResult,
+    type AtVolunteerProfileResult,
+    type VolunteerDiscoveryProfile,
+    type VolunteerProfileCommandInput,
     acceptCurrentPoliciesViaApi,
     blockUserViaApi,
     closeAtAidPostViaApi,
     createAidPostViaApi,
     createAtDirectoryResourceViaApi,
+    createAtVolunteerProfileViaApi,
     deactivateAccountViaApi,
     deleteAtDirectoryResourceViaApi,
+    deleteAtVolunteerProfileViaApi,
     deleteAtAidPostViaApi,
     exportDataViaApi,
     fetchAccountOnboardingViaApi,
@@ -99,7 +105,9 @@ import {
     fetchFeedRecordsFromApi,
     fetchSettingsAuditFromApi,
     fetchSettingsFromApi,
+    fetchVolunteerProfilesViaApi,
     getAtDirectoryResourceViaApi,
+    getAtVolunteerProfileViaApi,
     initiateChatViaApi,
     queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
@@ -108,6 +116,7 @@ import {
     transitionAidPostViaApi,
     updateAccountPreferencesViaApi,
     updateAtDirectoryResourceViaApi,
+    updateAtVolunteerProfileViaApi,
 } from './api-client';
 import {
     type SettingsPatch,
@@ -168,7 +177,6 @@ const appRoutes = [
 ] as const;
 
 const deferredFixtureRoutes = new Set<AppRoute>([
-    '/volunteer',
     '/chat',
     '/moderation',
     '/inbox',
@@ -209,6 +217,7 @@ const primaryRoutes: readonly AppRoute[] = [
     '/map',
     '/feed',
     '/resources',
+    '/volunteer',
     '/posting',
 ];
 
@@ -3165,7 +3174,7 @@ const toggleInList = <TValue extends string>(
     return [...list, value];
 };
 
-const VolunteerRoute = ({ did }: { did: string }) => {
+const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
     const [draft, setDraft] = useState<VolunteerOnboardingDraft>(() => ({
         did,
         displayName: '',
@@ -3640,6 +3649,462 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                     <Button type='submit'>Save volunteer profile</Button>
                 </form>
             </Panel>
+        </section>
+    );
+};
+
+const emptyVolunteerCommand = (): VolunteerProfileCommandInput => ({
+    profile: {
+        displayName: '',
+        bio: '',
+        capabilities: [],
+        availability: 'within-24h',
+        contactPreference: 'chat-only',
+        skills: [],
+        languages: ['en'],
+    },
+    privateProfile: {
+        contactEmail: null,
+        contactPhone: null,
+        availabilityWindows: [],
+        matchingPreferences: {
+            preferredCategories: ['other'],
+            preferredUrgencies: ['medium'],
+            maxDistanceKm: 10,
+            acceptsLateNight: false,
+        },
+    },
+});
+
+const VolunteerRoute = ({ did }: { did: string }) => {
+    const [profiles, setProfiles] = useState<VolunteerDiscoveryProfile[]>([]);
+    const [discoveryStatus, setDiscoveryStatus] =
+        useState('Loading volunteer profiles…');
+    const [searchText, setSearchText] = useState('');
+    const [command, setCommand] = useState<VolunteerProfileCommandInput>(
+        emptyVolunteerCommand,
+    );
+    const [owned, setOwned] = useState<AtVolunteerProfileResult>();
+    const [skillsText, setSkillsText] = useState('');
+    const [languagesText, setLanguagesText] = useState('en');
+    const [windowsText, setWindowsText] = useState('');
+    const [formStatus, setFormStatus] = useState<string>();
+
+    const loadProfiles = useCallback(async () => {
+        setDiscoveryStatus('Loading volunteer profiles…');
+        const result = await fetchVolunteerProfilesViaApi({ searchText });
+        if (!result.ok) {
+            setDiscoveryStatus(`Error: ${result.error}`);
+            return;
+        }
+        setProfiles(result.data);
+        setDiscoveryStatus(
+            result.data.length === 0 ?
+                'No volunteer profiles match these filters.'
+            :   `${result.data.length} volunteer profile${result.data.length === 1 ? '' : 's'}.`,
+        );
+        const mine = result.data.find(profile => profile.authorDid === did);
+        if (!mine || !did) return;
+        const ownedResult = await getAtVolunteerProfileViaApi(mine.uri);
+        if (!ownedResult.ok) return;
+        setOwned(ownedResult.data);
+        const record = ownedResult.data.record;
+        setCommand({
+            profile: {
+                displayName: record.displayName,
+                bio: record.bio ?? '',
+                capabilities: [...record.capabilities],
+                availability: record.availability,
+                contactPreference: record.contactPreference,
+                skills: [...(record.skills ?? [])],
+                languages: [...(record.languages ?? [])],
+                serviceArea: record.serviceArea,
+            },
+            privateProfile:
+                ownedResult.data.privateProfile ??
+                emptyVolunteerCommand().privateProfile,
+        });
+        setSkillsText((record.skills ?? []).join(', '));
+        setLanguagesText((record.languages ?? []).join(', '));
+        setWindowsText(
+            (
+                ownedResult.data.privateProfile?.availabilityWindows ??
+                []
+            ).join(', '),
+        );
+    }, [did, searchText]);
+
+    useEffect(() => {
+        void loadProfiles();
+    }, [loadProfiles]);
+
+    const updateProfile = (
+        patch: Partial<VolunteerProfileCommandInput['profile']>,
+    ) =>
+        setCommand(current => ({
+            ...current,
+            profile: { ...current.profile, ...patch },
+        }));
+
+    const save = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const next: VolunteerProfileCommandInput = {
+            ...command,
+            profile: {
+                ...command.profile,
+                skills: parseCommaList(skillsText),
+                languages: parseCommaList(languagesText),
+                serviceArea:
+                    command.profile.serviceArea?.areaLabel.trim() ?
+                        command.profile.serviceArea
+                    :   undefined,
+            },
+            privateProfile: {
+                ...command.privateProfile,
+                availabilityWindows: parseCommaList(windowsText),
+            },
+        };
+        setFormStatus('Saving volunteer profile…');
+        const result =
+            owned ?
+                await updateAtVolunteerProfileViaApi({
+                    ...next,
+                    uri: owned.uri,
+                    expectedCid: owned.cid,
+                })
+            :   await createAtVolunteerProfileViaApi(next);
+        if (!result.ok) {
+            setFormStatus(`Error: ${result.error}`);
+            return;
+        }
+        setOwned(result.data);
+        setCommand(next);
+        setFormStatus(
+            owned ? 'Volunteer profile updated.' : 'Volunteer profile published.',
+        );
+        await loadProfiles();
+    };
+
+    const remove = async () => {
+        if (!owned) return;
+        setFormStatus('Deleting volunteer profile…');
+        const result = await deleteAtVolunteerProfileViaApi({
+            uri: owned.uri,
+            expectedCid: owned.cid,
+        });
+        if (!result.ok) {
+            setFormStatus(`Error: ${result.error}`);
+            return;
+        }
+        setOwned(undefined);
+        setCommand(emptyVolunteerCommand());
+        setSkillsText('');
+        setLanguagesText('en');
+        setWindowsText('');
+        setFormStatus('Volunteer profile deleted.');
+        await loadProfiles();
+    };
+
+    return (
+        <section className='space-y-6'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>Volunteer profiles</h1>
+                <p className='mt-2 text-sm text-mh-textMuted'>
+                    Discover public skills and approximate service areas.
+                    Private contact and matching preferences are visible only
+                    to the profile owner and authorized workflows.
+                </p>
+            </header>
+
+            <Panel title='Find volunteers'>
+                <form
+                    className='flex flex-wrap gap-2'
+                    onSubmit={event => {
+                        event.preventDefault();
+                        void loadProfiles();
+                    }}
+                >
+                    <label className='grow text-sm font-bold'>
+                        Search public profiles
+                        <Input
+                            value={searchText}
+                            onChange={event => setSearchText(event.target.value)}
+                        />
+                    </label>
+                    <Button type='submit'>Search</Button>
+                </form>
+                <p
+                    className='mt-3 text-sm text-mh-textMuted'
+                    role={discoveryStatus.startsWith('Error:') ? 'alert' : 'status'}
+                >
+                    {discoveryStatus}
+                </p>
+                <div className='mt-4 grid gap-3 sm:grid-cols-2'>
+                    {profiles.map(profile => (
+                        <Card key={profile.uri} title={profile.displayName}>
+                            <p className='text-sm'>{profile.bio}</p>
+                            <p className='mt-2 text-xs text-mh-textMuted'>
+                                {profile.capabilities.join(', ')} ·{' '}
+                                {profile.availability}
+                            </p>
+                            <p className='mt-1 text-xs text-mh-textMuted'>
+                                Languages: {profile.languages.join(', ') || 'not listed'}
+                            </p>
+                            {profile.serviceArea ?
+                                <p className='mt-1 text-xs text-mh-textMuted'>
+                                    Service area: {profile.serviceArea.areaLabel}
+                                    {profile.serviceArea.noPermanentAddress ?
+                                        ' · no permanent address'
+                                    :   ''}
+                                </p>
+                            :   null}
+                        </Card>
+                    ))}
+                </div>
+            </Panel>
+
+            {did ?
+                <Panel title={owned ? 'Manage my profile' : 'Create my profile'}>
+                    <form className='space-y-4' onSubmit={save}>
+                        <div className='grid gap-3 sm:grid-cols-2'>
+                            <label className='text-sm font-bold'>
+                                Display name
+                                <Input
+                                    value={command.profile.displayName}
+                                    onChange={event =>
+                                        updateProfile({
+                                            displayName: event.target.value,
+                                        })
+                                    }
+                                />
+                            </label>
+                            <label className='text-sm font-bold'>
+                                Availability
+                                <select
+                                    className='mh-input mt-1 w-full px-3 py-2'
+                                    value={command.profile.availability}
+                                    onChange={event =>
+                                        updateProfile({
+                                            availability: event.target
+                                                .value as VolunteerProfileCommandInput['profile']['availability'],
+                                        })
+                                    }
+                                >
+                                    {volunteerAvailabilityOptions.map(value => (
+                                        <option key={value} value={value}>
+                                            {formatCategoryLabel(value)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
+                        <label className='block text-sm font-bold'>
+                            Public bio
+                            <textarea
+                                className='mh-input mt-1 min-h-24 w-full px-3 py-2'
+                                value={command.profile.bio ?? ''}
+                                onChange={event =>
+                                    updateProfile({ bio: event.target.value })
+                                }
+                            />
+                        </label>
+                        <fieldset>
+                            <legend className='text-sm font-bold'>
+                                Public capabilities
+                            </legend>
+                            <div className='mt-2 flex flex-wrap gap-2'>
+                                {volunteerCapabilityOptions.map(value => (
+                                    <label key={value} className='text-sm'>
+                                        <input
+                                            type='checkbox'
+                                            checked={command.profile.capabilities.includes(value)}
+                                            onChange={() =>
+                                                updateProfile({
+                                                    capabilities: toggleInList(
+                                                        command.profile.capabilities,
+                                                        value,
+                                                    ) as VolunteerProfileCommandInput['profile']['capabilities'],
+                                                })
+                                            }
+                                        />{' '}
+                                        {formatCategoryLabel(value)}
+                                    </label>
+                                ))}
+                            </div>
+                        </fieldset>
+                        <div className='grid gap-3 sm:grid-cols-2'>
+                            <label className='text-sm font-bold'>
+                                Public skills
+                                <Input
+                                    value={skillsText}
+                                    onChange={event => setSkillsText(event.target.value)}
+                                    placeholder='meal delivery, route planning'
+                                />
+                            </label>
+                            <label className='text-sm font-bold'>
+                                Public languages
+                                <Input
+                                    value={languagesText}
+                                    onChange={event => setLanguagesText(event.target.value)}
+                                    placeholder='en, es'
+                                />
+                            </label>
+                            <label className='text-sm font-bold'>
+                                Approximate service-area label
+                                <Input
+                                    value={command.profile.serviceArea?.areaLabel ?? ''}
+                                    onChange={event =>
+                                        updateProfile({
+                                            serviceArea: {
+                                                ...(command.profile.serviceArea ?? {
+                                                    noPermanentAddress: false,
+                                                }),
+                                                areaLabel: event.target.value,
+                                            },
+                                        })
+                                    }
+                                />
+                            </label>
+                            <label className='text-sm font-bold'>
+                                Precision (km, minimum 1)
+                                <Input
+                                    type='number'
+                                    min={1}
+                                    value={command.profile.serviceArea?.precisionKm ?? 2}
+                                    onChange={event =>
+                                        updateProfile({
+                                            serviceArea: {
+                                                ...(command.profile.serviceArea ?? {
+                                                    areaLabel: '',
+                                                    noPermanentAddress: false,
+                                                }),
+                                                precisionKm: Number(event.target.value),
+                                            },
+                                        })
+                                    }
+                                />
+                            </label>
+                            <label className='text-sm font-bold'>
+                                Approximate latitude
+                                <Input
+                                    type='number'
+                                    step='0.01'
+                                    value={command.profile.serviceArea?.latitude ?? ''}
+                                    onChange={event =>
+                                        updateProfile({
+                                            serviceArea: {
+                                                ...(command.profile.serviceArea ?? {
+                                                    areaLabel: '',
+                                                    noPermanentAddress: false,
+                                                }),
+                                                precisionKm:
+                                                    command.profile.serviceArea
+                                                        ?.precisionKm ?? 2,
+                                                latitude: Number(event.target.value),
+                                            },
+                                        })
+                                    }
+                                />
+                            </label>
+                            <label className='text-sm font-bold'>
+                                Approximate longitude
+                                <Input
+                                    type='number'
+                                    step='0.01'
+                                    value={command.profile.serviceArea?.longitude ?? ''}
+                                    onChange={event =>
+                                        updateProfile({
+                                            serviceArea: {
+                                                ...(command.profile.serviceArea ?? {
+                                                    areaLabel: '',
+                                                    noPermanentAddress: false,
+                                                }),
+                                                precisionKm:
+                                                    command.profile.serviceArea
+                                                        ?.precisionKm ?? 2,
+                                                longitude: Number(event.target.value),
+                                            },
+                                        })
+                                    }
+                                />
+                            </label>
+                        </div>
+                        <label className='block text-sm'>
+                            <input
+                                type='checkbox'
+                                checked={
+                                    command.profile.serviceArea
+                                        ?.noPermanentAddress ?? false
+                                }
+                                onChange={event =>
+                                    updateProfile({
+                                        serviceArea: {
+                                            ...(command.profile.serviceArea ?? {
+                                                areaLabel: '',
+                                            }),
+                                            noPermanentAddress:
+                                                event.target.checked,
+                                        },
+                                    })
+                                }
+                            />{' '}
+                            I do not have a permanent address
+                        </label>
+                        <Card title='Private operational details'>
+                            <div className='grid gap-3 sm:grid-cols-2'>
+                                <label className='text-sm font-bold'>
+                                    Private contact email
+                                    <Input
+                                        type='email'
+                                        value={command.privateProfile.contactEmail ?? ''}
+                                        onChange={event =>
+                                            setCommand(current => ({
+                                                ...current,
+                                                privateProfile: {
+                                                    ...current.privateProfile,
+                                                    contactEmail:
+                                                        event.target.value || null,
+                                                },
+                                            }))
+                                        }
+                                    />
+                                </label>
+                                <label className='text-sm font-bold'>
+                                    Private availability windows
+                                    <Input
+                                        value={windowsText}
+                                        onChange={event => setWindowsText(event.target.value)}
+                                    />
+                                </label>
+                            </div>
+                        </Card>
+                        <div className='flex flex-wrap items-center gap-2'>
+                            <Button type='submit'>
+                                {owned ? 'Save profile' : 'Publish profile'}
+                            </Button>
+                            {owned ?
+                                <Button
+                                    type='button'
+                                    variant='neutral'
+                                    onClick={() => void remove()}
+                                >
+                                    Delete profile
+                                </Button>
+                            :   null}
+                            {formStatus ?
+                                <span
+                                    role={formStatus.startsWith('Error:') ? 'alert' : 'status'}
+                                    className='text-sm'
+                                >
+                                    {formStatus}
+                                </span>
+                            :   null}
+                        </div>
+                    </form>
+                </Panel>
+            :   <Panel title='Sign in to volunteer'>
+                    <p>Create and manage a profile with your AT identity.</p>
+                </Panel>}
         </section>
     );
 };
@@ -5370,7 +5835,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 currentUserDid={currentUserDid}
             />
         : currentRoute === '/volunteer' ?
-            <VolunteerRoute did={currentUserDid} />
+            webDataMode === 'fixture' ?
+                <LegacyFixtureVolunteerRoute did={currentUserDid} />
+            :   <VolunteerRoute did={currentUserDid} />
         : currentRoute === '/chat' ?
             <ChatRoute
                 currentUserDid={currentUserDid}

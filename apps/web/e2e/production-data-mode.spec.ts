@@ -37,7 +37,7 @@ test('public home advertises only implemented alpha capabilities', async ({
     ).toHaveCount(0);
 
     await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Volunteer' })).toBeHidden();
+    await expect(page.getByRole('link', { name: 'Volunteer' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Chat' })).toBeHidden();
 });
 

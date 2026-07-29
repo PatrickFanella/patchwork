@@ -6,12 +6,15 @@ import {
     createAidPostViaApi,
     createAtAidPostViaApi,
     createAtDirectoryResourceViaApi,
+    createAtVolunteerProfileViaApi,
     deactivateAccountViaApi,
+    deleteAtVolunteerProfileViaApi,
     deleteAtDirectoryResourceViaApi,
     fetchAccountOnboardingViaApi,
     fetchAccountPreferencesViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
+    fetchVolunteerProfilesViaApi,
     exportDataViaApi,
     initiateChatViaApi,
     getAtDirectoryResourceViaApi,
@@ -21,6 +24,7 @@ import {
     transitionAidPostViaApi,
     updateAccountPreferencesViaApi,
     updateAtDirectoryResourceViaApi,
+    updateAtVolunteerProfileViaApi,
 } from './api-client.js';
 import {
     CURRENT_POLICY_VERSION,
@@ -823,5 +827,150 @@ describe('api client', () => {
         )[0];
         expect(String(call?.[0])).toContain('/at/aid-posts');
         expect(call?.[1].credentials).toBe('include');
+    });
+
+    it('keeps volunteer private details out of public discovery and PDS profile fields', async () => {
+        const record = {
+            $type: 'app.patchwork.volunteer.profile' as const,
+            version: '1.2.0' as const,
+            displayName: 'Alex Helper',
+            bio: 'Available for neighborhood deliveries.',
+            capabilities: ['food-delivery'] as const,
+            availability: 'within-24h' as const,
+            contactPreference: 'chat-only' as const,
+            skills: ['route planning'],
+            languages: ['en'],
+            serviceArea: {
+                areaLabel: 'North side',
+                noPermanentAddress: false,
+                latitude: 41.92,
+                longitude: -87.68,
+                precisionKm: 2,
+            },
+            createdAt: '2026-07-28T12:00:00.000Z',
+            updatedAt: '2026-07-28T12:00:00.000Z',
+        };
+        const privateProfile = {
+            contactEmail: 'alex-private@example.test',
+            contactPhone: null,
+            availabilityWindows: ['weekday evenings'],
+            matchingPreferences: {
+                preferredCategories: ['food'],
+                preferredUrgencies: ['high'],
+                maxDistanceKm: 12,
+                acceptsLateNight: false,
+            },
+        };
+        const command = {
+            profile: {
+                displayName: record.displayName,
+                bio: record.bio,
+                capabilities: [...record.capabilities],
+                availability: record.availability,
+                contactPreference: record.contactPreference,
+                skills: record.skills,
+                languages: record.languages,
+                serviceArea: record.serviceArea,
+            },
+            privateProfile,
+        };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                createJsonResponse(
+                    {
+                        uri: 'at://did:plc:alex/app.patchwork.volunteer.profile/self',
+                        cid: 'bafy-created',
+                        record,
+                        privateProfile,
+                    },
+                    true,
+                    201,
+                ),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    uri: 'at://did:plc:alex/app.patchwork.volunteer.profile/self',
+                    cid: 'bafy-updated',
+                    record: { ...record, bio: 'Updated public bio.' },
+                    privateProfile,
+                }),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    total: 1,
+                    page: 1,
+                    pageSize: 100,
+                    hasNextPage: false,
+                    results: [
+                        {
+                            uri: 'at://did:plc:alex/app.patchwork.volunteer.profile/self',
+                            cid: 'bafy-updated',
+                            authorDid: 'did:plc:alex',
+                            displayName: record.displayName,
+                            bio: 'Updated public bio.',
+                            capabilities: ['food-delivery'],
+                            availability: 'within-24h',
+                            contactPreference: 'chat-only',
+                            skills: ['route planning'],
+                            languages: ['en'],
+                            serviceArea: {
+                                areaLabel: 'North side',
+                                noPermanentAddress: false,
+                                approximateGeo: {
+                                    latitude: 41.92,
+                                    longitude: -87.68,
+                                    precisionKm: 2,
+                                },
+                            },
+                            updatedAt: record.updatedAt,
+                        },
+                    ],
+                }),
+            )
+            .mockResolvedValueOnce(createJsonResponse({}, true, 204));
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await expect(
+            createAtVolunteerProfileViaApi(command),
+        ).resolves.toMatchObject({ ok: true, data: { cid: 'bafy-created' } });
+        await expect(
+            updateAtVolunteerProfileViaApi({
+                ...command,
+                profile: { ...command.profile, bio: 'Updated public bio.' },
+                uri: 'at://did:plc:alex/app.patchwork.volunteer.profile/self',
+                expectedCid: 'bafy-created',
+            }),
+        ).resolves.toMatchObject({ ok: true, data: { cid: 'bafy-updated' } });
+        const discovery = await fetchVolunteerProfilesViaApi();
+        expect(discovery).toMatchObject({
+            ok: true,
+            data: [{ displayName: 'Alex Helper' }],
+        });
+        await expect(
+            deleteAtVolunteerProfileViaApi({
+                uri: 'at://did:plc:alex/app.patchwork.volunteer.profile/self',
+                expectedCid: 'bafy-updated',
+            }),
+        ).resolves.toEqual({ ok: true, data: undefined });
+
+        const calls = fetchMock.mock.calls as unknown as Array<
+            [string, RequestInit | undefined]
+        >;
+        const createBody = JSON.parse(String(calls[0]?.[1]?.body)) as {
+            profile: Record<string, unknown>;
+            privateProfile: Record<string, unknown>;
+        };
+        expect(createBody.profile).not.toHaveProperty('did');
+        expect(createBody.profile).not.toHaveProperty(
+            'verificationCheckpoints',
+        );
+        expect(createBody.privateProfile['contactEmail']).toBe(
+            'alex-private@example.test',
+        );
+        expect(String(calls[2]?.[0])).not.toContain('alex-private');
+        expect(JSON.stringify(discovery)).not.toContain(
+            'alex-private@example.test',
+        );
     });
 });

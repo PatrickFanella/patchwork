@@ -165,11 +165,19 @@ test.describe('Form accessibility', () => {
         ).toBeVisible();
     });
 
-    test('deferred prototype routes are identified without simulated forms', async ({ page }) => {
+    test('volunteer discovery is public and account editing requires sign-in', async ({ page }) => {
         await page.goto('/volunteer');
         await page.waitForLoadState('networkidle');
-        await expect(page.getByText('Deferred from the alpha')).toBeVisible();
-        await expect(page.locator('form')).toHaveCount(0);
+        await expect(
+            page.getByRole('heading', { name: 'Volunteer profiles' }),
+        ).toBeVisible();
+        await expect(
+            page.getByLabel('Search public profiles'),
+        ).toBeVisible();
+        await expect(
+            page.getByRole('region', { name: 'Sign in to volunteer' }),
+        ).toBeVisible();
+        await expect(page.getByLabel('Private contact email')).toHaveCount(0);
     });
 
     test('chat is a truthful non-mutating production placeholder', async ({

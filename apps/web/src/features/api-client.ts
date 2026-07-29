@@ -23,8 +23,10 @@ import type {
 import {
     aidPostSchema,
     directoryResourceSchema,
+    volunteerProfileSchema,
     type AidPostRecord,
     type DirectoryResourceRecord,
+    type VolunteerProfileRecord,
 } from '@patchwork/at-lexicons';
 import { enforceMinimumGeoPrecisionKm } from '@patchwork/shared';
 import {
@@ -798,6 +800,191 @@ export const deleteAtDirectoryResourceViaApi = async (
         signal,
     );
     return result.ok ? { ok: true, data: undefined } : result;
+};
+
+export interface VolunteerPrivateProfile {
+    contactEmail: string | null;
+    contactPhone: string | null;
+    availabilityWindows: string[];
+    matchingPreferences: {
+        preferredCategories: string[];
+        preferredUrgencies: string[];
+        maxDistanceKm: number;
+        acceptsLateNight: boolean;
+    };
+}
+
+export interface AtVolunteerProfileResult {
+    uri: string;
+    cid: string;
+    record: VolunteerProfileRecord;
+    privateProfile: VolunteerPrivateProfile | null;
+}
+
+export interface VolunteerProfileCommandInput {
+    profile: {
+        displayName: string;
+        bio?: string;
+        capabilities: VolunteerProfileRecord['capabilities'];
+        availability: VolunteerProfileRecord['availability'];
+        contactPreference: VolunteerProfileRecord['contactPreference'];
+        skills?: string[];
+        languages?: string[];
+        serviceArea?: VolunteerProfileRecord['serviceArea'];
+    };
+    privateProfile: VolunteerPrivateProfile;
+}
+
+const parseVolunteerPrivateProfile = (
+    input: unknown,
+): VolunteerPrivateProfile | null | undefined => {
+    if (input === null) return null;
+    if (!isRecord(input)) return undefined;
+    const matching = input['matchingPreferences'];
+    if (
+        !isRecord(matching) ||
+        !Array.isArray(input['availabilityWindows']) ||
+        !Array.isArray(matching['preferredCategories']) ||
+        !Array.isArray(matching['preferredUrgencies']) ||
+        typeof matching['maxDistanceKm'] !== 'number' ||
+        typeof matching['acceptsLateNight'] !== 'boolean' ||
+        !(
+            input['contactEmail'] === null ||
+            typeof input['contactEmail'] === 'string'
+        ) ||
+        !(
+            input['contactPhone'] === null ||
+            typeof input['contactPhone'] === 'string'
+        )
+    ) {
+        return undefined;
+    }
+    return input as unknown as VolunteerPrivateProfile;
+};
+
+const parseAtVolunteerProfileResult = (
+    payload: unknown,
+): ApiClientResult<AtVolunteerProfileResult> => {
+    if (!isRecord(payload)) {
+        return invalidResponseFailure(
+            'Volunteer-profile response was malformed.',
+        );
+    }
+    const uri = readString(payload, 'uri');
+    const cid = readString(payload, 'cid');
+    const record = volunteerProfileSchema.safeParse(payload['record']);
+    const privateProfile = parseVolunteerPrivateProfile(
+        payload['privateProfile'],
+    );
+    if (!uri || !cid || !record.success || privateProfile === undefined) {
+        return invalidResponseFailure(
+            'Volunteer-profile response was malformed.',
+        );
+    }
+    return {
+        ok: true,
+        data: { uri, cid, record: record.data, privateProfile },
+    };
+};
+
+export const getAtVolunteerProfileViaApi = async (
+    uri: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtVolunteerProfileResult>> => {
+    const result = await requestJson(
+        '/at/volunteer-profile',
+        new URLSearchParams({ uri }),
+        signal,
+    );
+    return result.ok ? parseAtVolunteerProfileResult(result.data) : result;
+};
+
+export const createAtVolunteerProfileViaApi = async (
+    input: VolunteerProfileCommandInput,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtVolunteerProfileResult>> => {
+    const result = await requestJsonPost(
+        '/at/volunteer-profile',
+        input,
+        signal,
+    );
+    return result.ok ? parseAtVolunteerProfileResult(result.data) : result;
+};
+
+export const updateAtVolunteerProfileViaApi = async (
+    input: VolunteerProfileCommandInput & {
+        uri: string;
+        expectedCid: string;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AtVolunteerProfileResult>> => {
+    const result = await requestJsonPut(
+        '/at/volunteer-profile',
+        input,
+        signal,
+    );
+    return result.ok ? parseAtVolunteerProfileResult(result.data) : result;
+};
+
+export const deleteAtVolunteerProfileViaApi = async (
+    input: { uri: string; expectedCid: string },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<void>> => {
+    const result = await requestJsonDelete(
+        '/at/volunteer-profile',
+        input,
+        signal,
+    );
+    return result.ok ? { ok: true, data: undefined } : result;
+};
+
+export interface VolunteerDiscoveryProfile {
+    uri: string;
+    cid: string | null;
+    authorDid: string;
+    displayName: string;
+    bio: string | null;
+    capabilities: string[];
+    availability: string;
+    contactPreference: string;
+    skills: string[];
+    languages: string[];
+    serviceArea: {
+        areaLabel: string;
+        noPermanentAddress: boolean;
+        approximateGeo?: {
+            latitude: number;
+            longitude: number;
+            precisionKm: number;
+        };
+    } | null;
+    updatedAt: string;
+}
+
+export const fetchVolunteerProfilesViaApi = async (
+    filters: {
+        searchText?: string;
+        capability?: string;
+        language?: string;
+        availability?: string;
+    } = {},
+    signal?: AbortSignal,
+): Promise<ApiClientResult<VolunteerDiscoveryProfile[]>> => {
+    const params = new URLSearchParams({ page: '1', pageSize: '100' });
+    for (const [key, value] of Object.entries(filters)) {
+        if (value) params.set(key, value);
+    }
+    const result = await requestJson('/query/volunteers', params, signal);
+    if (!result.ok) return result;
+    if (!isRecord(result.data) || !Array.isArray(result.data['results'])) {
+        return invalidResponseFailure(
+            'Volunteer discovery response was malformed.',
+        );
+    }
+    return {
+        ok: true,
+        data: result.data['results'] as VolunteerDiscoveryProfile[],
+    };
 };
 
 // ---------------------------------------------------------------------------
