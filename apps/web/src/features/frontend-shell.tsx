@@ -91,6 +91,11 @@ import {
     type OrganizationStewardship,
     type PublicOrganization,
     type ExactAddressRequest,
+    type ActivityInboxItem,
+    type CoordinationConnection,
+    type CoordinationOffer,
+    type MatchCandidate,
+    type OutcomeFeedback,
     type VerificationApplication,
     type VerificationAppeal,
     type VerificationReviewQueue,
@@ -107,6 +112,7 @@ import {
     createAtDirectoryResourceViaApi,
     createAtVolunteerProfileViaApi,
     createOrganizationViaApi,
+    createCoordinationOfferViaApi,
     deactivateAccountViaApi,
     deleteAtDirectoryResourceViaApi,
     deleteAtVolunteerProfileViaApi,
@@ -114,11 +120,14 @@ import {
     exportDataViaApi,
     fetchAccountOnboardingViaApi,
     fetchAccountPreferencesViaApi,
+    fetchActivityInboxViaApi,
+    fetchCoordinationViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     fetchMyOrganizationsViaApi,
     fetchOrganizationMembersViaApi,
     fetchOrganizationsViaApi,
+    fetchMyOutcomeFeedbackViaApi,
     fetchOrganizationStewardshipsViaApi,
     fetchExactAddressReviewQueueViaApi,
     fetchVerificationReviewQueueViaApi,
@@ -130,10 +139,13 @@ import {
     getAtVolunteerProfileViaApi,
     initiateChatViaApi,
     inviteOrganizationMemberViaApi,
+    decideCoordinationOfferViaApi,
     decideExactAddressViaApi,
     decideVerificationAppealViaApi,
     decideVerificationViaApi,
     queryAidPostLifecycleViaApi,
+    markActivityInboxReadViaApi,
+    matchRequestViaApi,
     reportAidPostViaApi,
     reconcileAidPostStatusViaApi,
     reconfirmOrganizationStewardshipViaApi,
@@ -141,6 +153,8 @@ import {
     removeOrganizationMemberViaApi,
     updateSettingsViaApi,
     transitionAidPostViaApi,
+    transitionCoordinationConnectionViaApi,
+    submitOutcomeFeedbackViaApi,
     submitVerificationAppealViaApi,
     submitVerificationApplicationViaApi,
     updateAccountPreferencesViaApi,
@@ -211,7 +225,6 @@ const appRoutes = [
 const deferredFixtureRoutes = new Set<AppRoute>([
     '/chat',
     '/moderation',
-    '/inbox',
     '/notifications',
     '/scheduling',
     '/feedback',
@@ -258,7 +271,7 @@ const primaryRoutes: readonly AppRoute[] = [
 ];
 
 const accountRoutes: readonly AppRoute[] = ['/volunteer', '/chat', '/settings'];
-const productionAccountRoutes: readonly AppRoute[] = ['/settings'];
+const productionAccountRoutes: readonly AppRoute[] = ['/inbox', '/settings'];
 
 const secondaryRoutes = appRoutes.filter(
     route =>
@@ -5384,6 +5397,676 @@ interface ChatRouteProps {
     onReset: () => void;
 }
 
+const outcomeOptions = [
+    'successful',
+    'partially-successful',
+    'unsuccessful',
+    'no-response',
+    'cancelled',
+] as const;
+
+const CoordinationInboxRoute = ({ did }: { did: string }) => {
+    const [offers, setOffers] = useState<CoordinationOffer[]>([]);
+    const [connections, setConnections] = useState<
+        CoordinationConnection[]
+    >([]);
+    const [items, setItems] = useState<ActivityInboxItem[]>([]);
+    const [feedback, setFeedback] = useState<OutcomeFeedback[]>([]);
+    const [requests, setRequests] = useState<FeedRecordEnvelope[]>([]);
+    const [matches, setMatches] = useState<
+        Readonly<Record<string, MatchCandidate[]>>
+    >({});
+    const [notes, setNotes] = useState<Readonly<Record<string, string>>>({});
+    const [languages, setLanguages] = useState('en');
+    const [accessibility, setAccessibility] = useState('');
+    const [outcomes, setOutcomes] = useState<
+        Readonly<
+            Record<
+                string,
+                {
+                    outcome: (typeof outcomeOptions)[number];
+                    rating: number;
+                    comment: string;
+                    safetyConcern: boolean;
+                }
+            >
+        >
+    >({});
+    const [unreadOnly, setUnreadOnly] = useState(false);
+    const [status, setStatus] = useState('Loading coordination activity…');
+
+    const load = useCallback(async () => {
+        setStatus('Loading coordination activity…');
+        const [coordination, inbox, outcomeHistory, discoverable] =
+            await Promise.all([
+                fetchCoordinationViaApi(),
+                fetchActivityInboxViaApi(unreadOnly),
+                fetchMyOutcomeFeedbackViaApi(),
+                fetchFeedRecordsFromApi(defaultDiscoveryFilterState, 'feed'),
+            ]);
+        const failure = [
+            coordination,
+            inbox,
+            outcomeHistory,
+            discoverable,
+        ].find(result => !result.ok);
+        if (failure && !failure.ok) {
+            setStatus(`Error: ${failure.error}`);
+            return;
+        }
+        if (
+            coordination.ok &&
+            inbox.ok &&
+            outcomeHistory.ok &&
+            discoverable.ok
+        ) {
+            setOffers(coordination.data.offers);
+            setConnections(coordination.data.connections);
+            setItems(inbox.data.items);
+            setFeedback(outcomeHistory.data.feedback);
+            setRequests(discoverable.data);
+            setStatus(
+                `${inbox.data.unread} unread item${inbox.data.unread === 1 ? '' : 's'}.`,
+            );
+        }
+    }, [unreadOnly]);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    const finish = async (
+        pendingMessage: string,
+        operation: Promise<{ ok: boolean; error?: string }>,
+    ) => {
+        setStatus(pendingMessage);
+        const result = await operation;
+        if (!result.ok) {
+            setStatus(`Error: ${result.error ?? 'The action failed.'}`);
+            return;
+        }
+        await load();
+    };
+
+    const ownedRequests = requests.filter(
+        request => request.recipientDid === did,
+    );
+    const availableRequests = requests.filter(
+        request => request.recipientDid !== did,
+    );
+
+    return (
+        <section className='space-y-6'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>Coordination inbox</h1>
+                <p className='mt-2 text-sm text-mh-textMuted'>
+                    Review durable offers, assignments, safety updates, and
+                    outcomes. This is activity coordination, not chat; it has no
+                    messages or conversation history.
+                </p>
+                <p
+                    className='mt-2 text-sm font-bold'
+                    role={status.startsWith('Error:') ? 'alert' : 'status'}
+                >
+                    {status}
+                </p>
+            </header>
+
+            <Panel title='Discover requests and offer help'>
+                {availableRequests.length === 0 ?
+                    <p className='text-sm text-mh-textMuted'>
+                        No open requests from other accounts are discoverable.
+                    </p>
+                :   <div className='grid gap-3 sm:grid-cols-2'>
+                        {availableRequests.map(request => (
+                            <Card
+                                key={request.aidPostUri}
+                                title={request.card.title}
+                            >
+                                <p className='text-sm'>
+                                    {request.card.description}
+                                </p>
+                                <p className='mt-2 text-xs text-mh-textMuted'>
+                                    {formatCategoryLabel(
+                                        request.card.category,
+                                    )}{' '}
+                                    · {request.card.status}
+                                </p>
+                                <label className='mt-3 block text-sm font-bold'>
+                                    Optional coordination note
+                                    <textarea
+                                        className='mh-input mt-1 min-h-20 w-full px-3 py-2'
+                                        maxLength={1000}
+                                        value={notes[request.aidPostUri] ?? ''}
+                                        onChange={event =>
+                                            setNotes(current => ({
+                                                ...current,
+                                                [request.aidPostUri]:
+                                                    event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </label>
+                                <Button
+                                    className='mt-3'
+                                    onClick={() =>
+                                        void finish(
+                                            'Sending offer…',
+                                            createCoordinationOfferViaApi({
+                                                requestUri:
+                                                    request.aidPostUri,
+                                                note:
+                                                    notes[
+                                                        request.aidPostUri
+                                                    ]?.trim() || null,
+                                            }),
+                                        )
+                                    }
+                                >
+                                    Offer help
+                                </Button>
+                            </Card>
+                        ))}
+                    </div>}
+            </Panel>
+
+            <Panel title='Offers'>
+                {offers.length === 0 ?
+                    <p className='text-sm text-mh-textMuted'>
+                        No offers yet.
+                    </p>
+                :   <div className='space-y-3'>
+                        {offers.map(offer => (
+                            <Card
+                                key={offer.id}
+                                title={`${formatCategoryLabel(offer.direction)} offer`}
+                            >
+                                <div className='flex flex-wrap gap-2'>
+                                    <Badge
+                                        tone={
+                                            offer.status === 'accepted' ?
+                                                'success'
+                                            : offer.status === 'pending' ?
+                                                'info'
+                                            :   'neutral'
+                                        }
+                                    >
+                                        {formatCategoryLabel(offer.status)}
+                                    </Badge>
+                                    <span className='text-xs text-mh-textMuted'>
+                                        Expires{' '}
+                                        {new Date(
+                                            offer.expiresAt,
+                                        ).toLocaleString()}
+                                    </span>
+                                </div>
+                                {offer.note ?
+                                    <p className='mt-2 text-sm'>{offer.note}</p>
+                                :   null}
+                                {offer.status === 'accepted' ?
+                                    <p className='mt-2 break-all text-xs'>
+                                        Requester: {offer.requesterDid}
+                                        <br />
+                                        Helper: {offer.helperDid}
+                                    </p>
+                                :   <p className='mt-2 text-xs text-mh-textMuted'>
+                                        Participant identity remains private
+                                        until acceptance.
+                                    </p>}
+                                {offer.status === 'pending' ?
+                                    <div className='mt-3 flex flex-wrap gap-2'>
+                                        {offer.direction === 'received' ?
+                                            <>
+                                                <Button
+                                                    onClick={() =>
+                                                        void finish(
+                                                            'Accepting offer…',
+                                                            decideCoordinationOfferViaApi(
+                                                                {
+                                                                    offerId:
+                                                                        offer.id,
+                                                                    decision:
+                                                                        'accept',
+                                                                },
+                                                            ),
+                                                        )
+                                                    }
+                                                >
+                                                    Accept
+                                                </Button>
+                                                <Button
+                                                    variant='secondary'
+                                                    onClick={() =>
+                                                        void finish(
+                                                            'Declining offer…',
+                                                            decideCoordinationOfferViaApi(
+                                                                {
+                                                                    offerId:
+                                                                        offer.id,
+                                                                    decision:
+                                                                        'decline',
+                                                                },
+                                                            ),
+                                                        )
+                                                    }
+                                                >
+                                                    Decline
+                                                </Button>
+                                            </>
+                                        :   <Button
+                                                variant='secondary'
+                                                onClick={() =>
+                                                    void finish(
+                                                        'Cancelling offer…',
+                                                        decideCoordinationOfferViaApi(
+                                                            {
+                                                                offerId:
+                                                                    offer.id,
+                                                                decision:
+                                                                    'cancel',
+                                                            },
+                                                        ),
+                                                    )
+                                                }
+                                            >
+                                                Cancel offer
+                                            </Button>}
+                                    </div>
+                                :   null}
+                            </Card>
+                        ))}
+                    </div>}
+            </Panel>
+
+            <Panel title='Explainable matching'>
+                <p className='mb-3 text-sm text-mh-textMuted'>
+                    Suggestions use category, approximate distance,
+                    availability, language, accessibility, and active
+                    verification. Results are deterministic and advisory;
+                    Patchwork never assigns anyone automatically or computes a
+                    reputation score.
+                </p>
+                <div className='grid gap-3 sm:grid-cols-2'>
+                    <label className='text-sm font-bold'>
+                        Required languages
+                        <Input
+                            value={languages}
+                            onChange={event =>
+                                setLanguages(event.target.value)
+                            }
+                            placeholder='en, es'
+                        />
+                    </label>
+                    <label className='text-sm font-bold'>
+                        Accessibility needs
+                        <Input
+                            value={accessibility}
+                            onChange={event =>
+                                setAccessibility(event.target.value)
+                            }
+                            placeholder='wheelchair-accessible'
+                        />
+                    </label>
+                </div>
+                {ownedRequests.length === 0 ?
+                    <p className='mt-3 text-sm text-mh-textMuted'>
+                        Publish an open request to review eligible candidates.
+                    </p>
+                :   ownedRequests.map(request => (
+                        <div
+                            key={request.aidPostUri}
+                            className='mt-4 border-t border-mh-borderSoft pt-4'
+                        >
+                            <div className='flex flex-wrap items-center justify-between gap-2'>
+                                <h2 className='font-bold'>
+                                    {request.card.title}
+                                </h2>
+                                <Button
+                                    onClick={() =>
+                                        void (async () => {
+                                            setStatus('Ranking candidates…');
+                                            const result =
+                                                await matchRequestViaApi({
+                                                    requestUri:
+                                                        request.aidPostUri,
+                                                    requiredLanguages:
+                                                        parseCommaList(
+                                                            languages,
+                                                        ),
+                                                    accessibilityNeeds:
+                                                        parseCommaList(
+                                                            accessibility,
+                                                        ),
+                                                });
+                                            if (!result.ok) {
+                                                setStatus(
+                                                    `Error: ${result.error}`,
+                                                );
+                                                return;
+                                            }
+                                            setMatches(current => ({
+                                                ...current,
+                                                [request.aidPostUri]:
+                                                    result.data.candidates,
+                                            }));
+                                            setStatus(
+                                                `${result.data.candidates.length} eligible candidate${result.data.candidates.length === 1 ? '' : 's'} ranked.`,
+                                            );
+                                        })()
+                                    }
+                                >
+                                    Find candidates
+                                </Button>
+                            </div>
+                            <ol className='mt-3 space-y-2'>
+                                {(matches[request.aidPostUri] ?? []).map(
+                                    candidate => (
+                                        <li
+                                            key={candidate.candidateRef}
+                                            className='rounded border border-mh-borderSoft p-3'
+                                        >
+                                            <p className='font-bold'>
+                                                #{candidate.rank}{' '}
+                                                {candidate.label}
+                                            </p>
+                                            <p className='text-xs text-mh-textMuted'>
+                                                {candidate.kind} ·{' '}
+                                                {candidate.availability} ·
+                                                verification{' '}
+                                                {candidate.verification}
+                                            </p>
+                                            <ul className='mt-2 list-disc pl-5 text-sm'>
+                                                {candidate.explanations.map(
+                                                    explanation => (
+                                                        <li key={explanation}>
+                                                            {explanation}
+                                                        </li>
+                                                    ),
+                                                )}
+                                            </ul>
+                                            <p className='mt-2 text-xs font-bold'>
+                                                Manual selection only
+                                            </p>
+                                        </li>
+                                    ),
+                                )}
+                            </ol>
+                        </div>
+                    ))}
+            </Panel>
+
+            <Panel title='Connections and outcomes'>
+                {connections.length === 0 ?
+                    <p className='text-sm text-mh-textMuted'>
+                        Accepted offers will appear here.
+                    </p>
+                :   <div className='space-y-3'>
+                        {connections.map(connection => {
+                            const alreadySubmitted = feedback.some(
+                                entry =>
+                                    entry.connectionId === connection.id,
+                            );
+                            const draft = outcomes[connection.id] ?? {
+                                outcome: 'successful',
+                                rating: 5,
+                                comment: '',
+                                safetyConcern: false,
+                            };
+                            return (
+                                <Card
+                                    key={connection.id}
+                                    title={`Connection · ${formatCategoryLabel(connection.status)}`}
+                                >
+                                    <p className='break-all text-xs'>
+                                        Connected with{' '}
+                                        {connection.counterpartDid}
+                                    </p>
+                                    {connection.status === 'active' ?
+                                        <div className='mt-3 flex flex-wrap gap-2'>
+                                            <Button
+                                                onClick={() =>
+                                                    void finish(
+                                                        'Completing handoff…',
+                                                        transitionCoordinationConnectionViaApi(
+                                                            {
+                                                                connectionId:
+                                                                    connection.id,
+                                                                action: 'complete',
+                                                            },
+                                                        ),
+                                                    )
+                                                }
+                                            >
+                                                Complete handoff
+                                            </Button>
+                                            <Button
+                                                variant='secondary'
+                                                onClick={() =>
+                                                    void finish(
+                                                        'Cancelling connection…',
+                                                        transitionCoordinationConnectionViaApi(
+                                                            {
+                                                                connectionId:
+                                                                    connection.id,
+                                                                action: 'cancel',
+                                                            },
+                                                        ),
+                                                    )
+                                                }
+                                            >
+                                                Cancel
+                                            </Button>
+                                        </div>
+                                    : connection.status === 'completed' &&
+                                      !alreadySubmitted ?
+                                        <form
+                                            className='mt-3 space-y-3 border-t border-mh-borderSoft pt-3'
+                                            onSubmit={event => {
+                                                event.preventDefault();
+                                                void finish(
+                                                    'Saving outcome…',
+                                                    submitOutcomeFeedbackViaApi(
+                                                        {
+                                                            connectionId:
+                                                                connection.id,
+                                                            outcome:
+                                                                draft.outcome,
+                                                            rating:
+                                                                draft.rating,
+                                                            comment:
+                                                                draft.comment.trim() ||
+                                                                null,
+                                                            tags:
+                                                                draft.safetyConcern ?
+                                                                    [
+                                                                        'safety-concern',
+                                                                    ]
+                                                                :   [],
+                                                        },
+                                                    ),
+                                                );
+                                            }}
+                                        >
+                                            <h3 className='font-bold'>
+                                                Record structured outcome
+                                            </h3>
+                                            <div className='grid gap-3 sm:grid-cols-2'>
+                                                <label className='text-sm font-bold'>
+                                                    Outcome
+                                                    <select
+                                                        className='mh-input mt-1 w-full px-3 py-2'
+                                                        value={draft.outcome}
+                                                        onChange={event =>
+                                                            setOutcomes(
+                                                                current => ({
+                                                                    ...current,
+                                                                    [connection.id]:
+                                                                        {
+                                                                            ...draft,
+                                                                            outcome:
+                                                                                event
+                                                                                    .target
+                                                                                    .value as (typeof outcomeOptions)[number],
+                                                                        },
+                                                                }),
+                                                            )
+                                                        }
+                                                    >
+                                                        {outcomeOptions.map(
+                                                            value => (
+                                                                <option
+                                                                    key={value}
+                                                                    value={
+                                                                        value
+                                                                    }
+                                                                >
+                                                                    {formatCategoryLabel(
+                                                                        value,
+                                                                    )}
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </select>
+                                                </label>
+                                                <label className='text-sm font-bold'>
+                                                    Rating
+                                                    <Input
+                                                        type='number'
+                                                        min={1}
+                                                        max={5}
+                                                        value={draft.rating}
+                                                        onChange={event =>
+                                                            setOutcomes(
+                                                                current => ({
+                                                                    ...current,
+                                                                    [connection.id]:
+                                                                        {
+                                                                            ...draft,
+                                                                            rating:
+                                                                                Number(
+                                                                                    event
+                                                                                        .target
+                                                                                        .value,
+                                                                                ),
+                                                                        },
+                                                                }),
+                                                            )
+                                                        }
+                                                    />
+                                                </label>
+                                            </div>
+                                            <label className='block text-sm font-bold'>
+                                                Optional comment
+                                                <textarea
+                                                    className='mh-input mt-1 min-h-20 w-full px-3 py-2'
+                                                    maxLength={2000}
+                                                    value={draft.comment}
+                                                    onChange={event =>
+                                                        setOutcomes(
+                                                            current => ({
+                                                                ...current,
+                                                                [connection.id]:
+                                                                    {
+                                                                        ...draft,
+                                                                        comment:
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                    },
+                                                            }),
+                                                        )
+                                                    }
+                                                />
+                                            </label>
+                                            <label className='block text-sm'>
+                                                <input
+                                                    type='checkbox'
+                                                    checked={
+                                                        draft.safetyConcern
+                                                    }
+                                                    onChange={event =>
+                                                        setOutcomes(
+                                                            current => ({
+                                                                ...current,
+                                                                [connection.id]:
+                                                                    {
+                                                                        ...draft,
+                                                                        safetyConcern:
+                                                                            event
+                                                                                .target
+                                                                                .checked,
+                                                                    },
+                                                            }),
+                                                        )
+                                                    }
+                                                />{' '}
+                                                Flag as a safety concern for
+                                                structured review
+                                            </label>
+                                            <Button type='submit'>
+                                                Submit outcome
+                                            </Button>
+                                        </form>
+                                    : alreadySubmitted ?
+                                        <p className='mt-3 text-sm text-mh-textMuted'>
+                                            Your outcome feedback is recorded.
+                                        </p>
+                                    :   null}
+                                </Card>
+                            );
+                        })}
+                    </div>}
+            </Panel>
+
+            <Panel title='Activity'>
+                <label className='mb-3 block text-sm'>
+                    <input
+                        type='checkbox'
+                        checked={unreadOnly}
+                        onChange={event =>
+                            setUnreadOnly(event.target.checked)
+                        }
+                    />{' '}
+                    Show unread only
+                </label>
+                {items.length === 0 ?
+                    <p className='text-sm text-mh-textMuted'>
+                        No activity items.
+                    </p>
+                :   <div className='space-y-2'>
+                        {items.map(item => (
+                            <Card key={item.id} title={item.title}>
+                                <p className='text-sm'>{item.summary}</p>
+                                <p className='mt-1 text-xs text-mh-textMuted'>
+                                    {formatCategoryLabel(item.type)} ·{' '}
+                                    {new Date(
+                                        item.occurredAt,
+                                    ).toLocaleString()}
+                                </p>
+                                {!item.readAt ?
+                                    <Button
+                                        className='mt-3'
+                                        variant='neutral'
+                                        onClick={() =>
+                                            void finish(
+                                                'Marking item read…',
+                                                markActivityInboxReadViaApi(
+                                                    item.id,
+                                                ),
+                                            )
+                                        }
+                                    >
+                                        Mark read
+                                    </Button>
+                                :   null}
+                            </Card>
+                        ))}
+                    </div>}
+            </Panel>
+        </section>
+    );
+};
+
 const ChatRoute = ({
     currentUserDid,
     hasPermission,
@@ -6892,6 +7575,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const requiresAuthentication =
         currentRoute === '/posting' ||
         currentRoute === '/chat' ||
+        currentRoute === '/inbox' ||
         currentRoute === '/settings';
     const isDeferredFixtureRoute =
         webDataMode !== 'fixture' && deferredFixtureRoutes.has(currentRoute);
@@ -7104,6 +7788,8 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             <OrganizationsRoute did={currentUserDid} />
         : currentRoute === '/verification' ?
             <VerificationRoute did={currentUserDid} />
+        : currentRoute === '/inbox' ?
+            <CoordinationInboxRoute did={currentUserDid} />
         : currentRoute === '/chat' ?
             <ChatRoute
                 currentUserDid={currentUserDid}

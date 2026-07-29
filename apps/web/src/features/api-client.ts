@@ -2141,6 +2141,309 @@ export const initiateChatViaApi = async (
     };
 };
 
+export type CoordinationOfferStatus =
+    | 'pending'
+    | 'accepted'
+    | 'declined'
+    | 'expired'
+    | 'cancelled';
+
+export interface CoordinationOffer {
+    id: string;
+    requestUri: string;
+    direction: 'received' | 'sent';
+    note: string | null;
+    status: CoordinationOfferStatus;
+    offeredAt: string;
+    expiresAt: string;
+    decidedAt: string | null;
+    requesterDid?: string;
+    helperDid?: string;
+}
+
+export interface CoordinationConnection {
+    id: string;
+    offerId: string;
+    requestUri: string;
+    status: 'active' | 'completed' | 'cancelled' | 'expired';
+    requesterDid: string;
+    helperDid: string;
+    counterpartDid: string;
+    acceptedAt: string;
+    completedAt: string | null;
+    updatedAt: string;
+}
+
+export interface ActivityInboxItem {
+    id: string;
+    type:
+        | 'request'
+        | 'offer'
+        | 'assignment'
+        | 'verification'
+        | 'moderation'
+        | 'expiry'
+        | 'notification'
+        | 'outcome';
+    title: string;
+    summary: string;
+    actionUrl: string;
+    metadata: Record<string, unknown>;
+    occurredAt: string;
+    readAt: string | null;
+}
+
+export interface MatchCandidate {
+    candidateRef: string;
+    kind: 'volunteer' | 'resource';
+    label: string;
+    rank: number;
+    score: number;
+    approximateDistanceKm: number | null;
+    availability: string;
+    verification: 'active' | 'not-active';
+    explanations: string[];
+    assignment: 'manual-only';
+}
+
+export interface OutcomeFeedback {
+    id: string;
+    connectionId: string;
+    outcome: string;
+    rating: number;
+    comment: string | null;
+    tags: string[];
+    submittedAt: string;
+}
+
+const parseRecordPayload = <T>(
+    payload: unknown,
+    requiredKey: string,
+    message: string,
+): ApiClientResult<T> =>
+    isRecord(payload) && payload[requiredKey] !== undefined ?
+        { ok: true, data: payload as T }
+    :   invalidResponseFailure(message);
+
+export const fetchCoordinationViaApi = async (
+    signal?: AbortSignal,
+): Promise<
+    ApiClientResult<{
+        offers: CoordinationOffer[];
+        connections: CoordinationConnection[];
+    }>
+> => {
+    const result = await requestJson(
+        '/coordination/mine',
+        new URLSearchParams(),
+        signal,
+    );
+    if (!result.ok) return result;
+    if (
+        !isRecord(result.data) ||
+        !Array.isArray(result.data['offers']) ||
+        !Array.isArray(result.data['connections'])
+    ) {
+        return invalidResponseFailure(
+            'Coordination workspace response was malformed.',
+        );
+    }
+    return {
+        ok: true,
+        data: result.data as unknown as {
+            offers: CoordinationOffer[];
+            connections: CoordinationConnection[];
+        },
+    };
+};
+
+export const createCoordinationOfferViaApi = async (
+    input: { requestUri: string; note: string | null },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ offer: CoordinationOffer }>> => {
+    const result = await requestJsonPost(
+        '/coordination/offers',
+        input,
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'offer',
+                'Offer response was malformed.',
+            )
+        :   result;
+};
+
+export const decideCoordinationOfferViaApi = async (
+    input: {
+        offerId: string;
+        decision: 'accept' | 'decline' | 'cancel';
+    },
+    signal?: AbortSignal,
+): Promise<
+    ApiClientResult<{
+        offer: CoordinationOffer;
+        connection: CoordinationConnection | null;
+    }>
+> => {
+    const result = await requestJsonPost(
+        '/coordination/offer-decisions',
+        input,
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'offer',
+                'Offer decision response was malformed.',
+            )
+        :   result;
+};
+
+export const transitionCoordinationConnectionViaApi = async (
+    input: {
+        connectionId: string;
+        action: 'complete' | 'cancel';
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ connection: CoordinationConnection }>> => {
+    const result = await requestJsonPost(
+        '/coordination/connections',
+        input,
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'connection',
+                'Connection response was malformed.',
+            )
+        :   result;
+};
+
+export const fetchActivityInboxViaApi = async (
+    unreadOnly = false,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ items: ActivityInboxItem[]; unread: number }>> => {
+    const result = await requestJson(
+        '/inbox',
+        new URLSearchParams({ unread: String(unreadOnly) }),
+        signal,
+    );
+    if (!result.ok) return result;
+    if (
+        !isRecord(result.data) ||
+        !Array.isArray(result.data['items']) ||
+        typeof result.data['unread'] !== 'number'
+    ) {
+        return invalidResponseFailure('Inbox response was malformed.');
+    }
+    return {
+        ok: true,
+        data: result.data as unknown as {
+            items: ActivityInboxItem[];
+            unread: number;
+        },
+    };
+};
+
+export const markActivityInboxReadViaApi = async (
+    itemId: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ itemId: string; readAt: string }>> => {
+    const result = await requestJsonPost('/inbox/read', { itemId }, signal);
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'readAt',
+                'Inbox update response was malformed.',
+            )
+        :   result;
+};
+
+export const matchRequestViaApi = async (
+    input: {
+        requestUri: string;
+        requiredLanguages: string[];
+        accessibilityNeeds: string[];
+    },
+    signal?: AbortSignal,
+): Promise<
+    ApiClientResult<{
+        requestUri: string;
+        generatedAt: string;
+        policy: {
+            opaqueReputationScoreUsed: false;
+            automaticAssignment: false;
+            deterministicTieBreak: string;
+        };
+        candidates: MatchCandidate[];
+    }>
+> => {
+    const result = await requestJsonPost(
+        '/coordination/matches',
+        input,
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'candidates',
+                'Match response was malformed.',
+            )
+        :   result;
+};
+
+export const submitOutcomeFeedbackViaApi = async (
+    input: {
+        connectionId: string;
+        outcome:
+            | 'successful'
+            | 'partially-successful'
+            | 'unsuccessful'
+            | 'no-response'
+            | 'cancelled';
+        rating: number;
+        comment: string | null;
+        tags: Array<
+            | 'timely'
+            | 'respectful'
+            | 'clear-communication'
+            | 'needs-follow-up'
+            | 'safety-concern'
+            | 'other'
+        >;
+    },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ feedback: OutcomeFeedback }>> => {
+    const result = await requestJsonPost('/outcomes', input, signal);
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'feedback',
+                'Outcome response was malformed.',
+            )
+        :   result;
+};
+
+export const fetchMyOutcomeFeedbackViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ feedback: OutcomeFeedback[] }>> => {
+    const result = await requestJson(
+        '/outcomes/mine',
+        new URLSearchParams(),
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'feedback',
+                'Outcome history response was malformed.',
+            )
+        :   result;
+};
+
 export interface LifecycleTransitionApiInput {
     postUri: string;
     targetStatus: string;

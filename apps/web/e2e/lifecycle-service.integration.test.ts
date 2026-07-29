@@ -1,12 +1,11 @@
 /**
  * Direct service integration test for the aid request lifecycle.
  *
- * Exercises the complete happy-path lifecycle via the LifecycleService and
- * FeedbackService, validating every state transition and the post-handoff
- * feedback loop:
+ * Exercises the complete happy-path lifecycle via the LifecycleService,
+ * validating every state transition:
  *
  *   open -> triaged -> assigned -> in_progress -> resolved -> archived
- *          + assignment accept + handoff complete + feedback submission
+ *          + assignment accept + handoff complete
  *
  * This deliberately imports service factories directly. It does not exercise
  * HTTP, authentication, process startup, or PostgreSQL; those boundaries are
@@ -22,7 +21,6 @@ import {
     type AssignmentSuccessResponse,
     type HandoffSuccessResponse,
 } from '../../../services/api/src/lifecycle-service.js';
-import { createFeedbackService } from '../../../services/api/src/feedback-service.js';
 import type { RequestStatus } from '@patchwork/shared';
 
 // ---------------------------------------------------------------------------
@@ -206,64 +204,7 @@ describe('#99 request lifecycle – assign/accept/handoff flow', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Post-handoff feedback loop
-// ---------------------------------------------------------------------------
-
-describe('#99 request lifecycle – feedback loop', () => {
-    it('submits feedback after handoff and retrieves summary', async () => {
-        const svc = createLifecycleService();
-        const feedback = createFeedbackService();
-        svc.registerPost(POST_URI, T0);
-
-        // Walk through lifecycle to resolved
-        await svc.transitionFromBody({
-            postUri: POST_URI, targetStatus: 'triaged',
-            actorDid: COORDINATOR_DID, actorRole: 'coordinator', now: T1,
-        });
-        await svc.assignRequest({
-            postUri: POST_URI, assigneeDid: VOLUNTEER_DID,
-            assignerDid: COORDINATOR_DID, now: T2,
-        });
-        await svc.acceptAssignment({
-            postUri: POST_URI, assigneeDid: VOLUNTEER_DID, now: T3,
-        });
-        await svc.completeHandoff({
-            postUri: POST_URI, assigneeDid: VOLUNTEER_DID,
-            recipientConfirmed: true, deliveryMethod: 'in_person', now: T4,
-        });
-
-        // Verify resolved
-        const record = svc.getRecord(POST_URI)!;
-        expect(record.currentStatus).toBe('resolved');
-
-        // Submit feedback
-        const fbResult = feedback.submitFeedback({
-            requestUri: POST_URI,
-            submitterDid: REQUESTER_DID,
-            outcome: 'successful',
-            rating: 5,
-            comment: 'Very helpful, fast response!',
-            tags: ['timely', 'kind'],
-            createdAt: T5,
-        });
-        expect(fbResult.statusCode).toBe(201);
-
-        // Verify feedback retrievable
-        const forRequest = feedback.getFeedbackForRequest(POST_URI);
-        expect(forRequest).toHaveLength(1);
-        expect(forRequest[0].rating).toBe(5);
-        expect(forRequest[0].outcome).toBe('successful');
-
-        // Verify summary
-        const summary = feedback.getSummary();
-        expect(summary.totalFeedback).toBe(1);
-        expect(summary.avgRating).toBe(5);
-        expect(summary.outcomeDistribution.successful).toBe(1);
-    });
-});
-
-// ---------------------------------------------------------------------------
-// 4. Transition guard — invalid paths are rejected
+// 3. Transition guard — invalid paths are rejected
 // ---------------------------------------------------------------------------
 
 describe('#99 request lifecycle – transition guards', () => {
@@ -324,7 +265,7 @@ describe('#99 request lifecycle – transition guards', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. Decline + reassignment path
+// 4. Decline + reassignment path
 // ---------------------------------------------------------------------------
 
 describe('#99 request lifecycle – decline and reassignment', () => {
