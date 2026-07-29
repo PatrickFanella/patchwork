@@ -118,6 +118,43 @@ const snapLocation = (
     };
 };
 
+const stableHash = (value: string): number => {
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < value.length; index += 1) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return hash >>> 0;
+};
+
+const displaceLocation = (
+    id: string,
+    location: { lat: number; lng: number },
+    precisionMeters: number,
+): { lat: number; lng: number } => {
+    const angle =
+        (stableHash(`angle:${id}`) / 0x1_0000_0000) * Math.PI * 2;
+    const distanceRatio =
+        0.3 + (stableHash(`distance:${id}`) / 0x1_0000_0000) * 0.15;
+    const distanceMeters = precisionMeters * distanceRatio;
+    const metersPerLatDegree = 111_320;
+    const lat =
+        location.lat +
+        (Math.cos(angle) * distanceMeters) / metersPerLatDegree;
+    const lng =
+        location.lng +
+        (Math.sin(angle) * distanceMeters) /
+            Math.max(
+                1,
+                metersPerLatDegree * Math.cos((location.lat * Math.PI) / 180),
+            );
+
+    return {
+        lat: Number(lat.toFixed(6)),
+        lng: Number(lng.toFixed(6)),
+    };
+};
+
 const cardMatchesText = (card: MapAidCard, text: string): boolean => {
     const haystack = [card.title, card.summary, card.location?.areaLabel]
         .filter(Boolean)
@@ -160,11 +197,12 @@ export function toApproximateMapMarker(
 
     const precisionMeters = normalizePrecision(card.location.precisionKm);
     const snapped = snapLocation(card.location.lat, card.location.lng, precisionMeters);
+    const displaced = displaceLocation(card.id, snapped, precisionMeters);
 
     return {
         id: card.id,
-        lat: snapped.lat,
-        lng: snapped.lng,
+        lat: displaced.lat,
+        lng: displaced.lng,
         radiusMeters: precisionMeters,
         label: card.location.areaLabel ?? card.category,
         urgency: card.urgency,
@@ -206,38 +244,75 @@ export function filterMapCards(
 
 export function clusterMapCards(
     cards: readonly MapAidCard[],
-    gridSizeMeters = 1200,
+    clusterDistanceMeters = 1200,
 ): MapCluster[] {
-    const groups = new Map<string, MapAidCard[]>();
-    const metersPerLatDegree = 111_320;
-
-    for (const card of cards) {
-        const marker = toApproximateMapMarker(card);
-        if (!marker) {
-            continue;
+    const located = cards
+        .map(card => ({ card, marker: toApproximateMapMarker(card) }))
+        .filter(
+            (
+                value,
+            ): value is { card: MapAidCard; marker: ApproximateMapMarker } =>
+                Boolean(value.marker),
+        );
+    const parents = located.map((_, index) => index);
+    const find = (index: number): number => {
+        let root = index;
+        while (parents[root] !== root) {
+            root = parents[root] ?? root;
         }
+        while (parents[index] !== index) {
+            const next = parents[index] ?? index;
+            parents[index] = root;
+            index = next;
+        }
+        return root;
+    };
+    const union = (left: number, right: number): void => {
+        const leftRoot = find(left);
+        const rightRoot = find(right);
+        if (leftRoot !== rightRoot) {
+            parents[rightRoot] = leftRoot;
+        }
+    };
 
-        const latStep = gridSizeMeters / metersPerLatDegree;
-        const lngStep =
-            gridSizeMeters /
-            Math.max(1, metersPerLatDegree * Math.cos((marker.lat * Math.PI) / 180));
-
-        const latCell = Math.floor(marker.lat / latStep);
-        const lngCell = Math.floor(marker.lng / lngStep);
-        const key = `${latCell}:${lngCell}`;
-        const existing = groups.get(key) ?? [];
-        existing.push(card);
-        groups.set(key, existing);
+    for (let left = 0; left < located.length; left += 1) {
+        for (let right = left + 1; right < located.length; right += 1) {
+            const leftMarker = located[left]?.marker;
+            const rightMarker = located[right]?.marker;
+            if (
+                leftMarker &&
+                rightMarker &&
+                haversineDistanceMeters(leftMarker, rightMarker) <=
+                    clusterDistanceMeters
+            ) {
+                union(left, right);
+            }
+        }
     }
 
-    return [...groups.entries()].map(([key, groupedCards]) => {
-        const markers = groupedCards
-            .map(toApproximateMapMarker)
-            .filter((value): value is ApproximateMapMarker => Boolean(value));
+    const groups = new Map<number, typeof located>();
+    for (let index = 0; index < located.length; index += 1) {
+        const root = find(index);
+        const group = groups.get(root) ?? [];
+        const entry = located[index];
+        if (entry) {
+            group.push(entry);
+            groups.set(root, group);
+        }
+    }
 
+    return [...groups.values()].map(group => {
+        const groupedCards = group.map(entry => entry.card);
+        const markers = group.map(entry => entry.marker);
         const lat = markers.reduce((sum, marker) => sum + marker.lat, 0) / markers.length;
         const lng = markers.reduce((sum, marker) => sum + marker.lng, 0) / markers.length;
-        const radiusMeters = Math.max(...markers.map(marker => marker.radiusMeters));
+        const radiusMeters = Math.max(
+            ...markers.map(
+                marker =>
+                    haversineDistanceMeters({ lat, lng }, marker) +
+                    marker.radiusMeters,
+            ),
+        );
         const urgencyMax = Math.max(...groupedCards.map(card => card.urgency)) as
             | 1
             | 2
@@ -246,7 +321,7 @@ export function clusterMapCards(
             | 5;
 
         return {
-            id: `cluster-${key}`,
+            id: `cluster-${groupedCards.map(card => card.id).sort().join('-')}`,
             count: groupedCards.length,
             postIds: groupedCards.map(card => card.id),
             lat,
@@ -257,6 +332,17 @@ export function clusterMapCards(
             label: `${groupedCards.length} requests in approximate area`,
         } satisfies MapCluster;
     });
+}
+
+export function clusterDistanceMetersForZoom(
+    zoom: number,
+    latitude: number,
+): number {
+    const metersPerPixel =
+        (156_543.033_92 *
+            Math.max(0.05, Math.cos((latitude * Math.PI) / 180))) /
+        2 ** Math.max(0, zoom);
+    return Math.max(250, metersPerPixel * 72);
 }
 
 export function buildMapViewModel(

@@ -30,15 +30,19 @@ const leafletMock = vi.hoisted(() => {
     circle.on = circleOn;
     circle.bindTooltip = vi.fn(() => circle);
     const getContainer = vi.fn(() => ({ addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    const on = vi.fn();
+    const off = vi.fn();
     const mapState = {
         getZoom: () => 9,
         getContainer,
+        on,
+        off,
         remove,
         attributionControl: { addAttribution: vi.fn() },
         setView: vi.fn(() => mapState),
     };
     const map = vi.fn(() => mapState);
-    return { remove, circleOn, circle, map };
+    return { remove, circleOn, circle, map, on, off };
 });
 
 vi.mock('leaflet', () => ({
@@ -70,7 +74,6 @@ describe('InteractiveMap', () => {
             root.render(
                 <InteractiveMap
                     cards={[{ id: 'card-1', title: 'Need rice', summary: 'Help', category: 'food', status: 'open', urgency: 3, updatedAt: '2026-07-01T00:00:00.000Z', location: { lat: 1.3, lng: 103.8, precisionKm: 1 } }]}
-                    clusters={[]}
                     selectedPostId='card-1'
                     center={{ lat: 1.3, lng: 103.8 }}
                     onSelectPostId={onSelectPostId}
@@ -99,7 +102,6 @@ describe('InteractiveMap', () => {
             root.render(
                 <InteractiveMap
                     cards={[]}
-                    clusters={[]}
                     center={{ lat: 1.3, lng: 103.8 }}
                     onSelectPostId={vi.fn()}
                     onTilesFailed={onTilesFailed}
@@ -122,7 +124,6 @@ describe('InteractiveMap', () => {
             root.render(
                 <InteractiveMap
                     cards={[{ id: 'card-1', title: 'Need rice', summary: 'Help', category: 'food', status: 'open', urgency: 3, updatedAt: '2026-07-01T00:00:00.000Z', location: { lat: 1.3, lng: 103.8, precisionKm: 1 } }]}
-                    clusters={[]}
                     center={{ lat: 1.3, lng: 103.8 }}
                     onSelectPostId={vi.fn()}
                     onTilesFailed={vi.fn()}
@@ -150,7 +151,6 @@ describe('InteractiveMap', () => {
             root.render(
                 <InteractiveMap
                     cards={[]}
-                    clusters={[]}
                     center={{ lat: 1.3, lng: 103.8 }}
                     onSelectPostId={vi.fn()}
                     onTilesFailed={vi.fn()}
@@ -177,7 +177,6 @@ describe('InteractiveMap', () => {
                         { id: 'card-1', title: 'Need rice', summary: 'Help', category: 'food', status: 'open', urgency: 3, updatedAt: '2026-07-01T00:00:00.000Z', location: { lat: 1.3, lng: 103.8, precisionKm: 1 } },
                         { id: 'card-2', title: 'Need water', summary: 'Help', category: 'food', status: 'open', urgency: 2, updatedAt: '2026-07-01T00:00:00.000Z', location: { lat: 1.3001, lng: 103.8001, precisionKm: 1 } },
                     ]}
-                    clusters={[{ id: 'cluster-1', count: 2, postIds: ['card-1', 'card-2'], lat: 1.30005, lng: 103.80005, radiusMeters: 1500, urgencyMax: 3, status: 'open', label: '2 requests in approximate area' }]}
                     center={{ lat: 1.3, lng: 103.8 }}
                     onSelectPostId={vi.fn()}
                     onTilesFailed={vi.fn()}
@@ -192,5 +191,32 @@ describe('InteractiveMap', () => {
         expect(clusterCalls.length).toBeGreaterThan(0);
 
         await act(async () => root.unmount());
+    });
+
+    it('uses the archive data ceiling so higher zooms overzoom valid tiles', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <InteractiveMap
+                    cards={[]}
+                    center={{ lat: 1.3, lng: 103.8 }}
+                    onSelectPostId={vi.fn()}
+                    onTilesFailed={vi.fn()}
+                />,
+            );
+        });
+
+        const { leafletLayer } = await import('protomaps-leaflet');
+        expect(leafletLayer).toHaveBeenCalledWith(
+            expect.objectContaining({ maxDataZoom: 10 }),
+        );
+        await act(async () => root.unmount());
+        expect(leafletMock.off).toHaveBeenCalledWith(
+            'zoomend',
+            expect.any(Function),
+        );
     });
 });

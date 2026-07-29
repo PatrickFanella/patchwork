@@ -1,14 +1,17 @@
 import 'leaflet/dist/leaflet.css';
-import { useEffect, useMemo, useRef, useId } from 'react';
+import { useEffect, useMemo, useRef, useId, useState } from 'react';
 import L from 'leaflet';
 import { leafletLayer } from 'protomaps-leaflet';
-import type { MapAidCard, MapCluster } from '../../map-ux.js';
-import { toApproximateMapMarker } from '../../map-ux.js';
+import type { MapAidCard } from '../../map-ux.js';
+import {
+    clusterDistanceMetersForZoom,
+    clusterMapCards,
+    toApproximateMapMarker,
+} from '../../map-ux.js';
 import { resolveMapTileUrl } from '../../config.js';
 
 export interface InteractiveMapProps {
     cards: readonly MapAidCard[];
-    clusters: readonly MapCluster[];
     selectedPostId?: string;
     center: { lat: number; lng: number };
     onSelectPostId: (postId: string | undefined) => void;
@@ -17,7 +20,6 @@ export interface InteractiveMapProps {
 
 export const InteractiveMap = ({
     cards,
-    clusters,
     selectedPostId,
     center,
     onSelectPostId,
@@ -27,6 +29,7 @@ export const InteractiveMap = ({
     const mapInstance = useRef<L.Map | null>(null);
     const onTilesFailedRef = useRef(onTilesFailed);
     const onSelectPostIdRef = useRef(onSelectPostId);
+    const [zoom, setZoom] = useState(9);
     const mapId = useId();
     const instructionsId = `map-instructions-${mapId.replace(/:/g, '')}`;
 
@@ -48,6 +51,14 @@ export const InteractiveMap = ({
         () => cards.map(toApproximateMapMarker).filter((value): value is NonNullable<typeof value> => Boolean(value)),
         [cards],
     );
+    const clusters = useMemo(
+        () =>
+            clusterMapCards(
+                cards,
+                clusterDistanceMetersForZoom(zoom, center.lat),
+            ),
+        [cards, center.lat, zoom],
+    );
     const clusteredPostIds = useMemo(
         () => new Set(clusters.filter(cluster => cluster.count > 1).flatMap(cluster => cluster.postIds)),
         [clusters],
@@ -61,7 +72,14 @@ export const InteractiveMap = ({
             zoomAnimation: !prefersReducedMotion.current,
             fadeAnimation: !prefersReducedMotion.current,
         }).setView([center.lat, center.lng], 9);
-        const layer = leafletLayer({ url: tileUrl, flavor: 'light', lang: 'en' });
+        const onZoomEnd = () => setZoom(map.getZoom());
+        map.on('zoomend', onZoomEnd);
+        const layer = leafletLayer({
+            url: tileUrl,
+            flavor: 'light',
+            lang: 'en',
+            maxDataZoom: 10,
+        });
         layer.on('tileerror', (event: unknown) => {
             onTilesFailedRef.current(`Tile layer failed to load${event ? '.' : ''}`);
         });
@@ -70,6 +88,7 @@ export const InteractiveMap = ({
         map.attributionControl.addAttribution('© OpenStreetMap contributors');
         mapInstance.current = map;
         return () => {
+            map.off('zoomend', onZoomEnd);
             mapInstance.current = null;
             map.remove();
         };
@@ -94,7 +113,12 @@ export const InteractiveMap = ({
                     :   'mh-map-cluster',
             }).addTo(map);
             circle.bindTooltip(cluster.label, { permanent: false });
-            circle.on('click', () => onSelectPostIdRef.current(cluster.postIds[0] ?? ''));
+            circle.on('click', () => {
+                map.setView(
+                    [cluster.lat, cluster.lng],
+                    Math.min(18, map.getZoom() + 2),
+                );
+            });
             layers.push(circle);
         }
         for (const marker of markers) {
@@ -153,7 +177,7 @@ export const InteractiveMap = ({
                     <span>Multiple requests cluster</span>
                 </div>
                 <div className="mh-map-legend-note">
-                    Circles show approximate areas (≥1km) to protect privacy
+                    Centers are displaced within approximate areas (≥1km) for privacy
                 </div>
             </div>
         </div>

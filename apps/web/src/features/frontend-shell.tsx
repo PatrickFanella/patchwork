@@ -1116,7 +1116,6 @@ const MapRoute = ({
                 <Suspense fallback={<div className='mh-skeleton h-96 w-full' />}>
                     <LazyInteractiveMap
                         cards={mapView.filteredCards}
-                        clusters={mapView.clusters}
                         selectedPostId={selectedPostId}
                         center={discoveryState.center ?? defaultDiscoveryCenter}
                         onSelectPostId={onSelectPost}

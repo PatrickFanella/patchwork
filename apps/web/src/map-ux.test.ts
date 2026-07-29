@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { defaultDiscoveryFilterState } from './discovery-filters.js';
+import { haversineDistanceMeters } from './geo-utils.js';
 import {
     buildMapViewModel,
+    clusterDistanceMetersForZoom,
     clusterMapCards,
     filterMapCards,
     openMapDetailDrawer,
@@ -21,7 +23,7 @@ const buildCard = (overrides: Partial<MapAidCard>): MapAidCard => ({
 });
 
 describe('map ux', () => {
-    it('clusters nearby cards in a single grid cell', () => {
+    it('clusters nearby cards without grid-boundary gaps', () => {
         const cards = [
             buildCard({
                 id: 'near-1',
@@ -38,6 +40,33 @@ describe('map ux', () => {
         expect(clusters).toHaveLength(1);
         expect(clusters[0]?.count).toBe(2);
         expect(clusters[0]?.status).toBe('open');
+    });
+
+    it('combines and splits circles as zoom changes', () => {
+        const cards = [
+            buildCard({
+                id: 'zoom-1',
+                location: { lat: 40.7, lng: -74, precisionKm: 1 },
+            }),
+            buildCard({
+                id: 'zoom-2',
+                location: { lat: 40.75, lng: -74, precisionKm: 1 },
+            }),
+        ];
+
+        const lowZoomClusters = clusterMapCards(
+            cards,
+            clusterDistanceMetersForZoom(8, 40.7),
+        );
+        const highZoomClusters = clusterMapCards(
+            cards,
+            clusterDistanceMetersForZoom(15, 40.7),
+        );
+
+        expect(lowZoomClusters).toHaveLength(1);
+        expect(lowZoomClusters[0]?.count).toBe(2);
+        expect(highZoomClusters).toHaveLength(2);
+        expect(highZoomClusters.every(cluster => cluster.count === 1)).toBe(true);
     });
 
     it('filters cards by category and radius interactions', () => {
@@ -85,6 +114,45 @@ describe('map ux', () => {
 
         expect(marker?.radiusMeters).toBeGreaterThanOrEqual(1000);
         expect(marker?.label).toBe('Downtown West');
+        expect(
+            Math.abs((marker?.lat ?? 0) - 1.30019) +
+                Math.abs((marker?.lng ?? 0) - 103.80019),
+        ).toBeGreaterThan(0.001);
+    });
+
+    it('uses a stable per-request displacement instead of exposing the area center', () => {
+        const location = { lat: 0, lng: 0, precisionKm: 1 };
+        const first = toApproximateMapMarker(
+            buildCard({ id: 'private-a', location }),
+        );
+        const repeat = toApproximateMapMarker(
+            buildCard({ id: 'private-a', location }),
+        );
+        const different = toApproximateMapMarker(
+            buildCard({ id: 'private-b', location }),
+        );
+
+        expect(first).toEqual(repeat);
+        expect({ lat: first?.lat, lng: first?.lng }).not.toEqual({
+            lat: different?.lat,
+            lng: different?.lng,
+        });
+        expect({ lat: first?.lat, lng: first?.lng }).not.toEqual({
+            lat: location.lat,
+            lng: location.lng,
+        });
+        expect(
+            haversineDistanceMeters(location, {
+                lat: first?.lat ?? 0,
+                lng: first?.lng ?? 0,
+            }),
+        ).toBeGreaterThanOrEqual(299);
+        expect(
+            haversineDistanceMeters(location, {
+                lat: first?.lat ?? 0,
+                lng: first?.lng ?? 0,
+            }),
+        ).toBeLessThanOrEqual(451);
     });
 
     it('does not fabricate location for missing geography', () => {

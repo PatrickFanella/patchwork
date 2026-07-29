@@ -8,6 +8,16 @@
 
 **Execution status (2026-07-20):** Complete and deployed. Runtime revision `796795b57e13ccf9a4955851c9239cb00f426db0` is healthy. The deployed archive is `us.9a7697125792ba1aa267fca4fa8751172ddd9347e00e9462beb727edf9bbde82.pmtiles`, capped at zoom 10. The current artifact was generated before the later territory context boxes were added to the source region and therefore covers the CONUS/Alaska/Hawaii pilot context; regenerate it before claiming the additional territory context documented for future archives.
 
+**Follow-up verification (2026-07-29):** Public circles now use a stable
+per-request display displacement after the existing minimum-1km quantization,
+so the visible center is not the supplied approximate coordinate. Distance-based
+clusters recompute at each zoom and split as the display scale narrows. The
+renderer explicitly uses the archive's zoom-10 data ceiling, allowing Leaflet
+zooms 11–18 to overzoom valid data instead of requesting missing zoom levels.
+Focused map tests and the full `npm run check` gate pass. This display hardening
+does not alter the fixed server-side boundary: exact personal coordinates remain
+absent from public map data and durable Patchwork surfaces.
+
 **Fixed decisions:**
 
 - US coverage only.
