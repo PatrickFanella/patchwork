@@ -20,6 +20,9 @@ import type {
     Notification,
     NotificationFilter,
     NotificationType,
+    ModerationAuditRecord,
+    ModerationPolicyAction,
+    ModerationQueueItem,
     SettingsChangeAudit,
     UserSettings,
 } from '@patchwork/shared';
@@ -67,6 +70,26 @@ export interface AccountOnboardingStatus {
 export interface SafetyMutationResult {
     created: boolean;
 }
+
+export interface MaintenanceState {
+    active: boolean;
+    reasonCodes: string[];
+    publicMessage: string;
+    activatedAt: string | null;
+    resumedAt: string | null;
+    version: number;
+    updatedAt: string;
+    environmentOverride: boolean;
+}
+
+export type MaintenanceReasonCode =
+    | 'privacy'
+    | 'authorization'
+    | 'abuse'
+    | 'integrity'
+    | 'moderation-backlog'
+    | 'monitoring'
+    | 'backup';
 
 export interface ChatInitiationApiResult {
     conversationUri: string;
@@ -3230,4 +3253,123 @@ export const createAidPostViaApi = async (
             }),
         },
     };
+};
+
+const readEnvelopeField = <T>(
+    payload: unknown,
+    field: string,
+    invalidMessage: string,
+): ApiClientResult<T> => {
+    if (!isRecord(payload) || payload[field] === undefined) {
+        return invalidResponseFailure(invalidMessage);
+    }
+    return { ok: true, data: payload[field] as T };
+};
+
+export const fetchPublicMaintenanceStatusViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<MaintenanceState>> => {
+    const result = await requestJson('/status', new URLSearchParams(), signal);
+    return result.ok ?
+            readEnvelopeField(
+                result.data,
+                'maintenance',
+                'Maintenance status response was malformed.',
+            )
+        :   result;
+};
+
+export const fetchModeratorMaintenanceViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<MaintenanceState>> => {
+    const result = await requestJson(
+        '/maintenance',
+        new URLSearchParams(),
+        signal,
+    );
+    return result.ok ?
+            readEnvelopeField(
+                result.data,
+                'maintenance',
+                'Moderator maintenance response was malformed.',
+            )
+        :   result;
+};
+
+export const declareMaintenanceViaApi = async (input: {
+    reasonCodes: MaintenanceReasonCode[];
+    publicMessage: string;
+}): Promise<ApiClientResult<MaintenanceState>> => {
+    const result = await requestJsonPost('/maintenance/declare', input);
+    return result.ok ?
+            readEnvelopeField(
+                result.data,
+                'maintenance',
+                'Maintenance declaration response was malformed.',
+            )
+        :   result;
+};
+
+export const resumeMaintenanceViaApi = async (): Promise<
+    ApiClientResult<MaintenanceState>
+> => {
+    const result = await requestJsonPost('/maintenance/resume', {});
+    return result.ok ?
+            readEnvelopeField(
+                result.data,
+                'maintenance',
+                'Maintenance resume response was malformed.',
+            )
+        :   result;
+};
+
+export const fetchModerationQueueViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<ModerationQueueItem[]>> => {
+    const result = await requestJson(
+        '/moderation/queue',
+        new URLSearchParams(),
+        signal,
+    );
+    if (!result.ok) return result;
+    if (!isRecord(result.data) || !Array.isArray(result.data['results'])) {
+        return invalidResponseFailure('Moderation queue response was malformed.');
+    }
+    return {
+        ok: true,
+        data: result.data['results'] as ModerationQueueItem[],
+    };
+};
+
+export const fetchModerationAuditViaApi = async (
+    subjectUri: string,
+): Promise<ApiClientResult<ModerationAuditRecord[]>> => {
+    const result = await requestJsonPost('/moderation/audit', { subjectUri });
+    if (!result.ok) return result;
+    if (!isRecord(result.data) || !Array.isArray(result.data['results'])) {
+        return invalidResponseFailure('Moderation audit response was malformed.');
+    }
+    return {
+        ok: true,
+        data: result.data['results'] as ModerationAuditRecord[],
+    };
+};
+
+export const applyModerationPolicyViaApi = async (input: {
+    subjectUri: string;
+    action: ModerationPolicyAction;
+    reason: string;
+    occurredAt?: string;
+}): Promise<ApiClientResult<ModerationQueueItem>> => {
+    const result = await requestJsonPost('/moderation/policy/apply', {
+        ...input,
+        occurredAt: input.occurredAt ?? new Date().toISOString(),
+    });
+    return result.ok ?
+            readEnvelopeField(
+                result.data,
+                'item',
+                'Moderation action response was malformed.',
+            )
+        :   result;
 };

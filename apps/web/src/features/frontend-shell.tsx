@@ -96,6 +96,8 @@ import {
     type CoordinationOffer,
     type MatchCandidate,
     type NotificationChannelState,
+    type MaintenanceReasonCode,
+    type MaintenanceState,
     type OutcomeFeedback,
     type PrivateAttachment,
     type VerificationApplication,
@@ -131,7 +133,11 @@ import {
     fetchOrganizationsViaApi,
     fetchMyOutcomeFeedbackViaApi,
     fetchNotificationChannelsViaApi,
+    fetchModeratorMaintenanceViaApi,
+    fetchModerationAuditViaApi,
+    fetchModerationQueueViaApi,
     fetchNotificationsViaApi,
+    fetchPublicMaintenanceStatusViaApi,
     fetchOrganizationStewardshipsViaApi,
     fetchPrivateAttachmentsViaApi,
     fetchExactAddressReviewQueueViaApi,
@@ -178,6 +184,9 @@ import {
     updateOrganizationMemberRoleViaApi,
     updateAtDirectoryResourceViaApi,
     updateAtVolunteerProfileViaApi,
+    applyModerationPolicyViaApi,
+    declareMaintenanceViaApi,
+    resumeMaintenanceViaApi,
 } from './api-client';
 import { ExactLocationExchange } from './exact-location-exchange';
 import {
@@ -197,6 +206,9 @@ import {
     defaultAccountPreferences,
     type Notification as DurableNotification,
     type NotificationFilter,
+    type ModerationAuditRecord,
+    type ModerationPolicyAction,
+    type ModerationQueueItem,
     requiredPolicyDocuments,
     type AccountPreferences,
     type UserSettings,
@@ -244,7 +256,6 @@ const appRoutes = [
 
 const deferredFixtureRoutes = new Set<AppRoute>([
     '/chat',
-    '/moderation',
     '/scheduling',
     '/feedback',
     '/groups',
@@ -293,6 +304,7 @@ const accountRoutes: readonly AppRoute[] = ['/volunteer', '/chat', '/settings'];
 const productionAccountRoutes: readonly AppRoute[] = [
     '/inbox',
     '/notifications',
+    '/moderation',
     '/settings',
 ];
 
@@ -7987,6 +7999,453 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
     );
 };
 
+const maintenanceReasonOptions: readonly {
+    code: MaintenanceReasonCode;
+    label: string;
+}[] = [
+    { code: 'privacy', label: 'Privacy boundary failure' },
+    { code: 'authorization', label: 'Authorization failure' },
+    { code: 'abuse', label: 'Active abuse incident' },
+    { code: 'integrity', label: 'Data integrity uncertainty' },
+    { code: 'moderation-backlog', label: 'Unsafe moderation backlog' },
+    { code: 'monitoring', label: 'Monitoring coverage failure' },
+    { code: 'backup', label: 'Backup or restore failure' },
+];
+
+const ModeratorConsoleRoute = ({
+    onMaintenanceChanged,
+}: {
+    onMaintenanceChanged(state: MaintenanceState): void;
+}) => {
+    const [items, setItems] = useState<ModerationQueueItem[]>([]);
+    const [audit, setAudit] = useState<ModerationAuditRecord[]>([]);
+    const [maintenance, setMaintenance] = useState<MaintenanceState>();
+    const [selectedUri, setSelectedUri] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [priorityFilter, setPriorityFilter] = useState('');
+    const [appealFilter, setAppealFilter] = useState('');
+    const [typeFilter, setTypeFilter] = useState('');
+    const [reason, setReason] = useState('Moderator safety review');
+    const [maintenanceReasons, setMaintenanceReasons] = useState<
+        MaintenanceReasonCode[]
+    >(['integrity']);
+    const [publicMessage, setPublicMessage] = useState(
+        'New submissions are temporarily paused while safety checks run.',
+    );
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState<string>();
+    const [accessDenied, setAccessDenied] = useState(false);
+    const [notice, setNotice] = useState<string>();
+
+    const load = useCallback(async (signal?: AbortSignal) => {
+        setIsLoading(true);
+        setError(undefined);
+        const [queueResult, maintenanceResult] = await Promise.all([
+            fetchModerationQueueViaApi(signal),
+            fetchModeratorMaintenanceViaApi(signal),
+        ]);
+        if (signal?.aborted) return;
+        const denied =
+            (!queueResult.ok &&
+                (queueResult.code === 'AUTHORIZATION_DENIED' ||
+                    queueResult.code === 'AUTHENTICATION_REQUIRED')) ||
+            (!maintenanceResult.ok &&
+                (maintenanceResult.code === 'AUTHORIZATION_DENIED' ||
+                    maintenanceResult.code === 'AUTHENTICATION_REQUIRED'));
+        if (denied) {
+            setAccessDenied(true);
+            setIsLoading(false);
+            return;
+        }
+        if (!queueResult.ok || !maintenanceResult.ok) {
+            setError(
+                !queueResult.ok ? queueResult.error
+                : !maintenanceResult.ok ? maintenanceResult.error
+                : 'Moderator console is unavailable.',
+            );
+            setIsLoading(false);
+            return;
+        }
+        setAccessDenied(false);
+        setItems(queueResult.data);
+        setMaintenance(maintenanceResult.data);
+        onMaintenanceChanged(maintenanceResult.data);
+        setSelectedUri(current =>
+            queueResult.data.some(item => item.subjectUri === current) ?
+                current
+            :   queueResult.data[0]?.subjectUri ?? '',
+        );
+        setIsLoading(false);
+    }, [onMaintenanceChanged]);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        void load(controller.signal);
+        return () => controller.abort();
+    }, [load]);
+
+    const selected = items.find(item => item.subjectUri === selectedUri);
+    const filteredItems = items.filter(item =>
+        (!statusFilter || item.queueStatus === statusFilter) &&
+        (!priorityFilter || (item.priority ?? 'normal') === priorityFilter) &&
+        (!appealFilter || item.appealState === appealFilter) &&
+        (!typeFilter || item.subjectType === typeFilter),
+    );
+
+    const loadAudit = async (subjectUri: string) => {
+        setSelectedUri(subjectUri);
+        const result = await fetchModerationAuditViaApi(subjectUri);
+        if (!result.ok) {
+            setError(result.error);
+            return;
+        }
+        setAudit(result.data);
+    };
+
+    const applyAction = async (action: ModerationPolicyAction) => {
+        if (!selected || reason.trim().length < 1) return;
+        setIsSaving(true);
+        setError(undefined);
+        const result = await applyModerationPolicyViaApi({
+            subjectUri: selected.subjectUri,
+            action,
+            reason: reason.trim(),
+        });
+        setIsSaving(false);
+        if (!result.ok) {
+            setError(result.error);
+            return;
+        }
+        setItems(current =>
+            current.map(item =>
+                item.subjectUri === result.data.subjectUri ? result.data : item,
+            ),
+        );
+        setNotice(`Action recorded: ${action}.`);
+        await loadAudit(result.data.subjectUri);
+    };
+
+    const declareMaintenance = async () => {
+        if (maintenanceReasons.length === 0) {
+            setError('Select at least one declared shutdown reason.');
+            return;
+        }
+        setIsSaving(true);
+        const result = await declareMaintenanceViaApi({
+            reasonCodes: maintenanceReasons,
+            publicMessage,
+        });
+        setIsSaving(false);
+        if (!result.ok) {
+            setError(result.error);
+            return;
+        }
+        setMaintenance(result.data);
+        onMaintenanceChanged(result.data);
+        setNotice('New submissions and exact-location exchange are shut down.');
+    };
+
+    const resume = async () => {
+        setIsSaving(true);
+        const result = await resumeMaintenanceViaApi();
+        setIsSaving(false);
+        if (!result.ok) {
+            setError(result.error);
+            return;
+        }
+        setMaintenance(result.data);
+        onMaintenanceChanged(result.data);
+        setNotice('Audited moderator resume completed.');
+    };
+
+    if (accessDenied) {
+        return (
+            <Panel title='Moderator access required'>
+                <p role='alert'>
+                    This console requires the durable content-moderation capability.
+                </p>
+            </Panel>
+        );
+    }
+
+    return (
+        <div className='space-y-5'>
+            <Panel title='Moderator safety console'>
+                <p className='text-sm text-mh-textMuted'>
+                    Review only evidence-safe previews. Exact addresses, private
+                    attachments, contact details, and raw sensitive submissions
+                    are intentionally excluded from this queue.
+                </p>
+                <p className='mt-2 text-sm font-bold'>
+                    We aim to review reports within two business days, but this is
+                    a best-effort target and not a guaranteed service level.
+                </p>
+                <p className='mt-2 text-sm text-mh-textMuted'>
+                    Urgent safety flags notify configured moderator channels.
+                    Patchwork remains operationally NO-GO for emergency response,
+                    guaranteed fulfillment, or handling emergency dispatch.
+                </p>
+                <div className='mt-3 flex flex-wrap gap-3 text-sm'>
+                    <a className='font-bold underline' href='/verification'>
+                        Verification and appeal controls
+                    </a>
+                    <a className='font-bold underline' href='/verification'>
+                        Exact-address and private-attachment controls
+                    </a>
+                </div>
+            </Panel>
+
+            {error ?
+                <p role='alert' className='border-2 border-mh-danger p-3 font-bold'>
+                    {error}
+                </p>
+            : null}
+            {notice ?
+                <p role='status' className='border-2 border-mh-border p-3 font-bold'>
+                    {notice}
+                </p>
+            : null}
+
+            <Panel title='New-submission shutdown'>
+                <p className='text-sm text-mh-textMuted'>
+                    An active declaration blocks all new submissions and exact
+                    location exchange while public reads and status stay available.
+                    Resume is capability-gated and written to the audit log.
+                </p>
+                <p className='mt-2 font-bold'>
+                    Current state: {maintenance?.active ? 'READ-ONLY' : 'Operating'}
+                    {maintenance?.environmentOverride ? ' (environment override)' : ''}
+                </p>
+                <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                    {maintenanceReasonOptions.map(option => (
+                        <label key={option.code} className='flex items-center gap-2 text-sm'>
+                            <input
+                                type='checkbox'
+                                checked={maintenanceReasons.includes(option.code)}
+                                onChange={event =>
+                                    setMaintenanceReasons(current =>
+                                        event.target.checked ?
+                                            [...current, option.code]
+                                        :   current.filter(code => code !== option.code),
+                                    )
+                                }
+                            />
+                            {option.label}
+                        </label>
+                    ))}
+                </div>
+                <label className='mt-3 block text-sm font-bold'>
+                    Public status message
+                    <Input
+                        value={publicMessage}
+                        maxLength={300}
+                        onChange={event => setPublicMessage(event.target.value)}
+                    />
+                </label>
+                <div className='mt-3 flex flex-wrap gap-2'>
+                    <Button
+                        variant='neutral'
+                        disabled={isSaving || maintenance?.active}
+                        onClick={() => void declareMaintenance()}
+                    >
+                        Shut down new submissions
+                    </Button>
+                    <Button
+                        variant='secondary'
+                        disabled={
+                            isSaving ||
+                            !maintenance?.active ||
+                            maintenance.environmentOverride
+                        }
+                        onClick={() => void resume()}
+                    >
+                        Resume after verification
+                    </Button>
+                </div>
+            </Panel>
+
+            <Panel title='Safety review queue'>
+                <div className='grid gap-2 sm:grid-cols-4'>
+                    <select
+                        aria-label='Filter by status'
+                        value={statusFilter}
+                        onChange={event => setStatusFilter(event.target.value)}
+                    >
+                        <option value=''>All statuses</option>
+                        <option value='queued'>Queued</option>
+                        <option value='processing'>Processing</option>
+                        <option value='resolved'>Resolved</option>
+                    </select>
+                    <select
+                        aria-label='Filter by priority'
+                        value={priorityFilter}
+                        onChange={event => setPriorityFilter(event.target.value)}
+                    >
+                        <option value=''>All priorities</option>
+                        <option value='urgent'>Urgent</option>
+                        <option value='high'>High</option>
+                        <option value='normal'>Normal</option>
+                        <option value='low'>Low</option>
+                    </select>
+                    <select
+                        aria-label='Filter by appeal'
+                        value={appealFilter}
+                        onChange={event => setAppealFilter(event.target.value)}
+                    >
+                        <option value=''>All appeal states</option>
+                        <option value='none'>No appeal</option>
+                        <option value='pending'>Pending</option>
+                        <option value='under-review'>Under review</option>
+                        <option value='upheld'>Upheld</option>
+                        <option value='rejected'>Rejected</option>
+                    </select>
+                    <select
+                        aria-label='Filter by content type'
+                        value={typeFilter}
+                        onChange={event => setTypeFilter(event.target.value)}
+                    >
+                        <option value=''>All content types</option>
+                        <option value='aid-post'>Aid post</option>
+                        <option value='directory-resource'>Directory resource</option>
+                        <option value='other'>Other</option>
+                    </select>
+                </div>
+                {isLoading ?
+                    <p className='mt-4' role='status'>Loading moderator state…</p>
+                : filteredItems.length === 0 ?
+                    <p className='mt-4'>No queue items match these filters.</p>
+                :   <div className='mt-4 grid gap-3 lg:grid-cols-2'>
+                        {filteredItems.map(item => (
+                            <button
+                                type='button'
+                                key={item.subjectUri}
+                                onClick={() => void loadAudit(item.subjectUri)}
+                                className='border-2 border-mh-border p-3 text-left'
+                                aria-pressed={selectedUri === item.subjectUri}
+                            >
+                                <span className='font-bold'>
+                                    {item.safePreview?.['label'] ?? 'Submitted content'}
+                                </span>
+                                <span className='mt-1 block text-xs uppercase'>
+                                    {item.priority ?? 'normal'} · {item.subjectType} ·
+                                    {' '}{item.queueStatus}
+                                </span>
+                                <span className='mt-2 block text-sm'>
+                                    {(item.reasonCodes ?? [item.latestReason]).join(', ')}
+                                </span>
+                                <span className='mt-2 block break-all text-xs text-mh-textMuted'>
+                                    {item.subjectUri}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                }
+            </Panel>
+
+            {selected ?
+                <Panel title='Selected case actions'>
+                    <dl className='grid gap-2 text-sm sm:grid-cols-2'>
+                        {Object.entries(selected.safePreview ?? {}).map(([key, value]) => (
+                            <div key={key}>
+                                <dt className='font-bold'>{key}</dt>
+                                <dd>{value}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                    <label className='mt-3 block text-sm font-bold'>
+                        Required audit reason
+                        <Input
+                            value={reason}
+                            onChange={event => setReason(event.target.value)}
+                        />
+                    </label>
+                    <div className='mt-3 flex flex-wrap gap-2'>
+                        {selected.visibility !== 'suspended' ?
+                            <Button
+                                variant='neutral'
+                                disabled={isSaving}
+                                onClick={() => void applyAction('suspend-visibility')}
+                            >
+                                Quarantine now
+                            </Button>
+                        : null}
+                        {selected.visibility !== 'delisted' ?
+                            <Button
+                                variant='neutral'
+                                disabled={isSaving}
+                                onClick={() => void applyAction('delist')}
+                            >
+                                Delist
+                            </Button>
+                        : null}
+                        {selected.visibility !== 'visible' ?
+                            <Button
+                                variant='secondary'
+                                disabled={isSaving}
+                                onClick={() => void applyAction('restore-visibility')}
+                            >
+                                Restore visibility
+                            </Button>
+                        : null}
+                        {selected.appealState === 'none' ?
+                            <Button
+                                variant='secondary'
+                                disabled={isSaving}
+                                onClick={() => void applyAction('open-appeal')}
+                            >
+                                Open appeal
+                            </Button>
+                        : selected.appealState === 'pending' ?
+                            <Button
+                                variant='secondary'
+                                disabled={isSaving}
+                                onClick={() => void applyAction('start-appeal-review')}
+                            >
+                                Start appeal review
+                            </Button>
+                        : selected.appealState === 'under-review' ?
+                            <>
+                                <Button
+                                    variant='secondary'
+                                    disabled={isSaving}
+                                    onClick={() => void applyAction('resolve-appeal-upheld')}
+                                >
+                                    Uphold appeal
+                                </Button>
+                                <Button
+                                    variant='neutral'
+                                    disabled={isSaving}
+                                    onClick={() => void applyAction('resolve-appeal-rejected')}
+                                >
+                                    Reject appeal
+                                </Button>
+                            </>
+                        : null}
+                    </div>
+                    <h3 className='mt-5 font-bold'>Durable audit trail</h3>
+                    {audit.length === 0 ?
+                        <p className='text-sm text-mh-textMuted'>
+                            Select this case to load its audit trail.
+                        </p>
+                    :   <ol className='mt-2 space-y-2'>
+                            {audit.map(entry => (
+                                <li key={entry.actionId} className='border-l-4 border-mh-border pl-3 text-sm'>
+                                    <strong>{entry.action}</strong> by {entry.actorDid}
+                                    <span className='block'>{entry.reason}</span>
+                                    <time dateTime={entry.occurredAt}>
+                                        {new Date(entry.occurredAt).toLocaleString()}
+                                    </time>
+                                </li>
+                            ))}
+                        </ol>
+                    }
+                </Panel>
+            : null}
+        </div>
+    );
+};
+
 export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const auth = useAuth();
     const mainContentRef = useRef<HTMLDivElement>(null);
@@ -8031,8 +8490,21 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         boolean | undefined
     >(webDataMode === 'fixture' ? false : undefined);
     const [onboardingError, setOnboardingError] = useState<string>();
+    const [maintenanceStatus, setMaintenanceStatus] =
+        useState<MaintenanceState>();
 
     const currentUserDid = auth.session?.did ?? '';
+
+    useEffect(() => {
+        if (webDataMode === 'fixture') return;
+        const controller = new AbortController();
+        void fetchPublicMaintenanceStatusViaApi(controller.signal).then(result => {
+            if (!controller.signal.aborted && result.ok) {
+                setMaintenanceStatus(result.data);
+            }
+        });
+        return () => controller.abort();
+    }, []);
 
     useEffect(() => {
         if (webDataMode === 'fixture' || !auth.session) {
@@ -8435,6 +8907,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         currentRoute === '/chat' ||
         currentRoute === '/inbox' ||
         currentRoute === '/notifications' ||
+        currentRoute === '/moderation' ||
         currentRoute === '/settings';
     const isDeferredFixtureRoute =
         webDataMode !== 'fixture' && deferredFixtureRoutes.has(currentRoute);
@@ -8495,6 +8968,15 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                     setOnboardingError(undefined);
                 }}
             />
+        : maintenanceStatus?.active && currentRoute === '/posting' ?
+            <Panel title='New submissions are temporarily paused'>
+                <p role='alert'>{maintenanceStatus.publicMessage}</p>
+                <p className='mt-2 text-sm text-mh-textMuted'>
+                    Existing public information remains readable. Exact-location
+                    exchange and all other new-submission APIs are also disabled
+                    until an audited moderator resume.
+                </p>
+            </Panel>
         : currentRoute === '/map' ?
             <MapRoute
                 discoveryState={discoveryState}
@@ -8651,6 +9133,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             <CoordinationInboxRoute did={currentUserDid} />
         : currentRoute === '/notifications' ?
             <NotificationCenterRoute />
+        : currentRoute === '/moderation' ?
+            <ModeratorConsoleRoute
+                onMaintenanceChanged={setMaintenanceStatus}
+            />
         : currentRoute === '/chat' ?
             <ChatRoute
                 currentUserDid={currentUserDid}
@@ -8786,6 +9272,18 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                         </div>
                     </div>
                 </nav>
+
+                {maintenanceStatus?.active ?
+                    <div
+                        role='alert'
+                        className='mb-4 border-4 border-mh-danger bg-mh-surfaceElev p-4'
+                    >
+                        <strong>Patchwork is temporarily read-only.</strong>{' '}
+                        {maintenanceStatus.publicMessage} New submissions and
+                        exact-location exchange are disabled; public reads and
+                        service status remain available.
+                    </div>
+                : null}
 
                 <div
                     id='main-content'

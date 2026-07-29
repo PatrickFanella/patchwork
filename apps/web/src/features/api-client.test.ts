@@ -21,6 +21,10 @@ import {
     fetchFeedRecordsFromApi,
     fetchMyOrganizationsViaApi,
     fetchNotificationChannelsViaApi,
+    fetchModeratorMaintenanceViaApi,
+    fetchModerationAuditViaApi,
+    fetchModerationQueueViaApi,
+    fetchPublicMaintenanceStatusViaApi,
     fetchNotificationsViaApi,
     fetchOrganizationsViaApi,
     fetchPrivateAttachmentsViaApi,
@@ -45,6 +49,9 @@ import {
     updateAccountPreferencesViaApi,
     updateAtDirectoryResourceViaApi,
     updateAtVolunteerProfileViaApi,
+    applyModerationPolicyViaApi,
+    declareMaintenanceViaApi,
+    resumeMaintenanceViaApi,
 } from './api-client.js';
 import {
     CURRENT_POLICY_VERSION,
@@ -117,6 +124,90 @@ describe('api client', () => {
         expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(
             'did:plc:viewer',
         );
+    });
+
+    it('uses authenticated, idempotent moderator commands without accepting browser actor identity', async () => {
+        const queueItem = {
+            queueId: 'queue-one',
+            subjectUri:
+                'at://did:plc:alice/app.patchwork.aid.post/one',
+            subjectType: 'aid-post',
+            reasons: ['sensitive-data'],
+            latestReason: 'SENSITIVE_DATA_REVIEW',
+            reportCount: 1,
+            queueStatus: 'queued',
+            visibility: 'suspended',
+            appealState: 'none',
+            context: {},
+            priority: 'high',
+            reasonCodes: ['sensitive-data'],
+            safePreview: { label: 'Meal delivery' },
+            automatedDecision: 'quarantined',
+            createdAt: '2026-07-28T12:00:00.000Z',
+            requestedAt: '2026-07-28T12:00:00.000Z',
+            updatedAt: '2026-07-28T12:00:00.000Z',
+        };
+        const maintenance = {
+            active: false,
+            reasonCodes: [],
+            publicMessage: 'Patchwork is operating normally.',
+            activatedAt: null,
+            resumedAt: null,
+            version: 0,
+            updatedAt: '2026-07-28T12:00:00.000Z',
+            environmentOverride: false,
+        };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(createJsonResponse({ results: [queueItem] }))
+            .mockResolvedValueOnce(createJsonResponse({ results: [] }))
+            .mockResolvedValueOnce(createJsonResponse({ item: queueItem }))
+            .mockResolvedValueOnce(createJsonResponse({ maintenance }))
+            .mockResolvedValueOnce(createJsonResponse({ maintenance }))
+            .mockResolvedValueOnce(createJsonResponse({
+                maintenance: { ...maintenance, active: true },
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ maintenance }));
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await expect(fetchModerationQueueViaApi()).resolves.toMatchObject({
+            ok: true,
+            data: [{ safePreview: { label: 'Meal delivery' } }],
+        });
+        await expect(
+            fetchModerationAuditViaApi(queueItem.subjectUri),
+        ).resolves.toMatchObject({ ok: true, data: [] });
+        await expect(applyModerationPolicyViaApi({
+            subjectUri: queueItem.subjectUri,
+            action: 'suspend-visibility',
+            reason: 'Safety review',
+        })).resolves.toMatchObject({ ok: true });
+        await expect(fetchPublicMaintenanceStatusViaApi()).resolves.toMatchObject({
+            ok: true,
+            data: { active: false },
+        });
+        await expect(fetchModeratorMaintenanceViaApi()).resolves.toMatchObject({
+            ok: true,
+        });
+        await expect(declareMaintenanceViaApi({
+            reasonCodes: ['integrity'],
+            publicMessage: 'Submissions are paused.',
+        })).resolves.toMatchObject({ ok: true, data: { active: true } });
+        await expect(resumeMaintenanceViaApi()).resolves.toMatchObject({
+            ok: true,
+            data: { active: false },
+        });
+
+        const calls = fetchMock.mock.calls as unknown as Array<
+            [string, RequestInit | undefined]
+        >;
+        for (const [, init] of calls.filter(([, init]) => init?.method === 'POST')) {
+            expect(init?.credentials).toBe('include');
+            expect(init?.headers).toMatchObject({
+                'idempotency-key': expect.any(String),
+            });
+            expect(String(init?.body)).not.toContain('actorDid');
+        }
     });
 
     it('deactivates the authenticated account without sending browser identity', async () => {
