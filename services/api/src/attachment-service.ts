@@ -684,7 +684,7 @@ export class AttachmentService {
                              SELECT 1 FROM request_workflows w
                              WHERE w.post_uri = a.subject_ref
                                AND w.current_status NOT IN (
-                                   'closed', 'expired', 'cancelled'
+                                   'resolved', 'archived'
                                )
                          )
                     )
@@ -1043,7 +1043,7 @@ export class AttachmentService {
                 `SELECT 1 FROM request_workflows
                  WHERE post_uri = $1 AND requester_did = $2
                    AND current_status NOT IN (
-                       'closed', 'expired', 'cancelled'
+                       'resolved', 'archived'
                    )`,
                 [subjectRef, actorDid],
             );

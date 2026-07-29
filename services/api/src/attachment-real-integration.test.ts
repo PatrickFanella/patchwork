@@ -104,7 +104,17 @@ describeReal('real MinIO and ClamAV attachment boundary', () => {
         await expect(service.runScanSweep()).resolves.toMatchObject({
             clean: 1,
         });
-        const access = await service.issueAccess(
+        const restarted = new AttachmentService(
+            pool,
+            objects,
+            new ClamdMalwareScanner(
+                clamdHost ?? '127.0.0.1',
+                clamdPort,
+            ),
+            'real-integration-signing-key-that-is-long-enough',
+            'https://patchwork.test/api',
+        );
+        const access = await restarted.issueAccess(
             ownerDid,
             { attachmentId: cleanId },
             false,
@@ -135,17 +145,23 @@ describeReal('real MinIO and ClamAV attachment boundary', () => {
             code: 'ATTACHMENT_NOT_CLEAN',
         });
 
-        await service.review('did:plc:real-attachment-moderator', {
-            attachmentId: cleanId,
-            action: 'delete',
-            reason: 'Integration cleanup.',
-        });
+        await pool.query(
+            `UPDATE private_attachments
+             SET deleted_reason = 'account-deactivated'
+             WHERE owner_did = $1 AND attachment_id = $2`,
+            [ownerDid, cleanId],
+        );
+        await pool.query(
+            `DELETE FROM private_attachments
+             WHERE owner_did = $1 AND attachment_id = $2`,
+            [ownerDid, cleanId],
+        );
         await service.review('did:plc:real-attachment-moderator', {
             attachmentId: infectedId,
             action: 'delete',
             reason: 'Quarantined integration cleanup.',
         });
-        await expect(service.runDeletionSweep()).resolves.toMatchObject({
+        await expect(restarted.runDeletionSweep()).resolves.toMatchObject({
             deleted: 3,
             failed: 0,
         });

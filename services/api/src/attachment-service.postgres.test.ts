@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -318,6 +319,76 @@ describePostgres('durable private attachment pipeline', () => {
         });
     });
 
+    it('validates PDFs and quarantines an uncertain zero-page document after durable retries', async () => {
+        const first = new Date('2026-07-28T12:00:00.000Z');
+        const pdf = await PDFDocument.create();
+        const body = Buffer.from(
+            await pdf.save({ addDefaultPage: false }),
+        );
+        const authorized = await service.authorizeUpload(
+            ownerDid,
+            {
+                filename: 'uncertain.pdf',
+                declaredMime: 'application/pdf',
+                byteSize: body.length,
+                purpose: 'verification-evidence',
+                subjectRef: null,
+            },
+            first,
+        );
+        const attachmentId = (
+            authorized['attachment'] as { id: string }
+        ).id;
+        await service.completeUpload(
+            ownerDid,
+            {
+                attachmentId,
+                uploadToken: (
+                    authorized['upload'] as { token: string }
+                ).token,
+            },
+            body,
+            'application/pdf',
+            first,
+        );
+
+        await expect(service.runScanSweep(first)).resolves.toMatchObject({
+            retry: 1,
+        });
+        await expect(
+            service.runScanSweep(
+                new Date(first.getTime() + 3 * 60_000),
+            ),
+        ).resolves.toMatchObject({ retry: 1 });
+        await expect(
+            service.runScanSweep(
+                new Date(first.getTime() + 8 * 60_000),
+            ),
+        ).resolves.toMatchObject({ quarantined: 1 });
+        await expect(
+            service.issueAccess(
+                ownerDid,
+                { attachmentId },
+                false,
+            ),
+        ).rejects.toMatchObject({ code: 'ATTACHMENT_NOT_CLEAN' });
+        expect(
+            (
+                await pool.query(
+                    `SELECT status, scan_attempt_count,
+                            quarantine_reason_code
+                     FROM private_attachments
+                     WHERE attachment_id = $1`,
+                    [attachmentId],
+                )
+            ).rows[0],
+        ).toMatchObject({
+            status: 'quarantined',
+            scan_attempt_count: 3,
+            quarantine_reason_code: 'scan-retries-exhausted',
+        });
+    });
+
     it('queues originals and derivatives for deletion, retries failures, and reconciles orphans', async () => {
         const attachment = await upload();
         await service.runScanSweep();
@@ -403,5 +474,25 @@ describePostgres('durable private attachment pipeline', () => {
         ).rejects.toMatchObject({
             code: 'INVALID_ATTACHMENT_SUBJECT',
         });
+    });
+
+    it('reconciles closed workflow policy expiry into durable object deletion', async () => {
+        await upload('aid-post', requestUri);
+        await service.runScanSweep();
+        await pool.query(
+            `UPDATE request_workflows
+             SET current_status = 'archived', updated_at = NOW()
+             WHERE post_uri = $1`,
+            [requestUri],
+        );
+
+        await expect(
+            service.runLifecycleReconciliation(),
+        ).resolves.toEqual({ removed: 1 });
+        await expect(service.runDeletionSweep()).resolves.toMatchObject({
+            deleted: 2,
+            failedPending: 0,
+        });
+        expect(objects.objects.size).toBe(0);
     });
 });
