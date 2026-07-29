@@ -93,6 +93,7 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             '0013_account_deactivation.sql',
             '0014_account_onboarding.sql',
             '0015_volunteer_private_profiles.sql',
+            '0016_organizations_and_stewardship.sql',
         ]) {
             await pool.query(
                 await readFile(
@@ -141,7 +142,12 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             );
         }
         await pool.query(
-            `TRUNCATE patchwork_browser_sessions, at_oauth_sessions,
+            `TRUNCATE organization_notification_events,
+                      organization_audit_events,
+                      organization_resource_stewardships,
+                      organization_invitations,
+                      organization_memberships, organizations,
+                      patchwork_browser_sessions, at_oauth_sessions,
                       platform_roles, operational_audit_events, abuse_reports,
                       user_blocks, request_handoff_events,
                       request_assignment_events, request_transition_events,
@@ -309,6 +315,76 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
              )`,
             [viewerDid],
         );
+        await pool.query(
+            `INSERT INTO organizations (
+                organization_id, slug, name, description, origin,
+                source_url, source_retrieved_at,
+                source_last_verified_at, non_endorsement_label,
+                created_by_did, created_at, updated_at
+             ) VALUES (
+                '11111111-1111-4111-8111-111111111111',
+                'privacy-cooperative', 'Privacy Cooperative',
+                'Shared organization for privacy tests.',
+                'visitor-created', NULL, NULL, NULL,
+                'Listed for public information. Patchwork does not endorse or guarantee this organization.',
+                $1, NOW(), NOW()
+             )`,
+            [viewerDid],
+        );
+        await pool.query(
+            `INSERT INTO organization_memberships (
+                organization_id, member_did, role, status,
+                invited_by_did, joined_at, updated_at
+             ) VALUES
+                ('11111111-1111-4111-8111-111111111111', $1,
+                 'owner', 'active', $1, NOW(), NOW()),
+                ('11111111-1111-4111-8111-111111111111', $2,
+                 'admin', 'active', $1, NOW(), NOW())`,
+            [viewerDid, otherDid],
+        );
+        await pool.query(
+            `INSERT INTO organization_invitations (
+                invitation_id, organization_id, invitee_did, role,
+                token_hash, status, invited_by_did, expires_at,
+                created_at, accepted_at
+             ) VALUES (
+                '22222222-2222-4222-8222-222222222222',
+                '11111111-1111-4111-8111-111111111111', $1, 'member',
+                $3, 'accepted', $2, NOW() + INTERVAL '7 days',
+                NOW(), NOW()
+             )`,
+            [viewerDid, otherDid, 'a'.repeat(64)],
+        );
+        await pool.query(
+            `INSERT INTO organization_resource_stewardships (
+                stewardship_id, organization_id, resource_uri,
+                steward_did, status, last_reconfirmed_at,
+                reconfirm_due_at, created_at, updated_at
+             ) VALUES (
+                '33333333-3333-4333-8333-333333333333',
+                '11111111-1111-4111-8111-111111111111',
+                'at://did:plc:privacyviewer/app.patchwork.directory.resource/one',
+                $1, 'due', NOW() - INTERVAL '90 days',
+                NOW(), NOW() - INTERVAL '90 days', NOW()
+             )`,
+            [viewerDid],
+        );
+        await pool.query(
+            `INSERT INTO organization_notification_events (
+                event_id, organization_id, recipient_did, event_type,
+                stewardship_id, deduplication_key, payload,
+                created_at, consumed_at
+             ) VALUES (
+                '44444444-4444-4444-8444-444444444444',
+                '11111111-1111-4111-8111-111111111111', $1,
+                'resource-reconfirmation-due',
+                '33333333-3333-4333-8333-333333333333',
+                'privacy-reconfirmation-event',
+                '{"stewardshipId":"33333333-3333-4333-8333-333333333333"}',
+                NOW(), NULL
+             )`,
+            [viewerDid],
+        );
     });
 
     afterAll(async () => {
@@ -360,6 +436,25 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 privateVolunteerProfile: expect.objectContaining({
                     contactEmail: 'viewer@example.test',
                 }),
+                organizations: {
+                    memberships: [
+                        expect.objectContaining({
+                            name: 'Privacy Cooperative',
+                            role: 'owner',
+                        }),
+                    ],
+                    invitations: [
+                        expect.objectContaining({
+                            role: 'member',
+                            status: 'accepted',
+                        }),
+                    ],
+                    stewardships: [
+                        expect.objectContaining({
+                            status: 'due',
+                        }),
+                    ],
+                },
             },
             exclusions: expect.arrayContaining([
                 expect.objectContaining({ category: 'at-repository' }),
@@ -410,15 +505,24 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 workflows: 1,
                 publicVolunteerProfiles: 1,
                 privateVolunteerProfile: 1,
+                organizationMemberships: 1,
+                organizationInvitations: 1,
+                organizationNotifications: 1,
+                organizations: 0,
                 policyConsents: 1,
                 preferences: 1,
             },
-            revoked: { browserSessions: 1, oauthSessions: 1 },
+            revoked: {
+                browserSessions: 1,
+                oauthSessions: 1,
+                organizationStewardships: 1,
+            },
             retained: expect.objectContaining({
                 deactivationReceipt: 1,
                 safetyBlocks: 1,
                 safetyReports: 1,
                 operationalAudit: 1,
+                transferredOrganizations: 1,
             }),
         });
         expect(JSON.stringify(body)).not.toContain(viewerDid);
@@ -472,6 +576,21 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         expect(viewerExport.data.workflows).toEqual([]);
         expect(viewerExport.data.publicVolunteerProfiles).toEqual([]);
         expect(viewerExport.data.privateVolunteerProfile).toBeNull();
+
+        const transferredOwner = await pool.query<{
+            member_did: string;
+            created_by_did: string;
+        }>(
+            `SELECT m.member_did, o.created_by_did
+             FROM organizations o
+             JOIN organization_memberships m USING (organization_id)
+             WHERE o.organization_id =
+                   '11111111-1111-4111-8111-111111111111'
+               AND m.role = 'owner' AND m.status = 'active'`,
+        );
+        expect(transferredOwner.rows).toEqual([
+            { member_did: otherDid, created_by_did: otherDid },
+        ]);
 
         const otherExport = (await fetch(`${running.origin}/account/export`, {
             headers: { cookie: 'patchwork_session=other-session' },

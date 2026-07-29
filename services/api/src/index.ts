@@ -51,6 +51,11 @@ import {
     isAccountOnboardingRoute,
 } from './http/account-onboarding-handler.js';
 import {
+    createOrganizationHandler,
+    isOrganizationRoute,
+} from './http/organization-handler.js';
+import { OrganizationService } from './organization-service.js';
+import {
     createDurableSafetyHandler,
     isDurableSafetyRoute,
 } from './http/durable-safety-handler.js';
@@ -108,17 +113,24 @@ if (postgresPool) {
     const projectionSchema = await postgresPool.query<{
         projection_table: string | null;
         directory_projection_table: string | null;
+        volunteer_projection_table: string | null;
         state_table: string | null;
+        organization_table: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
             to_regclass('indexer_directory_resource_projections')::TEXT
                 AS directory_projection_table,
-            to_regclass('indexer_projection_state')::TEXT AS state_table`,
+            to_regclass('indexer_volunteer_profile_projections')::TEXT
+                AS volunteer_projection_table,
+            to_regclass('indexer_projection_state')::TEXT AS state_table,
+            to_regclass('organizations')::TEXT AS organization_table`,
     );
     if (
         !projectionSchema.rows[0]?.projection_table ||
         !projectionSchema.rows[0]?.directory_projection_table ||
+        !projectionSchema.rows[0]?.volunteer_projection_table ||
+        !projectionSchema.rows[0]?.organization_table ||
         !projectionSchema.rows[0]?.state_table
     ) {
         await postgresPool.end();
@@ -172,6 +184,8 @@ const authenticateSessionRequest =
     :   undefined;
 const accountOnboardingService =
     postgresPool ? new AccountOnboardingService(postgresPool) : undefined;
+const organizationService =
+    postgresPool ? new OrganizationService(postgresPool) : undefined;
 const consentExemptPaths = new Set([
     '/account/onboarding',
     '/account/consent',
@@ -340,6 +354,14 @@ const accountOnboardingHandler =
         createAccountOnboardingHandler({
             service: accountOnboardingService,
             authenticate: authenticateSessionRequest,
+            executeIdempotent: executeIdempotentMutation,
+        })
+    :   undefined;
+const organizationHandler =
+    authenticateApiRequest && organizationService ?
+        createOrganizationHandler({
+            service: organizationService,
+            authenticate: authenticateApiRequest,
             executeIdempotent: executeIdempotentMutation,
         })
     :   undefined;
@@ -1342,6 +1364,17 @@ const contractRoutes = [
     '/account/onboarding',
     '/account/consent',
     '/account/preferences',
+    '/organizations',
+    '/organizations/profile',
+    '/organizations/mine',
+    '/organization-invitations',
+    '/organization-invitations/accept',
+    '/organizations/invitations',
+    '/organizations/members',
+    '/organizations/members/role',
+    '/organizations/stewardships',
+    '/organizations/stewardships/reconfirm',
+    '/organizations/audit',
     '/health',
     '/health/ready',
     '/metrics',
@@ -1545,6 +1578,19 @@ export const createApiServer = () => {
         }
 
         if (accountPrivacyHandler?.(request, response, requestUrl)) {
+            return;
+        }
+
+        if (organizationHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isOrganizationRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'ORGANIZATION_SERVICE_UNAVAILABLE',
+                    message: 'Organization services are unavailable.',
+                },
+            });
             return;
         }
         if (isAccountPrivacyRoute(request, requestUrl)) {
@@ -1780,6 +1826,7 @@ export const createApiServer = () => {
 export const startApiServer = () => {
     const server = createApiServer();
     let retentionScheduler: RetentionScheduler | undefined;
+    let organizationScheduler: RetentionScheduler | undefined;
     if (postgresPool) {
         const retention = new PostgresRetentionService(postgresPool);
         retentionScheduler = startRetentionScheduler({
@@ -1805,13 +1852,40 @@ export const startApiServer = () => {
                 );
             },
         });
+        if (organizationService) {
+            organizationScheduler = startRetentionScheduler({
+                intervalMs: 60 * 60 * 1_000,
+                enforce: async () => {
+                    const result =
+                        await organizationService.runReconfirmationSweep();
+                    console.log(
+                        JSON.stringify({
+                            level: 'info',
+                            event: 'organization_reconfirmation_sweep_completed',
+                            ...result,
+                        }),
+                    );
+                },
+                onError: () => {
+                    console.error(
+                        JSON.stringify({
+                            level: 'error',
+                            event: 'organization_reconfirmation_sweep_failed',
+                        }),
+                    );
+                },
+            });
+        }
     }
     server.listen(config.API_PORT, config.API_HOST, () => {
         console.log(
             `[api] listening on http://${config.API_HOST}:${config.API_PORT} (contracts=${CONTRACT_VERSION}, datasource=${config.API_DATA_SOURCE})`,
         );
     });
-    server.once('close', () => retentionScheduler?.stop());
+    server.once('close', () => {
+        retentionScheduler?.stop();
+        organizationScheduler?.stop();
+    });
     return server;
 };
 

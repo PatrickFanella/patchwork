@@ -78,6 +78,106 @@ export class AccountPrivacyService {
                 `DELETE FROM volunteer_private_profiles WHERE did = $1`,
                 [did],
             );
+            const ownedOrganizations = await client.query<{
+                organization_id: string;
+            }>(
+                `SELECT organization_id
+                 FROM organization_memberships
+                 WHERE member_did = $1 AND role = 'owner'
+                   AND status = 'active'
+                 FOR UPDATE`,
+                [did],
+            );
+            let transferredOrganizations = 0;
+            let removedOrganizations = 0;
+            for (const owned of ownedOrganizations.rows) {
+                const successor = await client.query<{
+                    member_did: string;
+                }>(
+                    `SELECT member_did
+                     FROM organization_memberships
+                     WHERE organization_id = $1
+                       AND member_did <> $2
+                       AND role = 'admin' AND status = 'active'
+                     ORDER BY joined_at, member_did
+                     LIMIT 1`,
+                    [owned.organization_id, did],
+                );
+                if (successor.rows[0]) {
+                    await client.query(
+                        `UPDATE organization_memberships
+                         SET status = 'removed', updated_at = $3
+                         WHERE organization_id = $1 AND member_did = $2`,
+                        [owned.organization_id, did, now],
+                    );
+                    await client.query(
+                        `UPDATE organization_memberships
+                         SET role = 'owner', updated_at = $3
+                         WHERE organization_id = $1 AND member_did = $2`,
+                        [
+                            owned.organization_id,
+                            successor.rows[0].member_did,
+                            now,
+                        ],
+                    );
+                    await client.query(
+                        `UPDATE organizations
+                         SET created_by_did = $2, updated_at = $3
+                         WHERE organization_id = $1`,
+                        [
+                            owned.organization_id,
+                            successor.rows[0].member_did,
+                            now,
+                        ],
+                    );
+                    transferredOrganizations += 1;
+                } else {
+                    const removed = await client.query(
+                        `DELETE FROM organizations
+                         WHERE organization_id = $1`,
+                        [owned.organization_id],
+                    );
+                    removedOrganizations += removed.rowCount ?? 0;
+                }
+            }
+            const organizationStewardships = await client.query(
+                `UPDATE organization_resource_stewardships
+                 SET status = 'revoked', updated_at = $2
+                 WHERE steward_did = $1 AND status <> 'revoked'`,
+                [did, now],
+            );
+            const organizationNotifications = await client.query(
+                `DELETE FROM organization_notification_events
+                 WHERE recipient_did = $1`,
+                [did],
+            );
+            const organizationInvitations = await client.query(
+                `DELETE FROM organization_invitations
+                 WHERE invitee_did = $1 OR invited_by_did = $1`,
+                [did],
+            );
+            await client.query(
+                `UPDATE organization_memberships m
+                 SET invited_by_did = owner.member_did,
+                     updated_at = $2
+                 FROM organization_memberships owner
+                 WHERE m.invited_by_did = $1
+                   AND m.organization_id = owner.organization_id
+                   AND owner.role = 'owner' AND owner.status = 'active'`,
+                [did, now],
+            );
+            const organizationMemberships = await client.query(
+                `DELETE FROM organization_memberships
+                 WHERE member_did = $1`,
+                [did],
+            );
+            const organizationAudit = await client.query(
+                `UPDATE organization_audit_events
+                 SET actor_did = NULL,
+                     details = '{"redactedForDeactivation":true}'::jsonb
+                 WHERE actor_did = $1 OR subject = $1`,
+                [did],
+            );
             const legacyDiscoveryEvents = await client.query(
                 `DELETE FROM discovery_events WHERE author_did = $1`,
                 [did],
@@ -182,6 +282,13 @@ export class AccountPrivacyService {
                         publicVolunteerProfiles.rowCount ?? 0,
                     privateVolunteerProfile:
                         privateVolunteerProfile.rowCount ?? 0,
+                    organizationMemberships:
+                        organizationMemberships.rowCount ?? 0,
+                    organizationInvitations:
+                        organizationInvitations.rowCount ?? 0,
+                    organizationNotifications:
+                        organizationNotifications.rowCount ?? 0,
+                    organizations: removedOrganizations,
                     legacyDiscoveryEvents: legacyDiscoveryEvents.rowCount ?? 0,
                     workflows: workflows.rowCount ?? 0,
                     platformRoles: platformRoles.rowCount ?? 0,
@@ -194,6 +301,8 @@ export class AccountPrivacyService {
                 revoked: {
                     browserSessions: browserSessions.rowCount ?? 0,
                     oauthSessions: oauthSessions.rowCount ?? 0,
+                    organizationStewardships:
+                        organizationStewardships.rowCount ?? 0,
                 },
                 retained: {
                     deactivationReceipt: 1,
@@ -205,6 +314,9 @@ export class AccountPrivacyService {
                         moderationCasework.rows[0]?.count ?? 0,
                     moderationActorAudit:
                         moderationActorAudit.rowCount ?? 0,
+                    transferredOrganizations,
+                    organizationAudit:
+                        organizationAudit.rowCount ?? 0,
                 },
             };
             await client.query(
@@ -345,6 +457,57 @@ export class AccountPrivacyService {
             `SELECT contact_email, contact_phone, availability_windows,
                     matching_preferences, created_at, updated_at
              FROM volunteer_private_profiles WHERE did = $1`,
+            [did],
+        );
+        const organizationMemberships = await client.query<{
+            organization_id: string;
+            slug: string;
+            name: string;
+            role: string;
+            joined_at: Date | string;
+            updated_at: Date | string;
+        }>(
+            `SELECT o.organization_id, o.slug, o.name, m.role,
+                    m.joined_at, m.updated_at
+             FROM organization_memberships m
+             JOIN organizations o USING (organization_id)
+             WHERE m.member_did = $1 AND m.status = 'active'
+             ORDER BY o.name, o.organization_id`,
+            [did],
+        );
+        const organizationInvitations = await client.query<{
+            invitation_id: string;
+            organization_id: string;
+            role: string;
+            status: string;
+            invited_by_did: string;
+            expires_at: Date | string;
+            created_at: Date | string;
+            accepted_at: Date | string | null;
+        }>(
+            `SELECT invitation_id, organization_id, role, status,
+                    invited_by_did, expires_at, created_at, accepted_at
+             FROM organization_invitations
+             WHERE invitee_did = $1
+             ORDER BY created_at, invitation_id`,
+            [did],
+        );
+        const organizationStewardships = await client.query<{
+            stewardship_id: string;
+            organization_id: string;
+            resource_uri: string;
+            status: string;
+            last_reconfirmed_at: Date | string;
+            reconfirm_due_at: Date | string;
+            created_at: Date | string;
+            updated_at: Date | string;
+        }>(
+            `SELECT stewardship_id, organization_id, resource_uri, status,
+                    last_reconfirmed_at, reconfirm_due_at,
+                    created_at, updated_at
+             FROM organization_resource_stewardships
+             WHERE steward_did = $1
+             ORDER BY created_at, stewardship_id`,
             [did],
         );
         const workflows = await client.query<{
@@ -604,6 +767,35 @@ export class AccountPrivacyService {
                             ),
                         }
                     :   null,
+                organizations: {
+                    memberships: organizationMemberships.rows.map(row => ({
+                        organizationId: row.organization_id,
+                        slug: row.slug,
+                        name: row.name,
+                        role: row.role,
+                        joinedAt: iso(row.joined_at),
+                        updatedAt: iso(row.updated_at),
+                    })),
+                    invitations: organizationInvitations.rows.map(row => ({
+                        id: row.invitation_id,
+                        organizationId: row.organization_id,
+                        role: row.role,
+                        status: row.status,
+                        expiresAt: iso(row.expires_at),
+                        createdAt: iso(row.created_at),
+                        acceptedAt: iso(row.accepted_at),
+                    })),
+                    stewardships: organizationStewardships.rows.map(row => ({
+                        id: row.stewardship_id,
+                        organizationId: row.organization_id,
+                        resourceUri: row.resource_uri,
+                        status: row.status,
+                        lastReconfirmedAt: iso(row.last_reconfirmed_at),
+                        reconfirmDueAt: iso(row.reconfirm_due_at),
+                        createdAt: iso(row.created_at),
+                        updatedAt: iso(row.updated_at),
+                    })),
+                },
                 workflows: workflows.rows.map(row => ({
                     postUri: row.post_uri,
                     currentStatus: row.current_status,
