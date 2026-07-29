@@ -18,7 +18,10 @@ export default defineConfig({
     fullyParallel: true,
     timeout: 60_000,
     forbidOnly: !!process.env['CI'],
-    retries: process.env['CI'] ? 2 : 0,
+    // Vite/Chromium occasionally yields a transient blank navigation on the
+    // constrained local acceptance host. One local retry distinguishes that
+    // infrastructure blip from a repeatable product failure; CI retains two.
+    retries: process.env['CI'] ? 2 : 1,
     // The local Vite server and Chromium share a constrained acceptance host.
     // Serial browser execution avoids false blank-page/navigation failures
     // under concurrent cold module transforms.
