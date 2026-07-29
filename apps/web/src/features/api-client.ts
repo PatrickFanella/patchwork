@@ -2174,6 +2174,49 @@ export interface CoordinationConnection {
     updatedAt: string;
 }
 
+export type ExactLocationSignal =
+    | {
+          sequence: number;
+          kind: 'description';
+          payload: { type: 'offer' | 'answer'; sdp: string };
+      }
+    | {
+          sequence: number;
+          kind: 'candidate';
+          payload: {
+              candidate: string;
+              sdpMid: string | null;
+              sdpMLineIndex: number | null;
+              usernameFragment: string | null;
+          };
+      }
+    | {
+          sequence: number;
+          kind: 'end-of-candidates';
+          payload: Record<string, never>;
+      };
+
+export interface ExactLocationSessionState {
+    connectionId: string;
+    consent: {
+        actorConsented: boolean;
+        peerConsented: boolean;
+        freshForSeconds: number;
+    };
+    session: {
+        id: string;
+        status: 'pending' | 'active' | 'revoked' | 'expired';
+        role: 'offerer' | 'answerer';
+        singleUse: true;
+        issuedAt: string;
+        expiresAt: string;
+        participantProof: string | null;
+        expectedPeerProof: string | null;
+        signals: ExactLocationSignal[];
+    } | null;
+    serverTime: string;
+}
+
 export interface ActivityInboxItem {
     id: string;
     type:
@@ -2318,6 +2361,125 @@ export const transitionCoordinationConnectionViaApi = async (
                 result.data,
                 'connection',
                 'Connection response was malformed.',
+            )
+        :   result;
+};
+
+const parseExactLocationState = (
+    result: ApiClientResult<unknown>,
+): ApiClientResult<ExactLocationSessionState> => {
+    if (!result.ok) return result;
+    if (
+        !isRecord(result.data) ||
+        typeof result.data['connectionId'] !== 'string' ||
+        !isRecord(result.data['consent']) ||
+        !(
+            result.data['session'] === null ||
+            isRecord(result.data['session'])
+        )
+    ) {
+        return invalidResponseFailure(
+            'Location-sharing session response was malformed.',
+        );
+    }
+    return {
+        ok: true,
+        data: result.data as unknown as ExactLocationSessionState,
+    };
+};
+
+export const fetchExactLocationSessionViaApi = async (
+    connectionId: string,
+    afterSequence = 0,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<ExactLocationSessionState>> =>
+    parseExactLocationState(
+        await requestJson(
+            '/location/session',
+            new URLSearchParams({
+                connectionId,
+                after: String(afterSequence),
+            }),
+            signal,
+        ),
+    );
+
+export const consentToExactLocationViaApi = async (
+    connectionId: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<ExactLocationSessionState>> =>
+    parseExactLocationState(
+        await requestJsonPost(
+            '/location/consent',
+            { connectionId, consent: true },
+            signal,
+        ),
+    );
+
+export const sendExactLocationSignalViaApi = async (
+    input:
+        | {
+              connectionId: string;
+              sessionId: string;
+              kind: 'description';
+              payload: { type: 'offer' | 'answer'; sdp: string };
+          }
+        | {
+              connectionId: string;
+              sessionId: string;
+              kind: 'candidate';
+              payload: {
+                  candidate: string;
+                  sdpMid: string | null;
+                  sdpMLineIndex: number | null;
+                  usernameFragment: string | null;
+              };
+          }
+        | {
+              connectionId: string;
+              sessionId: string;
+              kind: 'end-of-candidates';
+              payload: Record<string, never>;
+          },
+    signal?: AbortSignal,
+): Promise<
+    ApiClientResult<{
+        accepted: true;
+        sequence: number;
+        status: 'pending' | 'active';
+        expiresAt: string;
+    }>
+> => {
+    const result = await requestJsonPost('/location/signal', input, signal);
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'accepted',
+                'Location signal response was malformed.',
+            )
+        :   result;
+};
+
+export const revokeExactLocationSessionViaApi = async (
+    connectionId: string,
+    signal?: AbortSignal,
+): Promise<
+    ApiClientResult<{
+        connectionId: string;
+        status: 'revoked';
+        revokedAt: string;
+    }>
+> => {
+    const result = await requestJsonPost(
+        '/location/revoke',
+        { connectionId },
+        signal,
+    );
+    return result.ok ?
+            parseRecordPayload(
+                result.data,
+                'revokedAt',
+                'Location revocation response was malformed.',
             )
         :   result;
 };

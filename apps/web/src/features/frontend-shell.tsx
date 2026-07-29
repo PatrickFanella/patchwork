@@ -162,6 +162,7 @@ import {
     updateAtDirectoryResourceViaApi,
     updateAtVolunteerProfileViaApi,
 } from './api-client';
+import { ExactLocationExchange } from './exact-location-exchange';
 import {
     type SettingsPatch,
     type SettingsSection,
@@ -5822,41 +5823,46 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                         {connection.counterpartDid}
                                     </p>
                                     {connection.status === 'active' ?
-                                        <div className='mt-3 flex flex-wrap gap-2'>
-                                            <Button
-                                                onClick={() =>
-                                                    void finish(
-                                                        'Completing handoff…',
-                                                        transitionCoordinationConnectionViaApi(
-                                                            {
-                                                                connectionId:
-                                                                    connection.id,
-                                                                action: 'complete',
-                                                            },
-                                                        ),
-                                                    )
-                                                }
-                                            >
-                                                Complete handoff
-                                            </Button>
-                                            <Button
-                                                variant='secondary'
-                                                onClick={() =>
-                                                    void finish(
-                                                        'Cancelling connection…',
-                                                        transitionCoordinationConnectionViaApi(
-                                                            {
-                                                                connectionId:
-                                                                    connection.id,
-                                                                action: 'cancel',
-                                                            },
-                                                        ),
-                                                    )
-                                                }
-                                            >
-                                                Cancel
-                                            </Button>
-                                        </div>
+                                        <>
+                                            <ExactLocationExchange
+                                                connectionId={connection.id}
+                                            />
+                                            <div className='mt-3 flex flex-wrap gap-2'>
+                                                <Button
+                                                    onClick={() =>
+                                                        void finish(
+                                                            'Completing handoff…',
+                                                            transitionCoordinationConnectionViaApi(
+                                                                {
+                                                                    connectionId:
+                                                                        connection.id,
+                                                                    action: 'complete',
+                                                                },
+                                                            ),
+                                                        )
+                                                    }
+                                                >
+                                                    Complete handoff
+                                                </Button>
+                                                <Button
+                                                    variant='secondary'
+                                                    onClick={() =>
+                                                        void finish(
+                                                            'Cancelling connection…',
+                                                            transitionCoordinationConnectionViaApi(
+                                                                {
+                                                                    connectionId:
+                                                                        connection.id,
+                                                                    action: 'cancel',
+                                                                },
+                                                            ),
+                                                        )
+                                                    }
+                                                >
+                                                    Cancel
+                                                </Button>
+                                            </div>
+                                        </>
                                     : connection.status === 'completed' &&
                                       !alreadySubmitted ?
                                         <form

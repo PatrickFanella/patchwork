@@ -8,6 +8,7 @@ import {
     createAtDirectoryResourceViaApi,
     createAtVolunteerProfileViaApi,
     createOrganizationViaApi,
+    consentToExactLocationViaApi,
     deactivateAccountViaApi,
     deleteAtVolunteerProfileViaApi,
     deleteAtDirectoryResourceViaApi,
@@ -25,6 +26,8 @@ import {
     queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
     reconcileAidPostStatusViaApi,
+    revokeExactLocationSessionViaApi,
+    sendExactLocationSignalViaApi,
     transitionAidPostViaApi,
     updateAccountPreferencesViaApi,
     updateAtDirectoryResourceViaApi,
@@ -132,6 +135,79 @@ describe('api client', () => {
         });
         expect(JSON.parse(String(init.body))).toEqual({});
         expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('did:');
+    });
+
+    it('keeps exact coordinates out of the location signaling API', async () => {
+        const connectionId = '81111111-1111-4111-8111-111111111111';
+        const sessionId = '82111111-1111-4111-8111-111111111111';
+        const sessionState = {
+            connectionId,
+            consent: {
+                actorConsented: true,
+                peerConsented: true,
+                freshForSeconds: 120,
+            },
+            session: {
+                id: sessionId,
+                status: 'pending',
+                role: 'offerer',
+                singleUse: true,
+                issuedAt: '2026-07-28T12:00:00.000Z',
+                expiresAt: '2026-07-28T12:05:00.000Z',
+                participantProof: 'actor-proof',
+                expectedPeerProof: 'peer-proof',
+                signals: [],
+            },
+            serverTime: '2026-07-28T12:00:00.000Z',
+        };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(createJsonResponse(sessionState))
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    accepted: true,
+                    sequence: 1,
+                    status: 'pending',
+                    expiresAt: sessionState.session.expiresAt,
+                }),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    connectionId,
+                    status: 'revoked',
+                    revokedAt: '2026-07-28T12:01:00.000Z',
+                }),
+            );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await expect(
+            consentToExactLocationViaApi(connectionId),
+        ).resolves.toMatchObject({ ok: true });
+        await expect(
+            sendExactLocationSignalViaApi({
+                connectionId,
+                sessionId,
+                kind: 'description',
+                payload: { type: 'offer', sdp: 'v=0\r\n' },
+            }),
+        ).resolves.toMatchObject({ ok: true });
+        await expect(
+            revokeExactLocationSessionViaApi(connectionId),
+        ).resolves.toMatchObject({ ok: true });
+
+        const requestBodies = fetchMock.mock.calls
+            .map(call => (call[1] as RequestInit | undefined)?.body)
+            .filter((body): body is string => typeof body === 'string')
+            .map(body => JSON.parse(body) as Record<string, unknown>);
+        expect(requestBodies).toHaveLength(3);
+        expect(requestBodies[0]).toEqual({
+            connectionId,
+            consent: true,
+        });
+        expect(requestBodies[2]).toEqual({ connectionId });
+        expect(JSON.stringify(requestBodies)).not.toMatch(
+            /actorDid|latitude|longitude|coordinates|streetAddress/i,
+        );
     });
 
     it('loads consent status and persists only schema-valid account preferences', async () => {
