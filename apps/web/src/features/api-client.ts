@@ -1365,6 +1365,235 @@ export interface VerificationReviewQueue {
     appeals: VerificationAppeal[];
 }
 
+export type PrivateAttachmentPurpose =
+    | 'verification-evidence'
+    | 'aid-post'
+    | 'moderation-evidence';
+
+export type PrivateAttachmentStatus =
+    | 'authorized'
+    | 'uploaded'
+    | 'scanning'
+    | 'retry'
+    | 'clean'
+    | 'quarantined'
+    | 'deletion-pending'
+    | 'deleted';
+
+export interface PrivateAttachment {
+    id: string;
+    purpose: PrivateAttachmentPurpose;
+    subjectRef: string | null;
+    filename: string;
+    declaredMime: string;
+    detectedMime: string | null;
+    byteSize: number;
+    status: PrivateAttachmentStatus;
+    uploadExpiresAt: string;
+    retentionExpiresAt: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+const attachmentStatuses = new Set<PrivateAttachmentStatus>([
+    'authorized',
+    'uploaded',
+    'scanning',
+    'retry',
+    'clean',
+    'quarantined',
+    'deletion-pending',
+    'deleted',
+]);
+
+const attachmentPurposes = new Set<PrivateAttachmentPurpose>([
+    'verification-evidence',
+    'aid-post',
+    'moderation-evidence',
+]);
+
+const parsePrivateAttachment = (
+    value: unknown,
+): PrivateAttachment | undefined => {
+    if (!isRecord(value)) return undefined;
+    const purpose = value['purpose'];
+    const status = value['status'];
+    const subjectRef = value['subjectRef'];
+    const detectedMime = value['detectedMime'];
+    if (
+        !readString(value, 'id') ||
+        typeof purpose !== 'string' ||
+        !attachmentPurposes.has(purpose as PrivateAttachmentPurpose) ||
+        !(
+            subjectRef === null ||
+            typeof subjectRef === 'string'
+        ) ||
+        !readString(value, 'filename') ||
+        !readString(value, 'declaredMime') ||
+        !(
+            detectedMime === null ||
+            typeof detectedMime === 'string'
+        ) ||
+        typeof value['byteSize'] !== 'number' ||
+        typeof status !== 'string' ||
+        !attachmentStatuses.has(status as PrivateAttachmentStatus) ||
+        !readString(value, 'uploadExpiresAt') ||
+        !readString(value, 'retentionExpiresAt') ||
+        !readString(value, 'createdAt') ||
+        !readString(value, 'updatedAt')
+    ) {
+        return undefined;
+    }
+    return value as unknown as PrivateAttachment;
+};
+
+const parseAttachmentEnvelope = (
+    payload: unknown,
+): ApiClientResult<PrivateAttachment> => {
+    if (!isRecord(payload)) {
+        return invalidResponseFailure('Attachment response was malformed.');
+    }
+    const attachment = parsePrivateAttachment(payload['attachment']);
+    return attachment ?
+            { ok: true, data: attachment }
+        :   invalidResponseFailure('Attachment response was malformed.');
+};
+
+export const fetchPrivateAttachmentsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<PrivateAttachment[]>> => {
+    const result = await requestJson(
+        '/attachments',
+        new URLSearchParams(),
+        signal,
+    );
+    if (!result.ok) return result;
+    if (!isRecord(result.data) || !Array.isArray(result.data['attachments'])) {
+        return invalidResponseFailure('Attachment list was malformed.');
+    }
+    const attachments = result.data['attachments'].map(parsePrivateAttachment);
+    if (attachments.some(attachment => !attachment)) {
+        return invalidResponseFailure('Attachment list was malformed.');
+    }
+    return {
+        ok: true,
+        data: attachments as PrivateAttachment[],
+    };
+};
+
+export const uploadPrivateAttachmentViaApi = async (
+    file: File,
+    purpose: PrivateAttachmentPurpose,
+    subjectRef: string | null,
+): Promise<ApiClientResult<PrivateAttachment>> => {
+    const authorized = await requestJsonPost('/attachments/uploads', {
+        filename: file.name,
+        declaredMime: file.type,
+        byteSize: file.size,
+        purpose,
+        subjectRef,
+    });
+    if (!authorized.ok) return authorized;
+    if (
+        !isRecord(authorized.data) ||
+        !isRecord(authorized.data['upload'])
+    ) {
+        return invalidResponseFailure(
+            'Attachment authorization response was malformed.',
+        );
+    }
+    const attachment = parsePrivateAttachment(
+        authorized.data['attachment'],
+    );
+    const uploadToken = readString(authorized.data['upload'], 'token');
+    if (!attachment || !uploadToken) {
+        return invalidResponseFailure(
+            'Attachment authorization response was malformed.',
+        );
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+    try {
+        const response = await fetch(
+            resolveApiUrl(
+                `/attachments/uploads/${attachment.id}`,
+                new URLSearchParams(),
+            ),
+            {
+                method: 'PUT',
+                credentials: 'include',
+                headers: {
+                    'content-type': file.type,
+                    accept: 'application/json',
+                    'x-patchwork-upload-token': uploadToken,
+                    ...csrfHeaders(),
+                },
+                body: file,
+                signal: controller.signal,
+            },
+        );
+        const payload = await response.json().catch(() => undefined);
+        if (!response.ok) {
+            return failureForResponse(payload, response.status);
+        }
+        return parseAttachmentEnvelope(payload);
+    } catch (error) {
+        return networkFailure(error);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
+export const requestPrivateAttachmentAccessViaApi = async (
+    attachmentId: string,
+): Promise<
+    ApiClientResult<{ url: string; expiresAt: string }>
+> => {
+    const result = await requestJsonPost('/attachments/access', {
+        attachmentId,
+    });
+    if (
+        !result.ok ||
+        !isRecord(result.data) ||
+        !isRecord(result.data['access'])
+    ) {
+        return result.ok ?
+                invalidResponseFailure(
+                    'Attachment access response was malformed.',
+                )
+            :   result;
+    }
+    const url = readString(result.data['access'], 'url');
+    const expiresAt = readString(result.data['access'], 'expiresAt');
+    return url && expiresAt ?
+            { ok: true, data: { url, expiresAt } }
+        :   invalidResponseFailure(
+                'Attachment access response was malformed.',
+            );
+};
+
+export const deletePrivateAttachmentViaApi = async (
+    attachmentId: string,
+): Promise<ApiClientResult<void>> => {
+    const result = await requestJsonDelete(
+        `/attachments/${attachmentId}`,
+        {},
+    );
+    return result.ok ? { ok: true, data: undefined } : result;
+};
+
+export const reviewPrivateAttachmentViaApi = async (
+    attachmentId: string,
+    action: 'quarantine' | 'release-for-rescan' | 'delete',
+    reason: string,
+): Promise<ApiClientResult<unknown>> =>
+    requestJsonPost('/attachments/review', {
+        attachmentId,
+        action,
+        reason,
+    });
+
 const parseVerificationWorkspace = (
     payload: unknown,
 ): ApiClientResult<VerificationWorkspace> => {

@@ -96,6 +96,7 @@ import {
     type CoordinationOffer,
     type MatchCandidate,
     type OutcomeFeedback,
+    type PrivateAttachment,
     type VerificationApplication,
     type VerificationAppeal,
     type VerificationReviewQueue,
@@ -129,6 +130,7 @@ import {
     fetchOrganizationsViaApi,
     fetchMyOutcomeFeedbackViaApi,
     fetchOrganizationStewardshipsViaApi,
+    fetchPrivateAttachmentsViaApi,
     fetchExactAddressReviewQueueViaApi,
     fetchVerificationReviewQueueViaApi,
     fetchVerificationWorkspaceViaApi,
@@ -150,6 +152,7 @@ import {
     reconcileAidPostStatusViaApi,
     reconfirmOrganizationStewardshipViaApi,
     requestExactPublicAddressViaApi,
+    requestPrivateAttachmentAccessViaApi,
     removeOrganizationMemberViaApi,
     updateSettingsViaApi,
     transitionAidPostViaApi,
@@ -157,6 +160,9 @@ import {
     submitOutcomeFeedbackViaApi,
     submitVerificationAppealViaApi,
     submitVerificationApplicationViaApi,
+    uploadPrivateAttachmentViaApi,
+    deletePrivateAttachmentViaApi,
+    reviewPrivateAttachmentViaApi,
     updateAccountPreferencesViaApi,
     updateOrganizationMemberRoleViaApi,
     updateAtDirectoryResourceViaApi,
@@ -2057,6 +2063,8 @@ const PostingRoute = ({
     const [successMessage, setSuccessMessage] = useState<string>();
     const [apiError, setApiError] = useState<string>();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+    const [attachmentStatus, setAttachmentStatus] = useState<string>();
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -2080,6 +2088,12 @@ const PostingRoute = ({
                         endAt: new Date(endAt).toISOString(),
                     }
                 :   undefined,
+            attachments: attachmentFiles.map(file => ({
+                filename: file.name,
+                mimeType: file.type,
+                sizeBytes: file.size,
+                previewUrl: '',
+            })),
         };
 
         const validation = validatePostingDraft(draft);
@@ -2108,6 +2122,36 @@ const PostingRoute = ({
 
             onCreateRecord(createResult.data);
 
+            let uploaded = 0;
+            for (const file of attachmentFiles) {
+                setAttachmentStatus(
+                    `Uploading private attachment ${uploaded + 1} of ${attachmentFiles.length}…`,
+                );
+                const attachment = await uploadPrivateAttachmentViaApi(
+                    file,
+                    'aid-post',
+                    createResult.data.aidPostUri,
+                );
+                if (!attachment.ok) {
+                    setSuccessMessage(
+                        `Created post ${localId}. ${uploaded} attachment(s) were accepted.`,
+                    );
+                    setApiError(
+                        `The request is public, but a private attachment upload failed: ${attachment.error}`,
+                    );
+                    setAttachmentStatus(
+                        'Attachment upload stopped. Selected files remain available to retry on a new request.',
+                    );
+                    return;
+                }
+                uploaded += 1;
+            }
+            setAttachmentFiles([]);
+            setAttachmentStatus(
+                uploaded > 0 ?
+                    `${uploaded} private attachment(s) uploaded and queued for malware scanning.`
+                :   undefined,
+            );
             setSuccessMessage(
                 `Created post ${localId} and persisted via API/DB.`,
             );
@@ -2335,6 +2379,46 @@ const PostingRoute = ({
                                 onChange={event => setEndAt(event.target.value)}
                             />
                         </div>
+                    </div>
+
+                    <div>
+                        <label
+                            htmlFor='posting-attachments'
+                            className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
+                        >
+                            Private attachments (optional)
+                        </label>
+                        <Input
+                            id='posting-attachments'
+                            type='file'
+                            multiple
+                            accept='image/jpeg,image/png,image/gif,image/webp,application/pdf'
+                            onChange={event =>
+                                setAttachmentFiles(
+                                    Array.from(event.target.files ?? []),
+                                )
+                            }
+                        />
+                        <p className='mt-1 text-xs text-mh-textSoft'>
+                            Up to five images or PDFs, 10 MB each. Files remain
+                            private, are scanned and transformed, and are
+                            available only to authenticated people.
+                        </p>
+                        {attachmentFiles.length ?
+                            <ul className='mt-2 text-xs'>
+                                {attachmentFiles.map(file => (
+                                    <li key={`${file.name}-${file.size}`}>
+                                        {file.name} ·{' '}
+                                        {Math.ceil(file.size / 1024)} KB
+                                    </li>
+                                ))}
+                            </ul>
+                        :   null}
+                        {attachmentStatus ?
+                            <p className='mt-2 text-xs font-bold' role='status'>
+                                {attachmentStatus}
+                            </p>
+                        :   null}
                     </div>
 
                     {errors.length > 0 ?
@@ -4186,6 +4270,9 @@ const VolunteerRoute = ({ did }: { did: string }) => {
 const VerificationRoute = ({ did }: { did: string }) => {
     const [workspace, setWorkspace] = useState<VerificationWorkspace>();
     const [review, setReview] = useState<VerificationReviewQueue>();
+    const [attachments, setAttachments] = useState<PrivateAttachment[]>([]);
+    const evidenceFileRef = useRef<HTMLInputElement>(null);
+    const [accessUrls, setAccessUrls] = useState<Record<string, string>>({});
     const [exactReview, setExactReview] =
         useState<ExactAddressRequest[]>();
     const [status, setStatus] = useState('Loading private verification status…');
@@ -4206,22 +4293,35 @@ const VerificationRoute = ({ did }: { did: string }) => {
     const [reviewReason, setReviewReason] = useState(
         'Evidence reviewed against the verification policy.',
     );
+    const loadSequence = useRef(0);
 
     const load = useCallback(async () => {
         if (!did) return;
+        const sequence = ++loadSequence.current;
         setStatus('Loading private verification status…');
-        const mine = await fetchVerificationWorkspaceViaApi();
+        const [mine, privateFiles] = await Promise.all([
+            fetchVerificationWorkspaceViaApi(),
+            fetchPrivateAttachmentsViaApi(),
+        ]);
+        if (sequence !== loadSequence.current) return;
         if (!mine.ok) {
             setStatus(`Error: ${mine.error}`);
             return;
         }
         setWorkspace(mine.data);
+        if (privateFiles.ok) {
+            setAttachments(privateFiles.data);
+        } else {
+            setStatus(`Error: ${privateFiles.error}`);
+            return;
+        }
         setStatus('Verification status loaded.');
 
         const [verificationQueue, exactQueue] = await Promise.all([
             fetchVerificationReviewQueueViaApi(),
             fetchExactAddressReviewQueueViaApi(),
         ]);
+        if (sequence !== loadSequence.current) return;
         setReview(verificationQueue.ok ? verificationQueue.data : undefined);
         setExactReview(exactQueue.ok ? exactQueue.data : undefined);
     }, [did]);
@@ -4276,6 +4376,83 @@ const VerificationRoute = ({ did }: { did: string }) => {
         setAttachmentId('');
         await load();
         setStatus('Verification application submitted privately.');
+    };
+
+    const uploadEvidence = async () => {
+        const evidenceFile = evidenceFileRef.current?.files?.[0];
+        if (!evidenceFile) {
+            setStatus('Error: Choose an image or PDF to upload.');
+            return;
+        }
+        setStatus('Uploading private verification evidence…');
+        const result = await uploadPrivateAttachmentViaApi(
+            evidenceFile,
+            'verification-evidence',
+            null,
+        );
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        if (evidenceFileRef.current) {
+            evidenceFileRef.current.value = '';
+        }
+        await load();
+        setStatus(
+            'Evidence uploaded privately and queued for scanning. Refresh until it is clean before submitting.',
+        );
+    };
+
+    const deleteAttachment = async (attachmentIdToDelete: string) => {
+        const result = await deletePrivateAttachmentViaApi(
+            attachmentIdToDelete,
+        );
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        if (attachmentId === attachmentIdToDelete) {
+            setAttachmentId('');
+        }
+        await load();
+        setStatus('Attachment deletion queued for original and derivative bytes.');
+    };
+
+    const prepareAccess = async (attachmentIdToOpen: string) => {
+        const result = await requestPrivateAttachmentAccessViaApi(
+            attachmentIdToOpen,
+        );
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        setAccessUrls(current => ({
+            ...current,
+            [attachmentIdToOpen]: result.data.url,
+        }));
+        setStatus('Short-lived authenticated access is ready for 60 seconds.');
+    };
+
+    const moderateAttachment = async (
+        attachmentIdToReview: string,
+        action: 'quarantine' | 'release-for-rescan' | 'delete',
+    ) => {
+        const result = await reviewPrivateAttachmentViaApi(
+            attachmentIdToReview,
+            action,
+            reviewReason,
+        );
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        setAccessUrls(current => {
+            const next = { ...current };
+            delete next[attachmentIdToReview];
+            return next;
+        });
+        await load();
+        setStatus(`Attachment ${action} action recorded.`);
     };
 
     const submitAppeal = async (event: FormEvent<HTMLFormElement>) => {
@@ -4458,15 +4635,129 @@ const VerificationRoute = ({ did }: { did: string }) => {
                             }
                         />
                     </label>
+                    <Card title='Private evidence file'>
+                        <p className='mb-2 text-xs text-mh-textMuted'>
+                            Upload first, wait for a clean scan decision, then
+                            select the file for this application. Object keys
+                            and scanner details never appear here.
+                        </p>
+                        <div className='flex flex-wrap items-end gap-2'>
+                            <label className='min-w-64 flex-1 text-sm font-bold'>
+                                Image or PDF
+                                <input
+                                    className='mt-1'
+                                    type='file'
+                                    ref={evidenceFileRef}
+                                    accept='image/jpeg,image/png,image/gif,image/webp,application/pdf'
+                                />
+                            </label>
+                            <Button
+                                type='button'
+                                variant='secondary'
+                                onClick={() => void uploadEvidence()}
+                            >
+                                Upload privately
+                            </Button>
+                            <Button
+                                type='button'
+                                variant='neutral'
+                                onClick={() => void load()}
+                            >
+                                Refresh scan status
+                            </Button>
+                        </div>
+                        {attachments.length ?
+                            <ul className='mt-3 space-y-2'>
+                                {attachments.map(attachment => (
+                                    <li
+                                        className='mh-record-card text-xs'
+                                        key={attachment.id}
+                                    >
+                                        <div className='flex flex-wrap items-center justify-between gap-2'>
+                                            <span>
+                                                <strong>
+                                                    {attachment.filename}
+                                                </strong>{' '}
+                                                · {attachment.status} ·{' '}
+                                                {Math.ceil(
+                                                    attachment.byteSize / 1024,
+                                                )}{' '}
+                                                KB
+                                            </span>
+                                            <div className='flex flex-wrap gap-2'>
+                                                {attachment.status === 'clean' ?
+                                                    <Button
+                                                        type='button'
+                                                        variant='neutral'
+                                                        className='px-2 py-1 text-xs'
+                                                        onClick={() =>
+                                                            void prepareAccess(
+                                                                attachment.id,
+                                                            )
+                                                        }
+                                                    >
+                                                        Prepare preview
+                                                    </Button>
+                                                :   null}
+                                                <Button
+                                                    type='button'
+                                                    variant='neutral'
+                                                    className='px-2 py-1 text-xs'
+                                                    onClick={() =>
+                                                        void deleteAttachment(
+                                                            attachment.id,
+                                                        )
+                                                    }
+                                                >
+                                                    Delete
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        {accessUrls[attachment.id] ?
+                                            <a
+                                                className='mh-text-link mt-2 inline-block'
+                                                href={
+                                                    accessUrls[attachment.id]
+                                                }
+                                                target='_blank'
+                                                rel='noreferrer'
+                                            >
+                                                Open authenticated file
+                                            </a>
+                                        :   null}
+                                    </li>
+                                ))}
+                            </ul>
+                        :   <p className='mt-2 text-xs text-mh-textMuted'>
+                                No private files uploaded.
+                            </p>}
+                    </Card>
                     <label className='block text-sm font-bold'>
-                        Clean private attachment ID (optional)
-                        <Input
-                            className='mt-1'
+                        Clean private attachment (optional)
+                        <select
+                            className='mh-input mt-1 w-full px-3 py-2'
                             value={attachmentId}
                             onChange={event =>
                                 setAttachmentId(event.target.value)
                             }
-                        />
+                        >
+                            <option value=''>No file</option>
+                            {attachments
+                                .filter(
+                                    attachment =>
+                                        attachment.status === 'clean' &&
+                                        attachment.purpose ===
+                                            'verification-evidence',
+                                )
+                                .map(attachment => (
+                                    <option
+                                        key={attachment.id}
+                                        value={attachment.id}
+                                    >
+                                        {attachment.filename}
+                                    </option>
+                                ))}
+                        </select>
                     </label>
                     <label className='block text-sm font-bold'>
                         Private reviewer notes (optional)
@@ -4695,6 +4986,91 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                 {item.attachment ?
                                                     ` — attachment ${item.attachment.status}`
                                                 :   ''}
+                                                {item.attachment ?
+                                                    <div className='mt-1 flex flex-wrap gap-2'>
+                                                        {item.attachment
+                                                            .status ===
+                                                        'clean' ?
+                                                            <Button
+                                                                type='button'
+                                                                variant='neutral'
+                                                                className='px-2 py-1 text-xs'
+                                                                onClick={() =>
+                                                                    void prepareAccess(
+                                                                        item
+                                                                            .attachment!
+                                                                            .id,
+                                                                    )
+                                                                }
+                                                            >
+                                                                Prepare file
+                                                            </Button>
+                                                        :   null}
+                                                        <Button
+                                                            type='button'
+                                                            variant='neutral'
+                                                            className='px-2 py-1 text-xs'
+                                                            onClick={() =>
+                                                                void moderateAttachment(
+                                                                    item
+                                                                        .attachment!
+                                                                        .id,
+                                                                    'quarantine',
+                                                                )
+                                                            }
+                                                        >
+                                                            Quarantine
+                                                        </Button>
+                                                        <Button
+                                                            type='button'
+                                                            variant='neutral'
+                                                            className='px-2 py-1 text-xs'
+                                                            onClick={() =>
+                                                                void moderateAttachment(
+                                                                    item
+                                                                        .attachment!
+                                                                        .id,
+                                                                    'release-for-rescan',
+                                                                )
+                                                            }
+                                                        >
+                                                            Rescan
+                                                        </Button>
+                                                        <Button
+                                                            type='button'
+                                                            variant='neutral'
+                                                            className='px-2 py-1 text-xs'
+                                                            onClick={() =>
+                                                                void moderateAttachment(
+                                                                    item
+                                                                        .attachment!
+                                                                        .id,
+                                                                    'delete',
+                                                                )
+                                                            }
+                                                        >
+                                                            Delete file
+                                                        </Button>
+                                                    </div>
+                                                :   null}
+                                                {item.attachment &&
+                                                accessUrls[
+                                                    item.attachment.id
+                                                ] ?
+                                                    <a
+                                                        className='mh-text-link mt-1 inline-block'
+                                                        href={
+                                                            accessUrls[
+                                                                item.attachment
+                                                                    .id
+                                                            ]
+                                                        }
+                                                        target='_blank'
+                                                        rel='noreferrer'
+                                                    >
+                                                        Open authenticated file
+                                                    </a>
+                                                :   null}
                                             </li>
                                         ))}
                                 </ul>

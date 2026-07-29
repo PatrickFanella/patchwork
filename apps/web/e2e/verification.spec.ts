@@ -24,6 +24,10 @@ test('authenticated verification, appeal, renewal, and exact-address approval re
     const appeals: Array<Record<string, unknown>> = [];
     const exactAddressRequests: Array<Record<string, unknown>> = [];
     const commandBodies: Array<Record<string, unknown>> = [];
+    const privateAttachments: Array<Record<string, unknown>> = [];
+    const attachmentId =
+        'f7b8b206-c3c3-4ae7-8f29-6877b5a93531';
+    let uploadedBytes = 0;
 
     await page.route('**/api/**', async route => {
         const request = route.request();
@@ -63,6 +67,64 @@ test('authenticated verification, appeal, renewal, and exact-address approval re
             });
             return;
         }
+        if (pathname === '/attachments' && request.method() === 'GET') {
+            await fulfill({ attachments: privateAttachments });
+            return;
+        }
+        if (
+            pathname === '/attachments/uploads' &&
+            request.method() === 'POST'
+        ) {
+            const body = request.postDataJSON() as Record<string, unknown>;
+            const attachment = {
+                id: attachmentId,
+                purpose: body['purpose'],
+                subjectRef: body['subjectRef'],
+                filename: body['filename'],
+                declaredMime: body['declaredMime'],
+                detectedMime: null,
+                byteSize: body['byteSize'],
+                status: 'authorized',
+                uploadExpiresAt: '2026-07-28T12:10:00.000Z',
+                retentionExpiresAt: '2027-07-28T12:00:00.000Z',
+                createdAt: now,
+                updatedAt: now,
+            };
+            privateAttachments.push(attachment);
+            await fulfill(
+                {
+                    attachment,
+                    upload: {
+                        token: 'private-upload-token',
+                        expiresAt: attachment.uploadExpiresAt,
+                        maximumBytes: 10 * 1024 * 1024,
+                    },
+                },
+                201,
+            );
+            return;
+        }
+        if (
+            pathname === `/attachments/uploads/${attachmentId}` &&
+            request.method() === 'PUT'
+        ) {
+            expect(
+                request.headers()['x-patchwork-upload-token'],
+            ).toBe('private-upload-token');
+            uploadedBytes = request.postDataBuffer()?.length ?? 0;
+            Object.assign(privateAttachments[0]!, {
+                status: 'clean',
+                detectedMime: 'image/png',
+                updatedAt: now,
+            });
+            await fulfill({
+                attachment: {
+                    ...privateAttachments[0],
+                    status: 'uploaded',
+                },
+            });
+            return;
+        }
         if (
             pathname === '/verification/applications' &&
             request.method() === 'POST'
@@ -97,7 +159,15 @@ test('authenticated verification, appeal, renewal, and exact-address approval re
                 applicationId: id,
                 ...submittedEvidence,
                 createdAt: now,
-                attachment: null,
+                attachment:
+                    submittedEvidence?.['attachmentId'] === attachmentId ?
+                        {
+                            id: attachmentId,
+                            status: privateAttachments[0]?.['status'],
+                            detectedMime:
+                                privateAttachments[0]?.['detectedMime'],
+                        }
+                    :   null,
             });
             await fulfill({ application, evidence: [evidence.at(-1)] }, 201);
             return;
@@ -250,9 +320,29 @@ test('authenticated verification, appeal, renewal, and exact-address approval re
     });
 
     await page.goto('/verification');
+    await expect(
+        page.getByText('Verification status loaded.'),
+    ).toBeVisible();
     const applicationPanel = page.getByRole('region', {
         name: 'Apply for verification',
     });
+    await applicationPanel
+        .getByLabel('Image or PDF')
+        .setInputFiles({
+            name: 'evidence.png',
+            mimeType: 'image/png',
+            buffer: Buffer.from('private-image-bytes'),
+        });
+    await applicationPanel
+        .getByRole('button', { name: 'Upload privately' })
+        .click();
+    const attachmentSelect = applicationPanel.getByLabel(
+        'Clean private attachment (optional)',
+    );
+    await expect(
+        attachmentSelect.locator(`option[value="${attachmentId}"]`),
+    ).toHaveText('evidence.png');
+    await attachmentSelect.selectOption(attachmentId);
     await applicationPanel.getByLabel('Evidence label').fill('Government ID');
     await applicationPanel
         .getByLabel('Private reviewer notes (optional)')
@@ -263,6 +353,12 @@ test('authenticated verification, appeal, renewal, and exact-address approval re
     await expect(
         page.getByText('Verification application submitted privately.'),
     ).toBeVisible();
+    expect(uploadedBytes).toBeGreaterThan(0);
+    expect(commandBodies[0]).toMatchObject({
+        evidence: [
+            expect.objectContaining({ attachmentId }),
+        ],
+    });
 
     const moderatorPanel = page.getByRole('region', {
         name: 'Moderator review',

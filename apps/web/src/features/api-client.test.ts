@@ -18,6 +18,7 @@ import {
     fetchFeedRecordsFromApi,
     fetchMyOrganizationsViaApi,
     fetchOrganizationsViaApi,
+    fetchPrivateAttachmentsViaApi,
     fetchVolunteerProfilesViaApi,
     exportDataViaApi,
     initiateChatViaApi,
@@ -25,10 +26,12 @@ import {
     getAtDirectoryResourceViaApi,
     queryAidPostLifecycleViaApi,
     reportAidPostViaApi,
+    requestPrivateAttachmentAccessViaApi,
     reconcileAidPostStatusViaApi,
     revokeExactLocationSessionViaApi,
     sendExactLocationSignalViaApi,
     transitionAidPostViaApi,
+    uploadPrivateAttachmentViaApi,
     updateAccountPreferencesViaApi,
     updateAtDirectoryResourceViaApi,
     updateAtVolunteerProfileViaApi,
@@ -1149,5 +1152,113 @@ describe('api client', () => {
         expect(inviteBody).not.toHaveProperty('actorDid');
         expect(calls[0]?.[1]?.credentials).toBe('include');
         expect(calls[3]?.[1]?.credentials).toBe('include');
+    });
+
+    it('authorizes and uploads private bytes without exposing object keys or upload tokens in URLs', async () => {
+        const attachment = {
+            id: '11111111-1111-4111-8111-111111111111',
+            purpose: 'verification-evidence',
+            subjectRef: null,
+            filename: 'evidence.png',
+            declaredMime: 'image/png',
+            detectedMime: null,
+            byteSize: 8,
+            status: 'authorized',
+            uploadExpiresAt: '2026-07-28T12:10:00.000Z',
+            retentionExpiresAt: '2027-07-28T12:00:00.000Z',
+            createdAt: '2026-07-28T12:00:00.000Z',
+            updatedAt: '2026-07-28T12:00:00.000Z',
+        };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                createJsonResponse(
+                    {
+                        attachment,
+                        upload: {
+                            token: 'private-upload-token',
+                            expiresAt: attachment.uploadExpiresAt,
+                            maximumBytes: 10 * 1024 * 1024,
+                        },
+                    },
+                    true,
+                    201,
+                ),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    attachment: {
+                        ...attachment,
+                        status: 'uploaded',
+                        detectedMime: 'image/png',
+                    },
+                }),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    attachments: [
+                        {
+                            ...attachment,
+                            status: 'clean',
+                            detectedMime: 'image/png',
+                        },
+                    ],
+                }),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    attachment: {
+                        ...attachment,
+                        status: 'clean',
+                        detectedMime: 'image/png',
+                    },
+                    access: {
+                        url:
+                            'https://patchwork.test/api/attachments/content/' +
+                            `${attachment.id}?expires=1785268860&signature=signed`,
+                        expiresAt: '2026-07-28T12:01:00.000Z',
+                    },
+                }),
+            );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const file = new File([Buffer.from('png-body')], 'evidence.png', {
+            type: 'image/png',
+        });
+        await expect(
+            uploadPrivateAttachmentViaApi(
+                file,
+                'verification-evidence',
+                null,
+            ),
+        ).resolves.toMatchObject({
+            ok: true,
+            data: { status: 'uploaded' },
+        });
+        await expect(fetchPrivateAttachmentsViaApi()).resolves.toMatchObject({
+            ok: true,
+            data: [{ status: 'clean' }],
+        });
+        await expect(
+            requestPrivateAttachmentAccessViaApi(attachment.id),
+        ).resolves.toMatchObject({
+            ok: true,
+            data: { expiresAt: '2026-07-28T12:01:00.000Z' },
+        });
+
+        const calls = fetchMock.mock.calls as unknown as Array<
+            [string, RequestInit | undefined]
+        >;
+        expect(calls[0]?.[0]).toMatch(/\/attachments\/uploads$/);
+        expect(calls[1]?.[0]).toMatch(
+            new RegExp(`/attachments/uploads/${attachment.id}$`),
+        );
+        expect(calls[1]?.[1]?.headers).toMatchObject({
+            'x-patchwork-upload-token': 'private-upload-token',
+        });
+        expect(String(calls[1]?.[0])).not.toContain('private-upload-token');
+        expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(
+            'private/original/',
+        );
     });
 });
