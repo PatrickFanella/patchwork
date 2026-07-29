@@ -257,6 +257,29 @@ export class AccountPrivacyService {
                  WHERE actor_did = $1`,
                 [did],
             );
+            const coordinationInbox = await client.query(
+                `DELETE FROM activity_inbox_items
+                 WHERE recipient_did = $1`,
+                [did],
+            );
+            const coordinationFeedback = await client.query(
+                `DELETE FROM coordination_outcome_feedback
+                 WHERE submitter_did = $1`,
+                [did],
+            );
+            const coordinationOffers = await client.query(
+                `DELETE FROM coordination_offers
+                 WHERE offerer_did = $1`,
+                [did],
+            );
+            await client.query(
+                `UPDATE coordination_offer_events
+                 SET actor_did = NULL,
+                     private_details =
+                        '{"redactedForDeactivation":true}'::jsonb
+                 WHERE actor_did = $1`,
+                [did],
+            );
             const legacyDiscoveryEvents = await client.query(
                 `DELETE FROM discovery_events WHERE author_did = $1`,
                 [did],
@@ -374,6 +397,12 @@ export class AccountPrivacyService {
                         exactAddressRequests.rowCount ?? 0,
                     privateAttachments:
                         privateAttachments.rowCount ?? 0,
+                    coordinationInbox:
+                        coordinationInbox.rowCount ?? 0,
+                    coordinationFeedback:
+                        coordinationFeedback.rowCount ?? 0,
+                    coordinationOffers:
+                        coordinationOffers.rowCount ?? 0,
                     legacyDiscoveryEvents: legacyDiscoveryEvents.rowCount ?? 0,
                     workflows: workflows.rowCount ?? 0,
                     platformRoles: platformRoles.rowCount ?? 0,
@@ -683,6 +712,75 @@ export class AccountPrivacyService {
              FROM private_attachments
              WHERE owner_did = $1
              ORDER BY created_at, attachment_id`,
+            [did],
+        );
+        const coordinationOffers = await client.query<{
+            offer_id: string;
+            request_uri: string;
+            requester_did: string;
+            offerer_did: string;
+            note: string | null;
+            status: string;
+            offered_at: Date | string;
+            expires_at: Date | string;
+            decided_at: Date | string | null;
+        }>(
+            `SELECT offer_id, request_uri, requester_did, offerer_did,
+                    note, status, offered_at, expires_at, decided_at
+             FROM coordination_offers
+             WHERE requester_did = $1 OR offerer_did = $1
+             ORDER BY offered_at, offer_id`,
+            [did],
+        );
+        const coordinationConnections = await client.query<{
+            connection_id: string;
+            offer_id: string;
+            request_uri: string;
+            requester_did: string;
+            helper_did: string;
+            status: string;
+            accepted_at: Date | string;
+            completed_at: Date | string | null;
+            updated_at: Date | string;
+        }>(
+            `SELECT connection_id, offer_id, request_uri, requester_did,
+                    helper_did, status, accepted_at, completed_at, updated_at
+             FROM coordination_connections
+             WHERE requester_did = $1 OR helper_did = $1
+             ORDER BY accepted_at, connection_id`,
+            [did],
+        );
+        const coordinationInbox = await client.query<{
+            item_id: string;
+            item_type: string;
+            title: string;
+            summary: string;
+            action_url: string;
+            metadata: Record<string, unknown>;
+            occurred_at: Date | string;
+            read_at: Date | string | null;
+        }>(
+            `SELECT item_id, item_type, title, summary, action_url,
+                    metadata, occurred_at, read_at
+             FROM activity_inbox_items
+             WHERE recipient_did = $1
+             ORDER BY occurred_at, item_id`,
+            [did],
+        );
+        const coordinationFeedback = await client.query<{
+            feedback_id: string;
+            connection_id: string;
+            outcome: string;
+            rating: number;
+            comment: string | null;
+            tags: string[];
+            submitted_at: Date | string;
+        }>(
+            `SELECT feedback_id, connection_id, outcome, rating,
+                    comment, tags, submitted_at
+             FROM coordination_outcome_feedback
+             WHERE submitter_did = $1
+             ORDER BY submitted_at, feedback_id`,
             [did],
         );
         const workflows = await client.query<{
@@ -1040,6 +1138,55 @@ export class AccountPrivacyService {
                     updatedAt: iso(row.updated_at),
                     deletedAt: iso(row.deleted_at),
                 })),
+                coordination: {
+                    offers: coordinationOffers.rows.map(row => ({
+                        id: row.offer_id,
+                        requestUri: row.request_uri,
+                        direction:
+                            row.requester_did === did ? 'received' : 'sent',
+                        note: row.note,
+                        status: row.status,
+                        offeredAt: iso(row.offered_at),
+                        expiresAt: iso(row.expires_at),
+                        decidedAt: iso(row.decided_at),
+                        ...(row.status === 'accepted' ?
+                            {
+                                requesterDid: row.requester_did,
+                                helperDid: row.offerer_did,
+                            }
+                        :   {}),
+                    })),
+                    connections: coordinationConnections.rows.map(row => ({
+                        id: row.connection_id,
+                        offerId: row.offer_id,
+                        requestUri: row.request_uri,
+                        status: row.status,
+                        requesterDid: row.requester_did,
+                        helperDid: row.helper_did,
+                        acceptedAt: iso(row.accepted_at),
+                        completedAt: iso(row.completed_at),
+                        updatedAt: iso(row.updated_at),
+                    })),
+                    inbox: coordinationInbox.rows.map(row => ({
+                        id: row.item_id,
+                        type: row.item_type,
+                        title: row.title,
+                        summary: row.summary,
+                        actionUrl: row.action_url,
+                        metadata: row.metadata,
+                        occurredAt: iso(row.occurred_at),
+                        readAt: iso(row.read_at),
+                    })),
+                    feedback: coordinationFeedback.rows.map(row => ({
+                        id: row.feedback_id,
+                        connectionId: row.connection_id,
+                        outcome: row.outcome,
+                        rating: row.rating,
+                        comment: row.comment,
+                        tags: row.tags,
+                        submittedAt: iso(row.submitted_at),
+                    })),
+                },
                 workflows: workflows.rows.map(row => ({
                     postUri: row.post_uri,
                     currentStatus: row.current_status,

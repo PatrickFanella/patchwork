@@ -18,9 +18,10 @@ describe('API server method routing', () => {
             throw new Error('API test server did not bind a TCP address.');
         }
         origin = `http://127.0.0.1:${address.port}`;
-    });
+    }, 30_000);
 
     afterAll(async () => {
+        if (!server) return;
         await new Promise<void>((resolve, reject) =>
             server.close(error => (error ? reject(error) : resolve())),
         );

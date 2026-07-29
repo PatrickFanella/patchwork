@@ -95,6 +95,7 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             '0015_volunteer_private_profiles.sql',
             '0016_organizations_and_stewardship.sql',
             '0017_verification_and_exact_public_addresses.sql',
+            '0018_coordination_offers_inbox_outcomes.sql',
         ]) {
             await pool.query(
                 await readFile(
@@ -144,6 +145,11 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         }
         await pool.query(
             `TRUNCATE organization_notification_events,
+                      coordination_outcome_feedback,
+                      activity_inbox_items,
+                      coordination_offer_events,
+                      coordination_connections,
+                      coordination_offers,
                       verification_audit_events,
                       exact_public_address_requests,
                       verification_appeals,

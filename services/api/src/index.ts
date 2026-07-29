@@ -61,6 +61,11 @@ import {
 } from './http/verification-handler.js';
 import { VerificationCaseService } from './verification-case-service.js';
 import {
+    createCoordinationHandler,
+    isCoordinationRoute,
+} from './http/coordination-handler.js';
+import { CoordinationService } from './coordination-service.js';
+import {
     createDurableSafetyHandler,
     isDurableSafetyRoute,
 } from './http/durable-safety-handler.js';
@@ -122,6 +127,7 @@ if (postgresPool) {
         state_table: string | null;
         organization_table: string | null;
         verification_table: string | null;
+        coordination_table: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
@@ -132,7 +138,9 @@ if (postgresPool) {
             to_regclass('indexer_projection_state')::TEXT AS state_table,
             to_regclass('organizations')::TEXT AS organization_table,
             to_regclass('verification_applications')::TEXT
-                AS verification_table`,
+                AS verification_table,
+            to_regclass('coordination_offers')::TEXT
+                AS coordination_table`,
     );
     if (
         !projectionSchema.rows[0]?.projection_table ||
@@ -140,6 +148,7 @@ if (postgresPool) {
         !projectionSchema.rows[0]?.volunteer_projection_table ||
         !projectionSchema.rows[0]?.organization_table ||
         !projectionSchema.rows[0]?.verification_table ||
+        !projectionSchema.rows[0]?.coordination_table ||
         !projectionSchema.rows[0]?.state_table
     ) {
         await postgresPool.end();
@@ -197,6 +206,8 @@ const organizationService =
     postgresPool ? new OrganizationService(postgresPool) : undefined;
 const verificationCaseService =
     postgresPool ? new VerificationCaseService(postgresPool) : undefined;
+const coordinationService =
+    postgresPool ? new CoordinationService(postgresPool) : undefined;
 const consentExemptPaths = new Set([
     '/account/onboarding',
     '/account/consent',
@@ -380,6 +391,14 @@ const verificationHandler =
     authenticateApiRequest && verificationCaseService ?
         createVerificationHandler({
             service: verificationCaseService,
+            authenticate: authenticateApiRequest,
+            executeIdempotent: executeIdempotentMutation,
+        })
+    :   undefined;
+const coordinationHandler =
+    authenticateApiRequest && coordinationService ?
+        createCoordinationHandler({
+            service: coordinationService,
             authenticate: authenticateApiRequest,
             executeIdempotent: executeIdempotentMutation,
         })
@@ -1403,6 +1422,15 @@ const contractRoutes = [
     '/verification/exact-address/requests',
     '/verification/exact-address/review',
     '/verification/exact-address/decisions',
+    '/coordination/mine',
+    '/coordination/offers',
+    '/coordination/offer-decisions',
+    '/coordination/connections',
+    '/coordination/matches',
+    '/inbox',
+    '/inbox/read',
+    '/outcomes',
+    '/outcomes/mine',
     '/health',
     '/health/ready',
     '/metrics',
@@ -1614,6 +1642,18 @@ export const createApiServer = () => {
         }
 
         if (verificationHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (coordinationHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isCoordinationRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'COORDINATION_SERVICE_UNAVAILABLE',
+                    message: 'Coordination services are unavailable.',
+                },
+            });
             return;
         }
         if (isVerificationRoute(request, requestUrl)) {
@@ -1869,6 +1909,7 @@ export const startApiServer = () => {
     let retentionScheduler: RetentionScheduler | undefined;
     let organizationScheduler: RetentionScheduler | undefined;
     let verificationScheduler: RetentionScheduler | undefined;
+    let coordinationScheduler: RetentionScheduler | undefined;
     if (postgresPool) {
         const retention = new PostgresRetentionService(postgresPool);
         retentionScheduler = startRetentionScheduler({
@@ -1942,6 +1983,30 @@ export const startApiServer = () => {
                 },
             });
         }
+        if (coordinationService) {
+            coordinationScheduler = startRetentionScheduler({
+                intervalMs: 60 * 60 * 1_000,
+                enforce: async () => {
+                    const result =
+                        await coordinationService.runExpirySweep();
+                    console.log(
+                        JSON.stringify({
+                            level: 'info',
+                            event: 'coordination_expiry_sweep_completed',
+                            ...result,
+                        }),
+                    );
+                },
+                onError: () => {
+                    console.error(
+                        JSON.stringify({
+                            level: 'error',
+                            event: 'coordination_expiry_sweep_failed',
+                        }),
+                    );
+                },
+            });
+        }
     }
     server.listen(config.API_PORT, config.API_HOST, () => {
         console.log(
@@ -1952,6 +2017,7 @@ export const startApiServer = () => {
         retentionScheduler?.stop();
         organizationScheduler?.stop();
         verificationScheduler?.stop();
+        coordinationScheduler?.stop();
     });
     return server;
 };
