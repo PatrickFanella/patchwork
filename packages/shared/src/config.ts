@@ -74,6 +74,12 @@ const apiSchema = baseSchema.merge(atprotoSchema).extend({
         .min(10)
         .max(3_600)
         .default(30),
+    API_NOTIFICATION_INTERVAL_SECONDS: z.coerce
+        .number()
+        .int()
+        .min(5)
+        .max(3_600)
+        .default(15),
     API_MODERATION_SERVICE_URL: optionalUrlField,
     MODERATION_SERVICE_TOKEN: optionalSecretField,
     ATTACHMENT_OBJECT_ENDPOINT: optionalUrlField,
@@ -88,6 +94,13 @@ const apiSchema = baseSchema.merge(atprotoSchema).extend({
         .min(1)
         .max(65_535)
         .default(3310),
+    NOTIFICATION_EMAIL_PROVIDER_URL: optionalUrlField,
+    NOTIFICATION_EMAIL_PROVIDER_TOKEN: optionalSecretField,
+    NOTIFICATION_EMAIL_FROM: optionalSecretField,
+    NOTIFICATION_VAPID_SUBJECT: optionalSecretField,
+    NOTIFICATION_VAPID_PUBLIC_KEY: optionalSecretField,
+    NOTIFICATION_VAPID_PRIVATE_KEY: optionalSecretField,
+    NOTIFICATION_PROVIDER_WEBHOOK_TOKEN: optionalSecretField,
     API_DATA_SOURCE: z.enum(['fixture', 'postgres']).default('fixture'),
     API_DATABASE_URL: optionalUrlField,
     DATABASE_URL: optionalUrlField,
@@ -137,6 +150,29 @@ const apiSchemaWithRefinements = apiSchema.superRefine((value, context) => {
             code: z.ZodIssueCode.custom,
             path: ['ATTACHMENT_SIGNING_KEY'],
             message: 'ATTACHMENT_SIGNING_KEY must be at least 32 characters.',
+        });
+    }
+    const notificationFields = [
+        'NOTIFICATION_EMAIL_PROVIDER_URL',
+        'NOTIFICATION_EMAIL_PROVIDER_TOKEN',
+        'NOTIFICATION_EMAIL_FROM',
+        'NOTIFICATION_VAPID_SUBJECT',
+        'NOTIFICATION_VAPID_PUBLIC_KEY',
+        'NOTIFICATION_VAPID_PRIVATE_KEY',
+        'NOTIFICATION_PROVIDER_WEBHOOK_TOKEN',
+    ] as const;
+    const configuredNotifications = notificationFields.filter(field =>
+        Boolean(value[field]),
+    );
+    if (
+        configuredNotifications.length > 0 &&
+        configuredNotifications.length !== notificationFields.length
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['NOTIFICATION_EMAIL_PROVIDER_URL'],
+            message:
+                'All email, Web Push, and provider-feedback notification fields are required together.',
         });
     }
 });
@@ -248,6 +284,13 @@ export interface ProductionApiConfig extends ProductionConfigBase {
     ATTACHMENT_OBJECT_BUCKET?: string;
     ATTACHMENT_SIGNING_KEY?: string;
     ATTACHMENT_CLAMD_HOST?: string;
+    NOTIFICATION_EMAIL_PROVIDER_URL?: string;
+    NOTIFICATION_EMAIL_PROVIDER_TOKEN?: string;
+    NOTIFICATION_EMAIL_FROM?: string;
+    NOTIFICATION_VAPID_SUBJECT?: string;
+    NOTIFICATION_VAPID_PUBLIC_KEY?: string;
+    NOTIFICATION_VAPID_PRIVATE_KEY?: string;
+    NOTIFICATION_PROVIDER_WEBHOOK_TOKEN?: string;
 }
 
 export interface AtAuthRuntimeConfig extends ProductionApiConfig {
@@ -335,6 +378,23 @@ export const validateProductionConfig = (
     if (missingAttachments.length > 0) {
         throw new Error(
             `FATAL: private attachment runtime requires ${missingAttachments.join(', ')}.`,
+        );
+    }
+    const notificationRequired: Array<keyof ProductionApiConfig> = [
+        'NOTIFICATION_EMAIL_PROVIDER_URL',
+        'NOTIFICATION_EMAIL_PROVIDER_TOKEN',
+        'NOTIFICATION_EMAIL_FROM',
+        'NOTIFICATION_VAPID_SUBJECT',
+        'NOTIFICATION_VAPID_PUBLIC_KEY',
+        'NOTIFICATION_VAPID_PRIVATE_KEY',
+        'NOTIFICATION_PROVIDER_WEBHOOK_TOKEN',
+    ];
+    const missingNotifications = notificationRequired.filter(
+        key => !config[key],
+    );
+    if (missingNotifications.length > 0) {
+        throw new Error(
+            `FATAL: durable notification delivery requires ${missingNotifications.join(', ')}.`,
         );
     }
 };

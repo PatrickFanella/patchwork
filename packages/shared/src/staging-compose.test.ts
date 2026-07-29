@@ -38,6 +38,25 @@ const composeEnvironment = {
         'test-staging-object-secret-that-is-long',
     STAGING_PATCHWORK_ATTACHMENT_SIGNING_KEY:
         'test-staging-signing-key-that-is-long',
+    NOTIFICATION_EMAIL_PROVIDER_URL:
+        'https://email.example.test/send',
+    NOTIFICATION_EMAIL_PROVIDER_TOKEN: 'production-email-token',
+    NOTIFICATION_EMAIL_FROM: 'notifications@example.test',
+    NOTIFICATION_VAPID_SUBJECT: 'mailto:security@example.test',
+    NOTIFICATION_VAPID_PUBLIC_KEY: 'production-vapid-public',
+    NOTIFICATION_VAPID_PRIVATE_KEY: 'production-vapid-private',
+    NOTIFICATION_PROVIDER_WEBHOOK_TOKEN: 'production-webhook-token',
+    STAGING_NOTIFICATION_EMAIL_PROVIDER_URL:
+        'https://email-staging.example.test/send',
+    STAGING_NOTIFICATION_EMAIL_PROVIDER_TOKEN: 'staging-email-token',
+    STAGING_NOTIFICATION_EMAIL_FROM:
+        'notifications-staging@example.test',
+    STAGING_NOTIFICATION_VAPID_SUBJECT:
+        'mailto:security-staging@example.test',
+    STAGING_NOTIFICATION_VAPID_PUBLIC_KEY: 'staging-vapid-public',
+    STAGING_NOTIFICATION_VAPID_PRIVATE_KEY: 'staging-vapid-private',
+    STAGING_NOTIFICATION_PROVIDER_WEBHOOK_TOKEN:
+        'staging-webhook-token',
     PATCHWORK_PM_TILES_DIRECTORY: '/tmp/tiles',
     PATCHWORK_PM_TILES_FILENAME: 'us.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.pmtiles',
     STAGING_PATCHWORK_PM_TILES_DIRECTORY: '/tmp/tiles',
@@ -167,6 +186,17 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
                     ATTACHMENT_CLAMD_HOST: expect.stringMatching(
                         /^patchwork-clamav$/,
                     ),
+                    NOTIFICATION_EMAIL_PROVIDER_URL:
+                        expect.stringMatching(/^https:/),
+                    NOTIFICATION_EMAIL_PROVIDER_TOKEN:
+                        expect.any(String),
+                    NOTIFICATION_EMAIL_FROM: expect.stringContaining('@'),
+                    NOTIFICATION_VAPID_SUBJECT:
+                        expect.stringMatching(/^mailto:/),
+                    NOTIFICATION_VAPID_PUBLIC_KEY: expect.any(String),
+                    NOTIFICATION_VAPID_PRIVATE_KEY: expect.any(String),
+                    NOTIFICATION_PROVIDER_WEBHOOK_TOKEN:
+                        expect.any(String),
                 });
                 for (const runtime of [
                     'patchwork-api',

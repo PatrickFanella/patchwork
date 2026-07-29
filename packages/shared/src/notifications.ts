@@ -11,6 +11,22 @@
 // ---------------------------------------------------------------------------
 
 export const NOTIFICATION_TYPES = [
+    'offer_received',
+    'offer_accepted',
+    'offer_declined',
+    'offer_expired',
+    'connection_started',
+    'connection_completed',
+    'connection_cancelled',
+    'lifecycle_changed',
+    'verification_submitted',
+    'verification_decided',
+    'appeal_submitted',
+    'appeal_decided',
+    'account_expiry',
+    'moderation_action',
+    'attachment_action',
+    'organization_action',
     'request_created',
     'request_assigned',
     'assignment_accepted',
@@ -45,9 +61,12 @@ export type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number];
 
 export const DELIVERY_STATUSES = [
     'pending',
+    'processing',
     'sent',
     'delivered',
     'failed',
+    'retry',
+    'dead_letter',
     'skipped',
 ] as const;
 
@@ -81,6 +100,8 @@ export interface Notification {
     archived: boolean;
     actionUrl?: string;
     metadata?: Record<string, unknown>;
+    templateVersion?: string;
+    deduplicationKey?: string;
     createdAt: string;
     updatedAt: string;
 }

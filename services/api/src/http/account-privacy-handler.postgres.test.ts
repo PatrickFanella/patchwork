@@ -96,6 +96,7 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             '0016_organizations_and_stewardship.sql',
             '0017_verification_and_exact_public_addresses.sql',
             '0018_coordination_offers_inbox_outcomes.sql',
+            '0020_durable_notification_outbox.sql',
         ]) {
             await pool.query(
                 await readFile(
@@ -144,7 +145,11 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             );
         }
         await pool.query(
-            `TRUNCATE organization_notification_events,
+            `TRUNCATE notification_delivery_attempts,
+                      notification_push_subscriptions,
+                      notification_email_endpoints,
+                      notification_intents,
+                      organization_notification_events,
                       coordination_outcome_feedback,
                       activity_inbox_items,
                       coordination_offer_events,
@@ -471,6 +476,31 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 '{"privateApplicantContext":"must be redacted"}', NOW()
              )`,
         );
+        await pool.query(
+            `INSERT INTO notification_email_endpoints (
+                endpoint_id, owner_did, email_address,
+                verification_token_hash, verification_expires_at,
+                verified_at, disabled_at, created_at, updated_at
+             ) VALUES (
+                'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $1,
+                'notify-viewer@example.test', $2,
+                NOW() + INTERVAL '30 minutes', NOW(), NULL, NOW(), NOW()
+             )`,
+            [viewerDid, 'c'.repeat(64)],
+        );
+        await pool.query(
+            `
+             INSERT INTO notification_push_subscriptions (
+                subscription_id, owner_did, endpoint, p256dh, auth_secret,
+                user_agent_hash, created_at, updated_at
+             ) VALUES (
+                'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', $1,
+                'https://push.example.test/private-subscription',
+                'private-p256dh-material', 'private-auth-material',
+                $2, NOW(), NOW()
+             )`,
+            [viewerDid, 'd'.repeat(64)],
+        );
     });
 
     afterAll(async () => {
@@ -570,6 +600,24 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                         status: 'clean',
                     }),
                 ],
+                notifications: {
+                    items: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: 'verification_submitted',
+                        }),
+                        expect.objectContaining({
+                            type: 'appeal_submitted',
+                        }),
+                    ]),
+                    email: expect.objectContaining({
+                        address: 'notify-viewer@example.test',
+                    }),
+                    pushSubscriptions: [
+                        expect.objectContaining({
+                            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                        }),
+                    ],
+                },
             },
             exclusions: expect.arrayContaining([
                 expect.objectContaining({ category: 'at-repository' }),
@@ -582,6 +630,13 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         expect(serialized).not.toContain(
             'verification/private-viewer-evidence.pdf',
         );
+        expect(serialized).not.toContain(
+            'https://push.example.test/private-subscription',
+        );
+        expect(serialized).not.toContain('private-p256dh-material');
+        expect(serialized).not.toContain('private-auth-material');
+        expect(serialized).not.toContain('c'.repeat(64));
+        expect(serialized).not.toContain('d'.repeat(64));
         expect(serialized).not.toContain('Other aid post');
         expect(serialized).not.toContain('Other clinic');
         expect(serialized).not.toContain(otherDid);
@@ -630,6 +685,9 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 verificationApplications: 1,
                 exactAddressRequests: 1,
                 privateAttachments: 1,
+                notificationIntents: expect.any(Number),
+                notificationEmailEndpoints: 1,
+                notificationPushSubscriptions: 1,
                 policyConsents: 1,
                 preferences: 1,
             },

@@ -337,6 +337,21 @@ export class AccountPrivacyService {
                  WHERE actor_did = $1 AND pathname <> '/account/deactivate'`,
                 [did],
             );
+            const notificationIntents = await client.query(
+                `DELETE FROM notification_intents
+                 WHERE recipient_did = $1`,
+                [did],
+            );
+            const notificationEmailEndpoints = await client.query(
+                `DELETE FROM notification_email_endpoints
+                 WHERE owner_did = $1`,
+                [did],
+            );
+            const notificationPushSubscriptions = await client.query(
+                `DELETE FROM notification_push_subscriptions
+                 WHERE owner_did = $1`,
+                [did],
+            );
             const preferenceAudit = await client.query(
                 `DELETE FROM account_preference_audit WHERE did = $1`,
                 [did],
@@ -408,6 +423,12 @@ export class AccountPrivacyService {
                     platformRoles: platformRoles.rowCount ?? 0,
                     ownedBlocks: ownedBlocks.rowCount ?? 0,
                     commandMetadata: commandMetadata.rowCount ?? 0,
+                    notificationIntents:
+                        notificationIntents.rowCount ?? 0,
+                    notificationEmailEndpoints:
+                        notificationEmailEndpoints.rowCount ?? 0,
+                    notificationPushSubscriptions:
+                        notificationPushSubscriptions.rowCount ?? 0,
                     preferenceAudit: preferenceAudit.rowCount ?? 0,
                     preferences: preferences.rowCount ?? 0,
                     policyConsents: policyConsents.rowCount ?? 0,
@@ -781,6 +802,54 @@ export class AccountPrivacyService {
              FROM coordination_outcome_feedback
              WHERE submitter_did = $1
              ORDER BY submitted_at, feedback_id`,
+            [did],
+        );
+        const notifications = await client.query<{
+            notification_id: string;
+            notification_type: string;
+            template_version: string;
+            title: string;
+            body: string;
+            priority: string;
+            action_url: string;
+            metadata: Record<string, unknown>;
+            occurred_at: Date | string;
+            read_at: Date | string | null;
+            archived_at: Date | string | null;
+        }>(
+            `SELECT notification_id, notification_type, template_version,
+                    title, body, priority, action_url, metadata,
+                    occurred_at, read_at, archived_at
+             FROM notification_intents
+             WHERE recipient_did = $1
+             ORDER BY occurred_at, notification_id`,
+            [did],
+        );
+        const notificationEmail = await client.query<{
+            email_address: string;
+            verified_at: Date | string | null;
+            disabled_at: Date | string | null;
+            created_at: Date | string;
+            updated_at: Date | string;
+        }>(
+            `SELECT email_address, verified_at, disabled_at,
+                    created_at, updated_at
+             FROM notification_email_endpoints
+             WHERE owner_did = $1`,
+            [did],
+        );
+        const notificationPush = await client.query<{
+            subscription_id: string;
+            created_at: Date | string;
+            updated_at: Date | string;
+            revoked_at: Date | string | null;
+            invalid_reason_code: string | null;
+        }>(
+            `SELECT subscription_id, created_at, updated_at, revoked_at,
+                    invalid_reason_code
+             FROM notification_push_subscriptions
+             WHERE owner_did = $1
+             ORDER BY created_at, subscription_id`,
             [did],
         );
         const workflows = await client.query<{
@@ -1185,6 +1254,48 @@ export class AccountPrivacyService {
                         comment: row.comment,
                         tags: row.tags,
                         submittedAt: iso(row.submitted_at),
+                    })),
+                },
+                notifications: {
+                    items: notifications.rows.map(row => ({
+                        id: row.notification_id,
+                        type: row.notification_type,
+                        templateVersion: row.template_version,
+                        title: row.title,
+                        body: row.body,
+                        priority: row.priority,
+                        actionUrl: row.action_url,
+                        metadata: row.metadata,
+                        occurredAt: iso(row.occurred_at),
+                        readAt: iso(row.read_at),
+                        archivedAt: iso(row.archived_at),
+                    })),
+                    email:
+                        notificationEmail.rows[0] ?
+                            {
+                                address:
+                                    notificationEmail.rows[0]
+                                        .email_address,
+                                verifiedAt: iso(
+                                    notificationEmail.rows[0].verified_at,
+                                ),
+                                disabledAt: iso(
+                                    notificationEmail.rows[0].disabled_at,
+                                ),
+                                createdAt: iso(
+                                    notificationEmail.rows[0].created_at,
+                                ),
+                                updatedAt: iso(
+                                    notificationEmail.rows[0].updated_at,
+                                ),
+                            }
+                        :   null,
+                    pushSubscriptions: notificationPush.rows.map(row => ({
+                        id: row.subscription_id,
+                        createdAt: iso(row.created_at),
+                        updatedAt: iso(row.updated_at),
+                        revokedAt: iso(row.revoked_at),
+                        invalidReasonCode: row.invalid_reason_code,
                     })),
                 },
                 workflows: workflows.rows.map(row => ({

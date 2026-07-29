@@ -73,6 +73,15 @@ import { AttachmentService } from './attachment-service.js';
 import { MinioPrivateObjectStore } from './private-object-store.js';
 import { ClamdMalwareScanner } from './clamd-scanner.js';
 import {
+    DurableNotificationService,
+    HttpEmailProvider,
+    VapidPushProvider,
+} from './durable-notification-service.js';
+import {
+    createNotificationHandler,
+    isNotificationRoute,
+} from './http/notification-handler.js';
+import {
     createExactLocationSignalHandler,
     isExactLocationSignalRoute,
 } from './http/exact-location-signal-handler.js';
@@ -141,6 +150,7 @@ if (postgresPool) {
         verification_table: string | null;
         coordination_table: string | null;
         attachment_table: string | null;
+        notification_table: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
@@ -155,7 +165,9 @@ if (postgresPool) {
             to_regclass('coordination_offers')::TEXT
                 AS coordination_table,
             to_regclass('attachment_scan_attempts')::TEXT
-                AS attachment_table`,
+                AS attachment_table,
+            to_regclass('notification_intents')::TEXT
+                AS notification_table`,
     );
     if (
         !projectionSchema.rows[0]?.projection_table ||
@@ -165,6 +177,7 @@ if (postgresPool) {
         !projectionSchema.rows[0]?.verification_table ||
         !projectionSchema.rows[0]?.coordination_table ||
         !projectionSchema.rows[0]?.attachment_table ||
+        !projectionSchema.rows[0]?.notification_table ||
         !projectionSchema.rows[0]?.state_table
     ) {
         await postgresPool.end();
@@ -260,6 +273,34 @@ const attachmentService =
 if (attachmentService) {
     await attachmentService.ensureReady();
 }
+const notificationProviders =
+    config.NOTIFICATION_EMAIL_PROVIDER_URL &&
+    config.NOTIFICATION_EMAIL_PROVIDER_TOKEN &&
+    config.NOTIFICATION_EMAIL_FROM &&
+    config.NOTIFICATION_VAPID_SUBJECT &&
+    config.NOTIFICATION_VAPID_PUBLIC_KEY &&
+    config.NOTIFICATION_VAPID_PRIVATE_KEY ?
+        {
+            email: new HttpEmailProvider(
+                config.NOTIFICATION_EMAIL_PROVIDER_URL,
+                config.NOTIFICATION_EMAIL_PROVIDER_TOKEN,
+                config.NOTIFICATION_EMAIL_FROM,
+            ),
+            push: new VapidPushProvider({
+                subject: config.NOTIFICATION_VAPID_SUBJECT,
+                publicKey: config.NOTIFICATION_VAPID_PUBLIC_KEY,
+                privateKey: config.NOTIFICATION_VAPID_PRIVATE_KEY,
+            }),
+        }
+    :   {};
+const notificationService =
+    postgresPool ?
+        new DurableNotificationService(
+            postgresPool,
+            notificationProviders,
+            { publicWebOrigin: config.API_PUBLIC_ORIGIN.replace(/\/$/, '') },
+        )
+    :   undefined;
 const consentExemptPaths = new Set([
     '/account/onboarding',
     '/account/consent',
@@ -482,6 +523,15 @@ const attachmentHandler =
             authenticate: authenticateApiRequest,
         })
     :   undefined;
+const notificationHandler =
+    authenticateApiRequest && notificationService ?
+        createNotificationHandler({
+            service: notificationService,
+            authenticate: authenticateApiRequest,
+            providerFeedbackToken:
+                config.NOTIFICATION_PROVIDER_WEBHOOK_TOKEN,
+        })
+    :   undefined;
 const discoveryHandler = createDiscoveryHandler({
     service: queryService,
     authenticateOptional: authenticateOptionalApiRequest,
@@ -602,6 +652,11 @@ const buildReadinessPayload = async (): Promise<{
 let attachmentDeletionFailuresTotal = 0;
 let attachmentDeletionFailuresPending = 0;
 let attachmentPipelineSweepFailuresTotal = 0;
+let notificationDeliveryPending = 0;
+let notificationDeliveryRetrying = 0;
+let notificationDeliveryDeadLetters = 0;
+let notificationDeliveryOldestPendingSeconds = 0;
+let notificationDeliverySweepFailuresTotal = 0;
 
 const renderPrometheusMetrics = (): string => {
     const uptimeSeconds = Math.floor(process.uptime());
@@ -629,7 +684,25 @@ const renderPrometheusMetrics = (): string => {
         `patchwork_attachment_pipeline_sweep_failures_total{project="patchwork",service="api",component="stitch"} ${attachmentPipelineSweepFailuresTotal}`,
     ].join('\n');
 
-    return `${baseMetrics}\n${sliMetrics}\n${retentionMetrics.renderPrometheus()}\n${attachmentMetrics}`;
+    const notificationMetrics = [
+        '# HELP patchwork_notification_delivery_pending Pending external notification deliveries.',
+        '# TYPE patchwork_notification_delivery_pending gauge',
+        `patchwork_notification_delivery_pending{project="patchwork",service="api",component="stitch"} ${notificationDeliveryPending}`,
+        '# HELP patchwork_notification_delivery_retrying External notification deliveries waiting for retry.',
+        '# TYPE patchwork_notification_delivery_retrying gauge',
+        `patchwork_notification_delivery_retrying{project="patchwork",service="api",component="stitch"} ${notificationDeliveryRetrying}`,
+        '# HELP patchwork_notification_delivery_dead_letters External notification deliveries exhausted or permanently rejected.',
+        '# TYPE patchwork_notification_delivery_dead_letters gauge',
+        `patchwork_notification_delivery_dead_letters{project="patchwork",service="api",component="stitch"} ${notificationDeliveryDeadLetters}`,
+        '# HELP patchwork_notification_delivery_oldest_pending_seconds Age of the oldest pending external notification delivery.',
+        '# TYPE patchwork_notification_delivery_oldest_pending_seconds gauge',
+        `patchwork_notification_delivery_oldest_pending_seconds{project="patchwork",service="api",component="stitch"} ${notificationDeliveryOldestPendingSeconds}`,
+        '# HELP patchwork_notification_delivery_sweep_failures_total Notification delivery sweeps that failed.',
+        '# TYPE patchwork_notification_delivery_sweep_failures_total counter',
+        `patchwork_notification_delivery_sweep_failures_total{project="patchwork",service="api",component="stitch"} ${notificationDeliverySweepFailuresTotal}`,
+    ].join('\n');
+
+    return `${baseMetrics}\n${sliMetrics}\n${retentionMetrics.renderPrometheus()}\n${attachmentMetrics}\n${notificationMetrics}`;
 };
 
 const writeJson = (
@@ -1537,6 +1610,15 @@ const contractRoutes = [
     '/attachments/:attachmentId',
     '/attachments/uploads/:attachmentId',
     '/attachments/content/:attachmentId',
+    '/notifications',
+    '/notifications/read',
+    '/notifications/read-all',
+    '/notifications/archive',
+    '/notifications/channels',
+    '/notifications/email',
+    '/notifications/email/confirm',
+    '/notifications/push',
+    '/internal/notifications/provider-feedback',
     '/health',
     '/health/ready',
     '/metrics',
@@ -1759,6 +1841,18 @@ export const createApiServer = () => {
             return;
         }
         if (attachmentHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (notificationHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isNotificationRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'NOTIFICATION_SERVICE_UNAVAILABLE',
+                    message: 'Notifications are unavailable.',
+                },
+            });
             return;
         }
         if (isAttachmentRoute(request, requestUrl)) {
@@ -2044,6 +2138,7 @@ export const startApiServer = () => {
     let coordinationScheduler: RetentionScheduler | undefined;
     let exactLocationScheduler: RetentionScheduler | undefined;
     let attachmentScheduler: RetentionScheduler | undefined;
+    let notificationScheduler: RetentionScheduler | undefined;
     if (postgresPool) {
         const retention = new PostgresRetentionService(postgresPool);
         retentionScheduler = startRetentionScheduler({
@@ -2198,6 +2293,48 @@ export const startApiServer = () => {
                 },
             });
         }
+        if (notificationService) {
+            notificationScheduler = startRetentionScheduler({
+                intervalMs:
+                    config.API_NOTIFICATION_INTERVAL_SECONDS * 1_000,
+                enforce: async () => {
+                    const delivery =
+                        await notificationService.runDeliverySweep();
+                    const expired =
+                        await notificationService.runRetentionSweep();
+                    const metrics =
+                        await notificationService.getOperatorMetrics();
+                    notificationDeliveryPending = metrics.pending;
+                    notificationDeliveryRetrying = metrics.retrying;
+                    notificationDeliveryDeadLetters =
+                        metrics.deadLetter;
+                    notificationDeliveryOldestPendingSeconds =
+                        metrics.oldestPendingSeconds;
+                    const event = {
+                        level:
+                            delivery.failed > 0 ? 'warn' : 'info',
+                        event: 'notification_delivery_sweep_completed',
+                        delivery,
+                        expired,
+                        metrics,
+                    };
+                    if (delivery.failed > 0) {
+                        console.warn(JSON.stringify(event));
+                    } else {
+                        console.log(JSON.stringify(event));
+                    }
+                },
+                onError: () => {
+                    notificationDeliverySweepFailuresTotal += 1;
+                    console.error(
+                        JSON.stringify({
+                            level: 'error',
+                            event: 'notification_delivery_sweep_failed',
+                        }),
+                    );
+                },
+            });
+        }
     }
     server.listen(config.API_PORT, config.API_HOST, () => {
         console.log(
@@ -2211,6 +2348,7 @@ export const startApiServer = () => {
         coordinationScheduler?.stop();
         exactLocationScheduler?.stop();
         attachmentScheduler?.stop();
+        notificationScheduler?.stop();
     });
     return server;
 };

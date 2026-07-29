@@ -17,6 +17,16 @@ const productionAttachmentConfig = {
     ATTACHMENT_CLAMD_HOST: 'clamav',
 };
 
+const productionNotificationConfig = {
+    NOTIFICATION_EMAIL_PROVIDER_URL: 'https://email.example.test/send',
+    NOTIFICATION_EMAIL_PROVIDER_TOKEN: 'email-provider-secret',
+    NOTIFICATION_EMAIL_FROM: 'notifications@example.test',
+    NOTIFICATION_VAPID_SUBJECT: 'mailto:security@example.test',
+    NOTIFICATION_VAPID_PUBLIC_KEY: 'test-vapid-public-key',
+    NOTIFICATION_VAPID_PRIVATE_KEY: 'test-vapid-private-key',
+    NOTIFICATION_PROVIDER_WEBHOOK_TOKEN: 'provider-webhook-secret',
+};
+
 describe('config schema', () => {
     it('fails fast with a clear message for invalid DID', () => {
         const previous = process.env.ATPROTO_SERVICE_DID;
@@ -190,6 +200,7 @@ describe('validateProductionConfig', () => {
                 API_MODERATION_SERVICE_URL: 'http://moderation:4200',
                 MODERATION_SERVICE_TOKEN: 'service-secret',
                 ...productionAttachmentConfig,
+                ...productionNotificationConfig,
             }),
         ).not.toThrow();
     });
@@ -215,6 +226,7 @@ describe('validateProductionConfig', () => {
                 API_MODERATION_SERVICE_URL: 'http://moderation:4200',
                 MODERATION_SERVICE_TOKEN: 'service-secret',
                 ...productionAttachmentConfig,
+                ...productionNotificationConfig,
             }),
         ).not.toThrow();
     });
@@ -230,6 +242,34 @@ describe('validateProductionConfig', () => {
                 MODERATION_SERVICE_TOKEN: 'service-secret',
             }),
         ).toThrow(/private attachment runtime requires/);
+    });
+
+    it('requires complete email, push, and feedback configuration in production', () => {
+        expect(() =>
+            validateProductionConfig({
+                NODE_ENV: 'production',
+                ATPROTO_SERVICE_DID: 'did:web:patchwork.example.com',
+                API_DATA_SOURCE: 'postgres',
+                DATABASE_URL: 'postgresql://localhost/patchwork',
+                API_MODERATION_SERVICE_URL: 'http://moderation:4200',
+                MODERATION_SERVICE_TOKEN: 'service-secret',
+                ...productionAttachmentConfig,
+            }),
+        ).toThrow(/durable notification delivery requires/);
+
+        expect(() =>
+            validateProductionConfig({
+                NODE_ENV: 'production',
+                ATPROTO_SERVICE_DID: 'did:web:patchwork.example.com',
+                API_DATA_SOURCE: 'postgres',
+                DATABASE_URL: 'postgresql://localhost/patchwork',
+                API_MODERATION_SERVICE_URL: 'http://moderation:4200',
+                MODERATION_SERVICE_TOKEN: 'service-secret',
+                ...productionAttachmentConfig,
+                ...productionNotificationConfig,
+                NOTIFICATION_VAPID_PRIVATE_KEY: '',
+            }),
+        ).toThrow(/durable notification delivery requires/);
     });
 });
 
