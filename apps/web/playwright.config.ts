@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const externalBaseUrl = process.env['PATCHWORK_E2E_BASE_URL'];
+const chromiumExecutable =
+    process.env['PATCHWORK_E2E_CHROMIUM_EXECUTABLE'];
 const localPort = Number(process.env['PATCHWORK_E2E_PORT'] ?? '41739');
 if (!Number.isInteger(localPort) || localPort < 1 || localPort > 65_535) {
     throw new Error('PATCHWORK_E2E_PORT must be an integer TCP port.');
@@ -14,14 +16,21 @@ export default defineConfig({
     testDir: './e2e',
     testMatch: '**/*.spec.ts',
     fullyParallel: true,
+    timeout: 60_000,
     forbidOnly: !!process.env['CI'],
     retries: process.env['CI'] ? 2 : 0,
-    workers: process.env['CI'] ? 1 : undefined,
+    // The local Vite server and Chromium share a constrained acceptance host.
+    // Serial browser execution avoids false blank-page/navigation failures
+    // under concurrent cold module transforms.
+    workers: 1,
     reporter: process.env['CI'] ? 'github' : 'list',
     use: {
         baseURL: externalBaseUrl ?? localBaseUrl,
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',
+        ...(chromiumExecutable ?
+            { launchOptions: { executablePath: chromiumExecutable } }
+        :   {}),
     },
     projects: [
         {
