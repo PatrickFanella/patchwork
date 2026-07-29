@@ -210,6 +210,9 @@ export interface SignupCredentials {
     email: string;
     password: string;
     inviteCode: string;
+    policyVersion: string;
+    asserted18OrOlder: true;
+    acceptedDocuments: string[];
 }
 
 export interface SignupResult {
@@ -232,6 +235,9 @@ export const signup = async (credentials: SignupCredentials): Promise<SignupResu
             email: credentials.email.trim(),
             password: credentials.password,
             inviteCode: credentials.inviteCode.trim(),
+            policyVersion: credentials.policyVersion,
+            asserted18OrOlder: credentials.asserted18OrOlder,
+            acceptedDocuments: credentials.acceptedDocuments,
         }),
     });
     const payload: unknown = await response.json();

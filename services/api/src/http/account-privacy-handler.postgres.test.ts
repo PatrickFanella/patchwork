@@ -91,6 +91,7 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             '0011_http_idempotency.sql',
             '0012_retention_enforcement.sql',
             '0013_account_deactivation.sql',
+            '0014_account_onboarding.sql',
         ]) {
             await pool.query(
                 await readFile(
@@ -239,6 +240,31 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
              )`,
             [viewerDid],
         );
+        await pool.query(
+            `INSERT INTO account_policy_consents (
+                did, policy_version, asserted_18_or_older,
+                accepted_documents, accepted_at
+             ) VALUES (
+                $1, '2026-07-28', TRUE,
+                '["terms-of-use","privacy-notice","community-guidelines",
+                  "synthetic-data-disclosure","location-sharing-consent"]',
+                NOW()
+             )`,
+            [viewerDid],
+        );
+        await pool.query(
+            `INSERT INTO account_preferences (
+                did, privacy, notifications, visibility, language, location,
+                created_at, updated_at
+             ) VALUES (
+                $1, 'private',
+                '{"inApp":true,"email":false,"push":false}',
+                'hidden', 'es',
+                '{"sharing":"hidden","noPermanentAddress":true}',
+                NOW(), NOW()
+             )`,
+            [viewerDid],
+        );
     });
 
     afterAll(async () => {
@@ -271,6 +297,17 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 workflows: [
                     expect.objectContaining({ currentStatus: 'open' }),
                 ],
+                policyConsents: [
+                    expect.objectContaining({
+                        policyVersion: '2026-07-28',
+                        asserted18OrOlder: true,
+                    }),
+                ],
+                preferences: expect.objectContaining({
+                    privacy: 'private',
+                    visibility: 'hidden',
+                    language: 'es',
+                }),
             },
             exclusions: expect.arrayContaining([
                 expect.objectContaining({ category: 'at-repository' }),
@@ -319,6 +356,8 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 publicAidPosts: 1,
                 publicDirectoryResources: 1,
                 workflows: 1,
+                policyConsents: 1,
+                preferences: 1,
             },
             revoked: { browserSessions: 1, oauthSessions: 1 },
             retained: expect.objectContaining({

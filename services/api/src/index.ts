@@ -10,6 +10,7 @@ import {
     type ServiceHealth,
     type HealthCheck,
     SliCollector,
+    acceptPolicyConsentSchema,
 } from '@patchwork/shared';
 import { createPostgresPool } from './db/discovery-events.js';
 import {
@@ -32,6 +33,7 @@ import { PostgresLifecycleRepository } from './db/lifecycle-repository.js';
 import { PostgresRoleRepository } from './db/role-repository.js';
 import { BlockService } from './block-service.js';
 import { AccountPrivacyService } from './account-privacy-service.js';
+import { AccountOnboardingService } from './account-onboarding-service.js';
 import { ReportService } from './report-service.js';
 import {
     AuthorizationError,
@@ -42,6 +44,10 @@ import {
     createAccountPrivacyHandler,
     isAccountPrivacyRoute,
 } from './http/account-privacy-handler.js';
+import {
+    createAccountOnboardingHandler,
+    isAccountOnboardingRoute,
+} from './http/account-onboarding-handler.js';
 import {
     createDurableSafetyHandler,
     isDurableSafetyRoute,
@@ -154,13 +160,41 @@ const atAuthRuntime =
         undefined
     :   createAtAuthRuntime(config, postgresPool!);
 
-const authenticateApiRequest =
+const authenticateSessionRequest =
     atAuthRuntime && roleRepository ?
         (request: IncomingMessage) =>
             authenticateRequest(request, {
                 resolveSession: token => atAuthRuntime.service.current(token),
                 resolveRole: did => roleRepository.resolve(did),
             })
+    :   undefined;
+const accountOnboardingService =
+    postgresPool ? new AccountOnboardingService(postgresPool) : undefined;
+const consentExemptPaths = new Set([
+    '/account/onboarding',
+    '/account/consent',
+    '/account/preferences',
+    '/account/export',
+    '/account/deactivate',
+]);
+const authenticateApiRequest =
+    authenticateSessionRequest ?
+        async (request: IncomingMessage) => {
+            const authenticated = await authenticateSessionRequest(request);
+            const pathname = new URL(
+                request.url ?? '/',
+                'http://localhost',
+            ).pathname;
+            if (
+                accountOnboardingService &&
+                !consentExemptPaths.has(pathname)
+            ) {
+                await accountOnboardingService.requireCurrentConsent(
+                    authenticated.principal.did,
+                );
+            }
+            return authenticated;
+        }
     :   undefined;
 const authenticateOptionalApiRequest =
     atAuthRuntime && roleRepository ?
@@ -280,6 +314,16 @@ const accountPrivacyHandler =
                     ),
                 ]);
             },
+        })
+    :   undefined;
+const accountOnboardingHandler =
+    authenticateSessionRequest &&
+    accountOnboardingService &&
+    postgresPool ?
+        createAccountOnboardingHandler({
+            service: accountOnboardingService,
+            authenticate: authenticateSessionRequest,
+            executeIdempotent: executeIdempotentMutation,
         })
     :   undefined;
 const discoveryHandler = createDiscoveryHandler({
@@ -497,6 +541,9 @@ const handleRealAuthRoute = (
                     'email',
                     'password',
                     'inviteCode',
+                    'policyVersion',
+                    'asserted18OrOlder',
+                    'acceptedDocuments',
                 ]);
                 if (
                     Object.keys(record).some(key => !allowedFields.has(key))
@@ -507,12 +554,43 @@ const handleRealAuthRoute = (
                         'The signup input is invalid.',
                     );
                 }
+                const consent = acceptPolicyConsentSchema.safeParse({
+                    policyVersion: record.policyVersion,
+                    asserted18OrOlder: record.asserted18OrOlder,
+                    acceptedDocuments: record.acceptedDocuments,
+                });
+                if (!consent.success) {
+                    throw new PublicHttpError(
+                        400,
+                        'INVALID_POLICY_CONSENT',
+                        'Current policy consent and 18+ eligibility are required.',
+                    );
+                }
                 const result = await pdsSignupService.createAccount({
                     handle: typeof record.handle === 'string' ? record.handle : '',
                     email: typeof record.email === 'string' ? record.email : '',
                     password: typeof record.password === 'string' ? record.password : '',
                     inviteCode: typeof record.inviteCode === 'string' ? record.inviteCode : '',
                 });
+                if (accountOnboardingService) {
+                    try {
+                        await accountOnboardingService.accept(
+                            result.did,
+                            consent.data,
+                        );
+                    } catch {
+                        // The managed PDS account is already user-owned and
+                        // cannot be rolled back safely here. Fail closed on
+                        // protected actions: the onboarding gate will require
+                        // the same consent again after OAuth completes.
+                        console.error(
+                            JSON.stringify({
+                                level: 'error',
+                                event: 'signup_consent_persistence_failed',
+                            }),
+                        );
+                    }
+                }
                 writeJson(response, 201, result);
             } catch (error) {
                 writeRouteError(response, error);
@@ -1134,6 +1212,9 @@ const contractRoutes = [
     '/moderation/audit',
     '/account/export',
     '/account/deactivate',
+    '/account/onboarding',
+    '/account/consent',
+    '/account/preferences',
     '/health',
     '/health/ready',
     '/metrics',
@@ -1307,6 +1388,19 @@ export const createApiServer = () => {
         }
 
         if (handleDurableSafetyRoute(request, response, requestUrl)) {
+            return;
+        }
+
+        if (accountOnboardingHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isAccountOnboardingRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'ACCOUNT_ONBOARDING_UNAVAILABLE',
+                    message: 'Account onboarding is unavailable.',
+                },
+            });
             return;
         }
 

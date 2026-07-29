@@ -1,6 +1,10 @@
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PublicHttpError } from './error-response.js';
+import {
+    CURRENT_POLICY_VERSION,
+    requiredPolicyDocuments,
+} from '@patchwork/shared';
 
 const createAccount = vi.fn();
 
@@ -55,6 +59,9 @@ describe('POST /auth/signup', () => {
                 email: 'alice@example.com',
                 password: 'password123',
                 inviteCode: 'invite-1',
+                policyVersion: CURRENT_POLICY_VERSION,
+                asserted18OrOlder: true,
+                acceptedDocuments: [...requiredPolicyDocuments],
             }),
         });
 
@@ -83,6 +90,9 @@ describe('POST /auth/signup', () => {
                 email: 'alice@example.com',
                 password: 'password123',
                 inviteCode: 'invite-1',
+                policyVersion: CURRENT_POLICY_VERSION,
+                asserted18OrOlder: true,
+                acceptedDocuments: [...requiredPolicyDocuments],
             }),
         });
 
@@ -103,7 +113,12 @@ describe('POST /auth/signup', () => {
                 origin: 'https://patchwork.test',
                 'content-type': 'application/json',
             },
-            body: JSON.stringify({ handle: 'alice.subcult.tv' }),
+            body: JSON.stringify({
+                handle: 'alice.subcult.tv',
+                policyVersion: CURRENT_POLICY_VERSION,
+                asserted18OrOlder: true,
+                acceptedDocuments: [...requiredPolicyDocuments],
+            }),
         });
 
         expect(response.status).toBe(400);
@@ -135,6 +150,9 @@ describe('POST /auth/signup', () => {
                 email: 'alice@example.com',
                 password: 'password123',
                 inviteCode: 'invite-1',
+                policyVersion: CURRENT_POLICY_VERSION,
+                asserted18OrOlder: true,
+                acceptedDocuments: [...requiredPolicyDocuments],
                 ...field,
             }),
         });
@@ -159,6 +177,9 @@ describe('POST /auth/signup', () => {
                 email: 'alice@example.com',
                 password: 'password123',
                 inviteCode: 'invite-1',
+                policyVersion: CURRENT_POLICY_VERSION,
+                asserted18OrOlder: true,
+                acceptedDocuments: [...requiredPolicyDocuments],
             }),
         });
 
@@ -184,6 +205,9 @@ describe('POST /auth/signup', () => {
                 email: 'alice@example.com',
                 password: 'password123',
                 inviteCode: 'invite-1',
+                policyVersion: CURRENT_POLICY_VERSION,
+                asserted18OrOlder: true,
+                acceptedDocuments: [...requiredPolicyDocuments],
             }),
         });
 

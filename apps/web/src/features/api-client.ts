@@ -16,6 +16,7 @@ import {
     type FeedRecordEnvelope,
 } from './discovery-runtime';
 import type {
+    AccountPreferences,
     SettingsChangeAudit,
     UserSettings,
 } from '@patchwork/shared';
@@ -26,6 +27,11 @@ import {
     type DirectoryResourceRecord,
 } from '@patchwork/at-lexicons';
 import { enforceMinimumGeoPrecisionKm } from '@patchwork/shared';
+import {
+    CURRENT_POLICY_VERSION,
+    accountPreferenceSchema,
+    requiredPolicyDocuments,
+} from '@patchwork/shared';
 
 export type ApiDataOrigin = 'api' | 'fixture' | 'unavailable';
 
@@ -45,6 +51,13 @@ export interface ApiClientFailure {
 export type ApiClientResult<TData> = ApiClientSuccess<TData> | ApiClientFailure;
 
 export type AidPostReportReason = 'spam' | 'abuse' | 'fraud' | 'other';
+
+export interface AccountOnboardingStatus {
+    policyVersion: string;
+    requiredDocuments: string[];
+    consentRequired: boolean;
+    acceptedAt: string | null;
+}
 
 export interface SafetyMutationResult {
     created: boolean;
@@ -370,6 +383,93 @@ const parseSafetyMutationResult = <
         data: { [idField]: id, created } as unknown as SafetyMutationResult &
             Record<TIdField, string>,
     };
+};
+
+const parseOnboardingStatus = (
+    payload: unknown,
+): ApiClientResult<AccountOnboardingStatus> => {
+    if (!isRecord(payload)) {
+        return invalidResponseFailure('Onboarding response was malformed.');
+    }
+    const policyVersion = readString(payload, 'policyVersion');
+    const requiredDocumentsRaw = payload['requiredDocuments'];
+    if (
+        !policyVersion ||
+        !Array.isArray(requiredDocumentsRaw) ||
+        !requiredDocumentsRaw.every(value => typeof value === 'string') ||
+        typeof payload['consentRequired'] !== 'boolean' ||
+        !(
+            payload['acceptedAt'] === null ||
+            typeof payload['acceptedAt'] === 'string'
+        )
+    ) {
+        return invalidResponseFailure('Onboarding response was malformed.');
+    }
+    return {
+        ok: true,
+        data: {
+            policyVersion,
+            requiredDocuments: requiredDocumentsRaw,
+            consentRequired: payload['consentRequired'],
+            acceptedAt: payload['acceptedAt'],
+        },
+    };
+};
+
+export const fetchAccountOnboardingViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AccountOnboardingStatus>> => {
+    const result = await requestJson(
+        '/account/onboarding',
+        new URLSearchParams(),
+        signal,
+    );
+    return result.ok ? parseOnboardingStatus(result.data) : result;
+};
+
+export const acceptCurrentPoliciesViaApi = async (): Promise<
+    ApiClientResult<AccountOnboardingStatus>
+> => {
+    const result = await requestJsonPost('/account/consent', {
+        policyVersion: CURRENT_POLICY_VERSION,
+        asserted18OrOlder: true,
+        acceptedDocuments: [...requiredPolicyDocuments],
+    });
+    return result.ok ? parseOnboardingStatus(result.data) : result;
+};
+
+export const fetchAccountPreferencesViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AccountPreferences>> => {
+    const result = await requestJson(
+        '/account/preferences',
+        new URLSearchParams(),
+        signal,
+    );
+    if (!result.ok) return result;
+    if (!isRecord(result.data)) {
+        return invalidResponseFailure('Preferences response was malformed.');
+    }
+    const parsed = accountPreferenceSchema.safeParse(result.data['preferences']);
+    return parsed.success ?
+            { ok: true, data: parsed.data }
+        :   invalidResponseFailure('Preferences response was malformed.');
+};
+
+export const updateAccountPreferencesViaApi = async (
+    preferences: AccountPreferences,
+): Promise<ApiClientResult<AccountPreferences>> => {
+    const result = await requestJsonPut('/account/preferences', {
+        preferences,
+    });
+    if (!result.ok) return result;
+    if (!isRecord(result.data)) {
+        return invalidResponseFailure('Preferences response was malformed.');
+    }
+    const parsed = accountPreferenceSchema.safeParse(result.data['preferences']);
+    return parsed.success ?
+            { ok: true, data: parsed.data }
+        :   invalidResponseFailure('Preferences response was malformed.');
 };
 
 const requestJson = async (

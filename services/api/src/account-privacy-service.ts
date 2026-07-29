@@ -126,6 +126,18 @@ export class AccountPrivacyService {
                  WHERE actor_did = $1 AND pathname <> '/account/deactivate'`,
                 [did],
             );
+            const preferenceAudit = await client.query(
+                `DELETE FROM account_preference_audit WHERE did = $1`,
+                [did],
+            );
+            const preferences = await client.query(
+                `DELETE FROM account_preferences WHERE did = $1`,
+                [did],
+            );
+            const policyConsents = await client.query(
+                `DELETE FROM account_policy_consents WHERE did = $1`,
+                [did],
+            );
             const browserSessions = await client.query(
                 `DELETE FROM patchwork_browser_sessions WHERE did = $1`,
                 [did],
@@ -162,6 +174,9 @@ export class AccountPrivacyService {
                     platformRoles: platformRoles.rowCount ?? 0,
                     ownedBlocks: ownedBlocks.rowCount ?? 0,
                     commandMetadata: commandMetadata.rowCount ?? 0,
+                    preferenceAudit: preferenceAudit.rowCount ?? 0,
+                    preferences: preferences.rowCount ?? 0,
+                    policyConsents: policyConsents.rowCount ?? 0,
                 },
                 revoked: {
                     browserSessions: browserSessions.rowCount ?? 0,
@@ -372,6 +387,32 @@ export class AccountPrivacyService {
              WHERE actor_did = $1 ORDER BY created_at, idempotency_key`,
             [did],
         );
+        const policyConsents = await client.query<{
+            policy_version: string;
+            asserted_18_or_older: boolean;
+            accepted_documents: string[];
+            accepted_at: Date | string;
+        }>(
+            `SELECT policy_version, asserted_18_or_older,
+                    accepted_documents, accepted_at
+             FROM account_policy_consents
+             WHERE did = $1 ORDER BY accepted_at, policy_version`,
+            [did],
+        );
+        const preferences = await client.query<{
+            privacy: string;
+            notifications: unknown;
+            visibility: string;
+            language: string;
+            location: unknown;
+            created_at: Date | string;
+            updated_at: Date | string;
+        }>(
+            `SELECT privacy, notifications, visibility, language, location,
+                    created_at, updated_at
+             FROM account_preferences WHERE did = $1`,
+            [did],
+        );
         const oauthRow = oauth.rows[0];
         const roleRow = role.rows[0];
 
@@ -494,6 +535,25 @@ export class AccountPrivacyService {
                     createdAt: iso(row.created_at),
                     completedAt: iso(row.completed_at),
                 })),
+                policyConsents: policyConsents.rows.map(row => ({
+                    policyVersion: row.policy_version,
+                    asserted18OrOlder: row.asserted_18_or_older,
+                    acceptedDocuments: row.accepted_documents,
+                    acceptedAt: iso(row.accepted_at),
+                })),
+                preferences:
+                    preferences.rows[0] ?
+                        {
+                            privacy: preferences.rows[0].privacy,
+                            notifications:
+                                preferences.rows[0].notifications,
+                            visibility: preferences.rows[0].visibility,
+                            language: preferences.rows[0].language,
+                            location: preferences.rows[0].location,
+                            createdAt: iso(preferences.rows[0].created_at),
+                            updatedAt: iso(preferences.rows[0].updated_at),
+                        }
+                    :   null,
             },
             exclusions: [
                 {

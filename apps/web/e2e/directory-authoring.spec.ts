@@ -27,6 +27,19 @@ test('authenticated stewards publish, edit, and delete a directory resource', as
             });
             return;
         }
+        if (apiPath === '/account/onboarding') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    policyVersion: '2026-07-28',
+                    requiredDocuments: [],
+                    consentRequired: false,
+                    acceptedAt: '2026-07-28T00:00:00.000Z',
+                }),
+            });
+            return;
+        }
         if (apiPath === '/query/directory') {
             await route.fulfill({
                 status: 200,
