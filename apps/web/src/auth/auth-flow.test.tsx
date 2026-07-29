@@ -15,6 +15,10 @@ import { AuthProvider, useAuth } from './AuthProvider.js';
 import { AuthCallbackPage } from './AuthCallbackPage.js';
 import { LoginPage } from './LoginPage.js';
 import { SignupPage } from './SignupPage.js';
+import {
+    CURRENT_POLICY_VERSION,
+    requiredPolicyDocuments,
+} from '@patchwork/shared';
 
 const originalFetch = globalThis.fetch;
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
@@ -297,6 +301,9 @@ describe('AT authentication flow', () => {
             email: 'alice@example.com',
             password: 'supersecret',
             inviteCode: 'invite-123',
+            policyVersion: CURRENT_POLICY_VERSION,
+            asserted18OrOlder: true,
+            acceptedDocuments: [...requiredPolicyDocuments],
         });
 
         expect(result).toEqual({ did: 'did:plc:alice', handle: 'alice.subcult.tv' });
@@ -314,6 +321,9 @@ describe('AT authentication flow', () => {
                     email: 'alice@example.com',
                     password: 'supersecret',
                     inviteCode: 'invite-123',
+                    policyVersion: CURRENT_POLICY_VERSION,
+                    asserted18OrOlder: true,
+                    acceptedDocuments: [...requiredPolicyDocuments],
                 }),
             }),
         );
@@ -365,6 +375,11 @@ describe('AT authentication flow', () => {
 
             const termsAccepted = container.querySelector('#terms-accepted') as HTMLInputElement;
             termsAccepted.click();
+            (
+                container.querySelector(
+                    '#eligibility-accepted',
+                ) as HTMLInputElement
+            ).click();
         });
 
         await act(async () => {
@@ -426,6 +441,11 @@ describe('AT authentication flow', () => {
             setValue('#password-confirm', 'password1');
             setValue('#invite-code', 'invite-123');
             (container.querySelector('#terms-accepted') as HTMLInputElement).click();
+            (
+                container.querySelector(
+                    '#eligibility-accepted',
+                ) as HTMLInputElement
+            ).click();
         });
 
         await act(async () => {
@@ -502,6 +522,11 @@ describe('AT authentication flow', () => {
 
             const termsAccepted = container.querySelector('#terms-accepted') as HTMLInputElement;
             termsAccepted.click();
+            (
+                container.querySelector(
+                    '#eligibility-accepted',
+                ) as HTMLInputElement
+            ).click();
         });
 
         await act(async () => {
@@ -518,6 +543,9 @@ describe('AT authentication flow', () => {
                     email: 'alice@example.com',
                     password: 'password1',
                     inviteCode: 'invite-123',
+                    policyVersion: CURRENT_POLICY_VERSION,
+                    asserted18OrOlder: true,
+                    acceptedDocuments: [...requiredPolicyDocuments],
                 }),
             }),
         );

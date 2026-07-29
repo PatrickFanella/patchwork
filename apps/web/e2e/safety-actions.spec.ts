@@ -28,6 +28,19 @@ test.beforeEach(async ({ page, baseURL }) => {
             });
             return;
         }
+        if (apiPath === '/account/onboarding') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    policyVersion: '2026-07-28',
+                    requiredDocuments: [],
+                    consentRequired: false,
+                    acceptedAt: '2026-07-28T00:00:00.000Z',
+                }),
+            });
+            return;
+        }
         if (apiPath === '/query/feed') {
             await route.fulfill({
                 status: 200,
@@ -141,6 +154,19 @@ test('record owner closes with compare-and-swap then deletes the AT record', asy
             });
             return;
         }
+        if (apiPath === '/account/onboarding') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    policyVersion: '2026-07-28',
+                    requiredDocuments: [],
+                    consentRequired: false,
+                    acceptedAt: '2026-07-28T00:00:00.000Z',
+                }),
+            });
+            return;
+        }
         if (apiPath === '/query/feed') {
             await route.fulfill({
                 status: 200,
@@ -238,6 +264,19 @@ test('owner can recover when private lifecycle transition outpaces public AT syn
                         did: 'did:plc:viewer',
                         expiresAt: '2099-01-01T00:00:00.000Z',
                     },
+                }),
+            });
+            return;
+        }
+        if (apiPath === '/account/onboarding') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    policyVersion: '2026-07-28',
+                    requiredDocuments: [],
+                    consentRequired: false,
+                    acceptedAt: '2026-07-28T00:00:00.000Z',
                 }),
             });
             return;

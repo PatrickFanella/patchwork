@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { useAuth } from './AuthProvider.js';
 import { sanitizeReturnTo, signup, type SignupResult, AuthApiError } from './auth-api.js';
+import {
+    CURRENT_POLICY_VERSION,
+    requiredPolicyDocuments,
+} from '@patchwork/shared';
 
 const safeReturnTo = (): string => {
     if (typeof window === 'undefined') return '/';
@@ -46,6 +50,7 @@ export const SignupPage = () => {
     const [passwordConfirm, setPasswordConfirm] = useState('');
     const [inviteCode, setInviteCode] = useState('');
     const [termsAccepted, setTermsAccepted] = useState(false);
+    const [eligibilityAccepted, setEligibilityAccepted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<AuthApiError | null>(null);
     const [createdAccount, setCreatedAccount] = useState<SignupResult | null>(null);
@@ -89,7 +94,7 @@ export const SignupPage = () => {
             return;
         }
 
-        if (!termsAccepted) {
+        if (!termsAccepted || !eligibilityAccepted) {
             setError(new AuthApiError(
                 'INVALID_SIGNUP_INPUT',
                 'You must accept the Terms of Service and Privacy Policy.',
@@ -106,6 +111,9 @@ export const SignupPage = () => {
                 email: email.trim(),
                 password,
                 inviteCode: inviteCode.trim(),
+                policyVersion: CURRENT_POLICY_VERSION,
+                asserted18OrOlder: true,
+                acceptedDocuments: [...requiredPolicyDocuments],
             });
             clearPasswords();
             setCreatedAccount(result);
@@ -342,7 +350,10 @@ export const SignupPage = () => {
                         disabled={isLoading}
                     />
                     <label htmlFor='terms-accepted' className='text-sm leading-relaxed text-mh-textMuted'>
-                        I agree to the{' '}
+                        I accept the current Terms of Use, Privacy Notice,
+                        Community Guidelines, synthetic-data disclosure, and
+                        location-sharing consent (version{' '}
+                        {CURRENT_POLICY_VERSION}). Review the{' '}
                         <a
                             href='https://subcult.tv/terms'
                             target='_blank'
@@ -363,9 +374,36 @@ export const SignupPage = () => {
                     </label>
                 </div>
 
+                <div className='flex items-start gap-2'>
+                    <input
+                        id='eligibility-accepted'
+                        name='eligibilityAccepted'
+                        type='checkbox'
+                        required
+                        checked={eligibilityAccepted}
+                        onChange={event =>
+                            setEligibilityAccepted(event.target.checked)
+                        }
+                        className='mt-1 h-4 w-4 accent-mh-accent'
+                        disabled={isLoading}
+                    />
+                    <label
+                        htmlFor='eligibility-accepted'
+                        className='text-sm font-bold leading-relaxed'
+                    >
+                        I confirm that I am at least 18 years old.
+                    </label>
+                </div>
+
                 <button
                     type='submit'
-                    disabled={isLoading || !handleLabelValid || !passwordsMatch || !termsAccepted}
+                    disabled={
+                        isLoading ||
+                        !handleLabelValid ||
+                        !passwordsMatch ||
+                        !termsAccepted ||
+                        !eligibilityAccepted
+                    }
                     className='mh-button mh-button--primary px-4 py-2 font-bold w-full sm:w-auto'
                 >
                     {isLoading ? 'Creating account…' : 'Create account'}

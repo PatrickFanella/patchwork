@@ -8,6 +8,8 @@ import {
     createAtDirectoryResourceViaApi,
     deactivateAccountViaApi,
     deleteAtDirectoryResourceViaApi,
+    fetchAccountOnboardingViaApi,
+    fetchAccountPreferencesViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     exportDataViaApi,
@@ -17,8 +19,14 @@ import {
     reportAidPostViaApi,
     reconcileAidPostStatusViaApi,
     transitionAidPostViaApi,
+    updateAccountPreferencesViaApi,
     updateAtDirectoryResourceViaApi,
 } from './api-client.js';
+import {
+    CURRENT_POLICY_VERSION,
+    defaultAccountPreferences,
+    requiredPolicyDocuments,
+} from '@patchwork/shared';
 import type { DiscoveryFilterState } from '../discovery-filters.js';
 
 const originalFetch = globalThis.fetch;
@@ -116,6 +124,64 @@ describe('api client', () => {
         });
         expect(JSON.parse(String(init.body))).toEqual({});
         expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('did:');
+    });
+
+    it('loads consent status and persists only schema-valid account preferences', async () => {
+        const updated = {
+            ...defaultAccountPreferences,
+            privacy: 'private' as const,
+            location: {
+                sharing: 'hidden' as const,
+                noPermanentAddress: true,
+            },
+        };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    policyVersion: CURRENT_POLICY_VERSION,
+                    requiredDocuments: [...requiredPolicyDocuments],
+                    consentRequired: false,
+                    acceptedAt: '2026-07-28T12:00:00.000Z',
+                }),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({
+                    preferences: defaultAccountPreferences,
+                }),
+            )
+            .mockResolvedValueOnce(
+                createJsonResponse({ preferences: updated }),
+            );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await expect(fetchAccountOnboardingViaApi()).resolves.toMatchObject({
+            ok: true,
+            data: { consentRequired: false },
+        });
+        await expect(fetchAccountPreferencesViaApi()).resolves.toEqual({
+            ok: true,
+            data: defaultAccountPreferences,
+        });
+        await expect(
+            updateAccountPreferencesViaApi(updated),
+        ).resolves.toEqual({ ok: true, data: updated });
+
+        const [, updateInit] = fetchMock.mock.calls[2] as unknown as [
+            string,
+            RequestInit,
+        ];
+        expect(updateInit).toMatchObject({
+            method: 'PUT',
+            credentials: 'include',
+            headers: expect.objectContaining({
+                'idempotency-key': expect.any(String),
+            }),
+        });
+        expect(JSON.parse(String(updateInit.body))).toEqual({
+            preferences: updated,
+        });
+        expect(String(updateInit.body)).not.toContain('did:');
     });
 
     it('fetches and maps aid records for map scope', async () => {

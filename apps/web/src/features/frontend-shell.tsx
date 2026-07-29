@@ -84,6 +84,7 @@ import {
     type ApiDataOrigin,
     type AtAidPostResult,
     type AtDirectoryResourceResult,
+    acceptCurrentPoliciesViaApi,
     blockUserViaApi,
     closeAtAidPostViaApi,
     createAidPostViaApi,
@@ -92,6 +93,8 @@ import {
     deleteAtDirectoryResourceViaApi,
     deleteAtAidPostViaApi,
     exportDataViaApi,
+    fetchAccountOnboardingViaApi,
+    fetchAccountPreferencesViaApi,
     fetchDirectoryCardsFromApi,
     fetchFeedRecordsFromApi,
     fetchSettingsAuditFromApi,
@@ -103,6 +106,7 @@ import {
     reconcileAidPostStatusViaApi,
     updateSettingsViaApi,
     transitionAidPostViaApi,
+    updateAccountPreferencesViaApi,
     updateAtDirectoryResourceViaApi,
 } from './api-client';
 import {
@@ -117,7 +121,11 @@ import {
     validateSettings,
 } from '../settings-ux';
 import {
+    CURRENT_POLICY_VERSION,
     CHAT_PLACEHOLDER_CONTRACT,
+    defaultAccountPreferences,
+    requiredPolicyDocuments,
+    type AccountPreferences,
     type UserSettings,
     geoSharingPrecisions,
     privacyLevels,
@@ -3774,6 +3782,31 @@ const AccountPrivacyRoute = ({
     const [pendingAction, setPendingAction] = useState<
         'export' | 'deactivate'
     >();
+    const [preferences, setPreferences] = useState<AccountPreferences>(
+        defaultAccountPreferences,
+    );
+    const [preferencesStatus, setPreferencesStatus] = useState<string>();
+
+    useEffect(() => {
+        const controller = new AbortController();
+        void fetchAccountPreferencesViaApi(controller.signal).then(result => {
+            if (!controller.signal.aborted && result.ok) {
+                setPreferences(result.data);
+            }
+        });
+        return () => controller.abort();
+    }, []);
+
+    const savePreferences = async () => {
+        setPreferencesStatus('Saving preferences…');
+        const result = await updateAccountPreferencesViaApi(preferences);
+        if (!result.ok) {
+            setPreferencesStatus(`Error: ${result.error}`);
+            return;
+        }
+        setPreferences(result.data);
+        setPreferencesStatus('Preferences saved.');
+    };
 
     const handleExport = async () => {
         setPendingAction('export');
@@ -3825,6 +3858,159 @@ const AccountPrivacyRoute = ({
 
             <Panel title='Account controls'>
                 <div className='space-y-4'>
+                    <Card title='Privacy and delivery preferences'>
+                        <div className='grid gap-3 sm:grid-cols-2'>
+                            <label className='text-sm font-bold'>
+                                Privacy
+                                <select
+                                    className='mh-input mt-1 w-full px-3 py-2'
+                                    value={preferences.privacy}
+                                    onChange={event =>
+                                        setPreferences(current => ({
+                                            ...current,
+                                            privacy: event.target
+                                                .value as AccountPreferences['privacy'],
+                                        }))
+                                    }
+                                >
+                                    <option value='public'>Public</option>
+                                    <option value='community'>Community</option>
+                                    <option value='private'>Private</option>
+                                </select>
+                            </label>
+                            <label className='text-sm font-bold'>
+                                Profile visibility
+                                <select
+                                    className='mh-input mt-1 w-full px-3 py-2'
+                                    value={preferences.visibility}
+                                    onChange={event =>
+                                        setPreferences(current => ({
+                                            ...current,
+                                            visibility: event.target
+                                                .value as AccountPreferences['visibility'],
+                                        }))
+                                    }
+                                >
+                                    <option value='public'>Public</option>
+                                    <option value='authenticated'>
+                                        Signed-in people
+                                    </option>
+                                    <option value='hidden'>Hidden</option>
+                                </select>
+                            </label>
+                            <label className='text-sm font-bold'>
+                                Language
+                                <select
+                                    className='mh-input mt-1 w-full px-3 py-2'
+                                    value={preferences.language}
+                                    onChange={event =>
+                                        setPreferences(current => ({
+                                            ...current,
+                                            language: event.target
+                                                .value as AccountPreferences['language'],
+                                        }))
+                                    }
+                                >
+                                    <option value='en'>English</option>
+                                    <option value='es'>Español</option>
+                                </select>
+                            </label>
+                            <label className='text-sm font-bold'>
+                                Location visibility
+                                <select
+                                    className='mh-input mt-1 w-full px-3 py-2'
+                                    value={preferences.location.sharing}
+                                    onChange={event =>
+                                        setPreferences(current => ({
+                                            ...current,
+                                            location: {
+                                                ...current.location,
+                                                sharing: event.target
+                                                    .value as AccountPreferences['location']['sharing'],
+                                            },
+                                        }))
+                                    }
+                                >
+                                    <option value='approximate'>
+                                        Approximate only
+                                    </option>
+                                    <option value='hidden'>Hidden</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+                            {(
+                                [
+                                    ['inApp', 'In-app notifications'],
+                                    ['email', 'Email notifications'],
+                                    ['push', 'Browser push notifications'],
+                                ] as const
+                            ).map(([channel, label]) => (
+                                <label
+                                    key={channel}
+                                    className='inline-flex items-center gap-2 text-sm'
+                                >
+                                    <input
+                                        type='checkbox'
+                                        checked={
+                                            preferences.notifications[channel]
+                                        }
+                                        onChange={event =>
+                                            setPreferences(current => ({
+                                                ...current,
+                                                notifications: {
+                                                    ...current.notifications,
+                                                    [channel]:
+                                                        event.target.checked,
+                                                },
+                                            }))
+                                        }
+                                    />
+                                    {label}
+                                </label>
+                            ))}
+                            <label className='inline-flex items-center gap-2 text-sm'>
+                                <input
+                                    type='checkbox'
+                                    checked={
+                                        preferences.location
+                                            .noPermanentAddress
+                                    }
+                                    onChange={event =>
+                                        setPreferences(current => ({
+                                            ...current,
+                                            location: {
+                                                ...current.location,
+                                                noPermanentAddress:
+                                                    event.target.checked,
+                                            },
+                                        }))
+                                    }
+                                />
+                                I do not have a permanent address
+                            </label>
+                        </div>
+                        <div className='mt-3 flex items-center gap-3'>
+                            <Button
+                                className='px-3 py-1 text-xs'
+                                onClick={() => void savePreferences()}
+                            >
+                                Save preferences
+                            </Button>
+                            {preferencesStatus ?
+                                <span
+                                    role={
+                                        preferencesStatus.startsWith('Error:') ?
+                                            'alert'
+                                        :   'status'
+                                    }
+                                    className='text-xs'
+                                >
+                                    {preferencesStatus}
+                                </span>
+                            :   null}
+                        </div>
+                    </Card>
                     <Card title='Data export'>
                         <p className='text-sm text-mh-textMuted'>
                             Download a versioned snapshot of Patchwork-held
@@ -3917,6 +4103,93 @@ const AccountPrivacyRoute = ({
                 </div>
             </Panel>
         </section>
+    );
+};
+
+interface PolicyConsentGateProps {
+    onAccepted: () => void;
+}
+
+const policyLabels: Readonly<Record<string, string>> = {
+    'terms-of-use': 'Terms of Use',
+    'privacy-notice': 'Privacy Notice',
+    'community-guidelines': 'Community Guidelines',
+    'synthetic-data-disclosure': 'Synthetic-data disclosure',
+    'location-sharing-consent': 'Location-sharing consent',
+};
+
+const PolicyConsentGate = ({ onAccepted }: PolicyConsentGateProps) => {
+    const [accepted, setAccepted] = useState<Set<string>>(new Set());
+    const [eligible, setEligible] = useState(false);
+    const [status, setStatus] = useState<string>();
+    const allAccepted = requiredPolicyDocuments.every(document =>
+        accepted.has(document),
+    );
+
+    const submit = async () => {
+        setStatus('Recording consent…');
+        const result = await acceptCurrentPoliciesViaApi();
+        if (!result.ok) {
+            setStatus(`Error: ${result.error}`);
+            return;
+        }
+        setStatus('Consent recorded.');
+        onAccepted();
+    };
+
+    return (
+        <Panel title='Review current policies'>
+            <p className='text-sm text-mh-textMuted'>
+                Version {CURRENT_POLICY_VERSION}. Material changes require a
+                new acceptance before protected actions are available.
+            </p>
+            <div className='mt-4 space-y-2'>
+                {requiredPolicyDocuments.map(document => (
+                    <label
+                        key={document}
+                        className='flex items-start gap-2 text-sm'
+                    >
+                        <input
+                            type='checkbox'
+                            checked={accepted.has(document)}
+                            onChange={event =>
+                                setAccepted(current => {
+                                    const next = new Set(current);
+                                    if (event.target.checked) next.add(document);
+                                    else next.delete(document);
+                                    return next;
+                                })
+                            }
+                        />
+                        I accept the {policyLabels[document]}.
+                    </label>
+                ))}
+                <label className='flex items-start gap-2 text-sm font-bold'>
+                    <input
+                        type='checkbox'
+                        checked={eligible}
+                        onChange={event => setEligible(event.target.checked)}
+                    />
+                    I confirm that I am at least 18 years old.
+                </label>
+            </div>
+            <div className='mt-4 flex items-center gap-3'>
+                <Button
+                    disabled={!allAccepted || !eligible}
+                    onClick={() => void submit()}
+                >
+                    Accept and continue
+                </Button>
+                {status ?
+                    <span
+                        role={status.startsWith('Error:') ? 'alert' : 'status'}
+                        className='text-xs'
+                    >
+                        {status}
+                    </span>
+                :   null}
+            </div>
+        </Panel>
     );
 };
 
@@ -4486,8 +4759,32 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const [hasChatPermission, setHasChatPermission] = useState(true);
     const [forceChatFallback, setForceChatFallback] = useState(false);
     const [chatRequestPreview, setChatRequestPreview] = useState<string>();
+    const [consentRequired, setConsentRequired] = useState<
+        boolean | undefined
+    >(webDataMode === 'fixture' ? false : undefined);
+    const [onboardingError, setOnboardingError] = useState<string>();
 
     const currentUserDid = auth.session?.did ?? '';
+
+    useEffect(() => {
+        if (webDataMode === 'fixture' || !auth.session) {
+            setConsentRequired(false);
+            setOnboardingError(undefined);
+            return;
+        }
+        const controller = new AbortController();
+        setConsentRequired(undefined);
+        setOnboardingError(undefined);
+        void fetchAccountOnboardingViaApi(controller.signal).then(result => {
+            if (controller.signal.aborted) return;
+            if (!result.ok) {
+                setOnboardingError(result.error);
+                return;
+            }
+            setConsentRequired(result.data.consentRequired);
+        });
+        return () => controller.abort();
+    }, [auth.session]);
 
     useEffect(() => {
         if (import.meta.env.VITE_DATA_MODE !== 'fixture') {
@@ -4904,6 +5201,30 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                     Sign in to continue
                 </a>
             </Panel>
+        : auth.session &&
+          webDataMode !== 'fixture' &&
+          onboardingError ?
+            <Panel title='Onboarding unavailable'>
+                <p role='alert'>
+                    Protected actions remain disabled because current policy
+                    consent could not be checked: {onboardingError}
+                </p>
+            </Panel>
+        : auth.session &&
+          webDataMode !== 'fixture' &&
+          consentRequired === undefined ?
+            <Panel title='Checking account policies'>
+                <p role='status'>Loading your current consent status…</p>
+            </Panel>
+        : auth.session &&
+          webDataMode !== 'fixture' &&
+          consentRequired ?
+            <PolicyConsentGate
+                onAccepted={() => {
+                    setConsentRequired(false);
+                    setOnboardingError(undefined);
+                }}
+            />
         : currentRoute === '/map' ?
             <MapRoute
                 discoveryState={discoveryState}

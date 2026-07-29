@@ -55,6 +55,13 @@ test('authenticated production settings expose durable account controls only', a
     ]);
     let deactivated = false;
     let exportRequests = 0;
+    let preferences = {
+        privacy: 'community',
+        notifications: { inApp: true, email: true, push: false },
+        visibility: 'authenticated',
+        language: 'en',
+        location: { sharing: 'approximate', noPermanentAddress: false },
+    };
     let deactivationBody: unknown;
     let deactivationCsrf: string | undefined;
     await page.route('**/api/**', async route => {
@@ -83,6 +90,36 @@ test('authenticated production settings expose durable account controls only', a
                         expiresAt: '2099-01-01T00:00:00.000Z',
                     },
                 }),
+            });
+            return;
+        }
+        if (apiPath === '/account/onboarding') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    policyVersion: '2026-07-28',
+                    requiredDocuments: [
+                        'terms-of-use',
+                        'privacy-notice',
+                        'community-guidelines',
+                        'synthetic-data-disclosure',
+                        'location-sharing-consent',
+                    ],
+                    consentRequired: false,
+                    acceptedAt: '2026-07-28T00:00:00.000Z',
+                }),
+            });
+            return;
+        }
+        if (apiPath === '/account/preferences') {
+            if (request.method() === 'PUT') {
+                preferences = request.postDataJSON().preferences;
+            }
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ preferences }),
             });
             return;
         }
@@ -138,7 +175,18 @@ test('authenticated production settings expose durable account controls only', a
     await expect(
         page.getByRole('button', { name: 'Deactivate account' }),
     ).toBeVisible();
-    await expect(page.getByText('Privacy level')).toHaveCount(0);
+    await expect(page.getByText('Privacy and delivery preferences')).toBeVisible();
+    await page
+        .getByRole('article', { name: 'Privacy and delivery preferences' })
+        .getByRole('combobox', { name: /^Privacy/ })
+        .selectOption('private');
+    await page.getByLabel('I do not have a permanent address').check();
+    await page.getByRole('button', { name: 'Save preferences' }).click();
+    await expect(page.getByText('Preferences saved.')).toBeVisible();
+    expect(preferences).toMatchObject({
+        privacy: 'private',
+        location: { noPermanentAddress: true },
+    });
 
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download data export' }).click();
@@ -169,4 +217,101 @@ test('authenticated production settings expose durable account controls only', a
     ).toBeVisible();
     expect(deactivationBody).toEqual({});
     expect(deactivationCsrf).toBe('account-controls-csrf');
+});
+
+test('expired policy consent blocks protected UI until every policy and 18+ assertion is accepted', async ({
+    page,
+}) => {
+    let consentBody: unknown;
+    await page.route('**/api/**', async route => {
+        const request = route.request();
+        const apiPath = new URL(request.url()).pathname.replace(/^\/api/, '');
+        if (apiPath === '/auth/session') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    session: {
+                        did: 'did:plc:renew-consent',
+                        expiresAt: '2099-01-01T00:00:00.000Z',
+                    },
+                }),
+            });
+            return;
+        }
+        if (apiPath === '/account/onboarding') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    policyVersion: '2026-07-28',
+                    requiredDocuments: [
+                        'terms-of-use',
+                        'privacy-notice',
+                        'community-guidelines',
+                        'synthetic-data-disclosure',
+                        'location-sharing-consent',
+                    ],
+                    consentRequired: true,
+                    acceptedAt: null,
+                }),
+            });
+            return;
+        }
+        if (apiPath === '/account/consent') {
+            consentBody = request.postDataJSON();
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    policyVersion: '2026-07-28',
+                    requiredDocuments: [
+                        'terms-of-use',
+                        'privacy-notice',
+                        'community-guidelines',
+                        'synthetic-data-disclosure',
+                        'location-sharing-consent',
+                    ],
+                    consentRequired: false,
+                    acceptedAt: '2026-07-28T12:00:00.000Z',
+                }),
+            });
+            return;
+        }
+        await route.fulfill({
+            status: 404,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                error: { code: 'NOT_FOUND', message: 'Not found.' },
+            }),
+        });
+    });
+
+    await page.goto('/settings');
+    await expect(
+        page.getByText('Material changes require a new acceptance'),
+    ).toBeVisible();
+    const continueButton = page.getByRole('button', {
+        name: 'Accept and continue',
+    });
+    await expect(continueButton).toBeDisabled();
+    for (const checkbox of await page.getByRole('checkbox').all()) {
+        await checkbox.check();
+    }
+    await continueButton.click();
+    await expect(
+        page.getByRole('heading', { name: 'Account privacy' }),
+    ).toBeVisible();
+    expect(consentBody).toEqual({
+        policyVersion: '2026-07-28',
+        asserted18OrOlder: true,
+        acceptedDocuments: [
+            'terms-of-use',
+            'privacy-notice',
+            'community-guidelines',
+            'synthetic-data-disclosure',
+            'location-sharing-consent',
+        ],
+    });
+    expect(JSON.stringify(consentBody)).not.toContain('did:');
 });
