@@ -90,6 +90,13 @@ export interface DirectoryCard {
         phone?: string;
     };
     approximateGeo?: ApproximateGeoPoint;
+    exactPublicAddress?: {
+        kind: 'exact-public-resource';
+        streetAddress: string;
+        latitude: number;
+        longitude: number;
+        approvalExpiresAt: string;
+    };
     openHours?: string;
     eligibilityNotes?: string;
     operationalStatus: 'open' | 'limited' | 'closed';

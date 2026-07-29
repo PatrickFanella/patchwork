@@ -395,10 +395,66 @@ export class PostgresProjectionQueryService {
         const service = createQueryServiceFromNormalizedEvents(snapshot.events);
         const result = service.queryDirectory(params);
         if ('error' in result.body) return result;
+        const exactLocations = await this.pool.query<{
+            resource_uri: string;
+            street_address: string;
+            latitude: number;
+            longitude: number;
+            approval_expires_at: Date | string;
+        }>(
+            `SELECT e.resource_uri, e.street_address, e.latitude,
+                    e.longitude, e.approval_expires_at
+             FROM exact_public_address_requests e
+             WHERE e.status = 'approved'
+               AND e.confidential_facility = FALSE
+               AND e.approval_expires_at > NOW()
+               AND EXISTS (
+                   SELECT 1 FROM verification_applications v
+                   WHERE v.subject_type = 'organization'
+                     AND v.organization_id = e.organization_id
+                     AND v.subject_ref = e.organization_id::text
+                     AND v.status = 'approved' AND v.expires_at > NOW()
+               )
+               AND EXISTS (
+                   SELECT 1 FROM verification_applications v
+                   WHERE v.subject_type = 'resource'
+                     AND v.organization_id = e.organization_id
+                     AND v.subject_ref = e.resource_uri
+                     AND v.status = 'approved' AND v.expires_at > NOW()
+               )
+               AND EXISTS (
+                   SELECT 1
+                   FROM organization_resource_stewardships s
+                   WHERE s.organization_id = e.organization_id
+                     AND s.resource_uri = e.resource_uri
+                     AND s.status = 'active'
+               )`,
+        );
+        const exactByUri = new Map(
+            exactLocations.rows.map(row => [
+                row.resource_uri,
+                {
+                    kind: 'exact-public-resource' as const,
+                    streetAddress: row.street_address,
+                    latitude: Number(row.latitude),
+                    longitude: Number(row.longitude),
+                    approvalExpiresAt: new Date(
+                        row.approval_expires_at,
+                    ).toISOString(),
+                },
+            ]),
+        );
+        const body = result.body as ApiQueryDirectoryResponse;
         return {
             ...result,
             body: {
-                ...result.body,
+                ...body,
+                results: body.results.map(row => ({
+                    ...row,
+                    ...(exactByUri.has(row.uri) ?
+                        { exactPublicAddress: exactByUri.get(row.uri) }
+                    :   {}),
+                })),
                 projectionFreshness: snapshot.freshness,
             },
         };

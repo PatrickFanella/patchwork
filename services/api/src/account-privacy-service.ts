@@ -6,6 +6,19 @@ const hash = (value: string): string =>
 const iso = (value: Date | string | null): string | null =>
     value === null ? null : new Date(value).toISOString();
 
+interface ApplicationExportRow {
+    application_id: string;
+    subject_type: string;
+    organization_id: string | null;
+    subject_ref: string;
+    status: string;
+    submitted_at: Date | string;
+    decided_at: Date | string | null;
+    expires_at: Date | string | null;
+    revoked_at: Date | string | null;
+    updated_at: Date | string;
+}
+
 export class AccountPrivacyService {
     constructor(private readonly pool: Pool) {}
 
@@ -178,6 +191,72 @@ export class AccountPrivacyService {
                  WHERE actor_did = $1 OR subject = $1`,
                 [did],
             );
+            const verificationAudit = await client.query(
+                `UPDATE verification_audit_events
+                 SET actor_did = CASE
+                         WHEN actor_did = $1 THEN NULL
+                         ELSE actor_did
+                     END,
+                     private_details =
+                        '{"redactedForDeactivation":true}'::jsonb
+                 WHERE actor_did = $1
+                    OR subject_id IN (
+                        SELECT application_id::text
+                        FROM verification_applications
+                        WHERE applicant_did = $1
+                    )
+                    OR subject_id IN (
+                        SELECT appeal_id::text
+                        FROM verification_appeals
+                        WHERE applicant_did = $1
+                    )
+                    OR subject_id IN (
+                        SELECT request_id::text
+                        FROM exact_public_address_requests
+                        WHERE applicant_did = $1
+                    )`,
+                [did],
+            );
+            const exactAddressRequests = await client.query(
+                `DELETE FROM exact_public_address_requests
+                 WHERE applicant_did = $1`,
+                [did],
+            );
+            const verificationApplications = await client.query(
+                `DELETE FROM verification_applications
+                 WHERE applicant_did = $1`,
+                [did],
+            );
+            const privateAttachments = await client.query(
+                `DELETE FROM private_attachments WHERE owner_did = $1`,
+                [did],
+            );
+            const verificationModeratorDecisions = await client.query(
+                `UPDATE verification_decisions
+                 SET moderator_did = 'deactivated:' || $2
+                 WHERE moderator_did = $1`,
+                [did, didHash],
+            );
+            await client.query(
+                `UPDATE verification_appeals
+                 SET resolved_by_did = 'deactivated:' || $2
+                 WHERE resolved_by_did = $1`,
+                [did, didHash],
+            );
+            await client.query(
+                `UPDATE exact_public_address_requests
+                 SET decided_by_did = 'deactivated:' || $2
+                 WHERE decided_by_did = $1`,
+                [did, didHash],
+            );
+            await client.query(
+                `UPDATE verification_audit_events
+                 SET actor_did = NULL,
+                     private_details =
+                        '{"redactedForDeactivation":true}'::jsonb
+                 WHERE actor_did = $1`,
+                [did],
+            );
             const legacyDiscoveryEvents = await client.query(
                 `DELETE FROM discovery_events WHERE author_did = $1`,
                 [did],
@@ -289,6 +368,12 @@ export class AccountPrivacyService {
                     organizationNotifications:
                         organizationNotifications.rowCount ?? 0,
                     organizations: removedOrganizations,
+                    verificationApplications:
+                        verificationApplications.rowCount ?? 0,
+                    exactAddressRequests:
+                        exactAddressRequests.rowCount ?? 0,
+                    privateAttachments:
+                        privateAttachments.rowCount ?? 0,
                     legacyDiscoveryEvents: legacyDiscoveryEvents.rowCount ?? 0,
                     workflows: workflows.rowCount ?? 0,
                     platformRoles: platformRoles.rowCount ?? 0,
@@ -317,6 +402,10 @@ export class AccountPrivacyService {
                     transferredOrganizations,
                     organizationAudit:
                         organizationAudit.rowCount ?? 0,
+                    verificationModeratorDecisions:
+                        verificationModeratorDecisions.rowCount ?? 0,
+                    verificationAudit:
+                        verificationAudit.rowCount ?? 0,
                 },
             };
             await client.query(
@@ -508,6 +597,92 @@ export class AccountPrivacyService {
              FROM organization_resource_stewardships
              WHERE steward_did = $1
              ORDER BY created_at, stewardship_id`,
+            [did],
+        );
+        const verificationApplications = await client.query<ApplicationExportRow>(
+            `SELECT application_id, subject_type, organization_id,
+                    subject_ref, status, submitted_at, decided_at,
+                    expires_at, revoked_at, updated_at
+             FROM verification_applications
+             WHERE applicant_did = $1
+             ORDER BY submitted_at, application_id`,
+            [did],
+        );
+        const verificationEvidence = await client.query<{
+            evidence_id: string;
+            application_id: string;
+            evidence_kind: string;
+            label: string;
+            issuer: string | null;
+            issued_at: Date | string | null;
+            attachment_id: string | null;
+            private_notes: string | null;
+            created_at: Date | string;
+        }>(
+            `SELECT e.evidence_id, e.application_id, e.evidence_kind,
+                    e.label, e.issuer, e.issued_at, e.attachment_id,
+                    e.private_notes, e.created_at
+             FROM verification_evidence_metadata e
+             JOIN verification_applications a USING (application_id)
+             WHERE a.applicant_did = $1
+             ORDER BY e.created_at, e.evidence_id`,
+            [did],
+        );
+        const verificationAppeals = await client.query<{
+            appeal_id: string;
+            application_id: string;
+            reason: string;
+            status: string;
+            submitted_at: Date | string;
+            resolved_at: Date | string | null;
+            resolution_note: string | null;
+        }>(
+            `SELECT appeal_id, application_id, reason, status,
+                    submitted_at, resolved_at, resolution_note
+             FROM verification_appeals
+             WHERE applicant_did = $1
+             ORDER BY submitted_at, appeal_id`,
+            [did],
+        );
+        const exactAddressRequests = await client.query<{
+            request_id: string;
+            organization_id: string;
+            resource_uri: string;
+            street_address: string;
+            latitude: number;
+            longitude: number;
+            confidential_facility: boolean;
+            status: string;
+            requested_at: Date | string;
+            decision_reason: string | null;
+            approval_expires_at: Date | string | null;
+            updated_at: Date | string;
+        }>(
+            `SELECT request_id, organization_id, resource_uri,
+                    street_address, latitude, longitude,
+                    confidential_facility, status, requested_at,
+                    decision_reason, approval_expires_at, updated_at
+             FROM exact_public_address_requests
+             WHERE applicant_did = $1
+             ORDER BY requested_at, request_id`,
+            [did],
+        );
+        const attachments = await client.query<{
+            attachment_id: string;
+            purpose: string;
+            declared_mime: string;
+            detected_mime: string | null;
+            byte_size: string | number;
+            status: string;
+            created_at: Date | string;
+            updated_at: Date | string;
+            deleted_at: Date | string | null;
+        }>(
+            `SELECT attachment_id, purpose, declared_mime, detected_mime,
+                    byte_size, status, created_at, updated_at, deleted_at
+             FROM private_attachments
+             WHERE owner_did = $1
+             ORDER BY created_at, attachment_id`,
             [did],
         );
         const workflows = await client.query<{
@@ -796,6 +971,75 @@ export class AccountPrivacyService {
                         updatedAt: iso(row.updated_at),
                     })),
                 },
+                verification: {
+                    applications: verificationApplications.rows.map(row => ({
+                        id: row.application_id,
+                        subjectType: row.subject_type,
+                        organizationId: row.organization_id,
+                        subjectRef: row.subject_ref,
+                        status: row.status,
+                        submittedAt: iso(row.submitted_at),
+                        decidedAt: iso(row.decided_at),
+                        expiresAt: iso(row.expires_at),
+                        revokedAt: iso(row.revoked_at),
+                        updatedAt: iso(row.updated_at),
+                    })),
+                    evidence: verificationEvidence.rows.map(row => ({
+                        id: row.evidence_id,
+                        applicationId: row.application_id,
+                        kind: row.evidence_kind,
+                        label: row.label,
+                        issuer: row.issuer,
+                        issuedAt:
+                            row.issued_at ?
+                                new Date(row.issued_at)
+                                    .toISOString()
+                                    .slice(0, 10)
+                            :   null,
+                        attachmentId: row.attachment_id,
+                        privateNotes: row.private_notes,
+                        createdAt: iso(row.created_at),
+                    })),
+                    appeals: verificationAppeals.rows.map(row => ({
+                        id: row.appeal_id,
+                        applicationId: row.application_id,
+                        reason: row.reason,
+                        status: row.status,
+                        submittedAt: iso(row.submitted_at),
+                        resolvedAt: iso(row.resolved_at),
+                        resolutionNote: row.resolution_note,
+                    })),
+                    exactAddressRequests: exactAddressRequests.rows.map(
+                        row => ({
+                            id: row.request_id,
+                            organizationId: row.organization_id,
+                            resourceUri: row.resource_uri,
+                            streetAddress: row.street_address,
+                            latitude: Number(row.latitude),
+                            longitude: Number(row.longitude),
+                            confidentialFacility:
+                                row.confidential_facility,
+                            status: row.status,
+                            requestedAt: iso(row.requested_at),
+                            decisionReason: row.decision_reason,
+                            approvalExpiresAt: iso(
+                                row.approval_expires_at,
+                            ),
+                            updatedAt: iso(row.updated_at),
+                        }),
+                    ),
+                },
+                attachments: attachments.rows.map(row => ({
+                    id: row.attachment_id,
+                    purpose: row.purpose,
+                    declaredMime: row.declared_mime,
+                    detectedMime: row.detected_mime,
+                    byteSize: Number(row.byte_size),
+                    status: row.status,
+                    createdAt: iso(row.created_at),
+                    updatedAt: iso(row.updated_at),
+                    deletedAt: iso(row.deleted_at),
+                })),
                 workflows: workflows.rows.map(row => ({
                     postUri: row.post_uri,
                     currentStatus: row.current_status,

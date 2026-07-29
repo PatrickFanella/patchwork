@@ -33,7 +33,20 @@ describePostgres('PostgresProjectionQueryService', () => {
 
     beforeEach(async () => {
         await pool.query(
-            `TRUNCATE indexer_projection_events,
+            `TRUNCATE verification_audit_events,
+                      exact_public_address_requests,
+                      verification_appeals,
+                      verification_decisions,
+                      verification_evidence_metadata,
+                      verification_applications,
+                      private_attachments,
+                      organization_notification_events,
+                      organization_audit_events,
+                      organization_resource_stewardships,
+                      organization_invitations,
+                      organization_memberships,
+                      organizations,
+                      indexer_projection_events,
                       indexer_projection_tombstones,
                       indexer_aid_post_projections,
                       indexer_directory_resource_projections,
@@ -129,6 +142,89 @@ describePostgres('PostgresProjectionQueryService', () => {
                 `at://did:plc:alex/${recordNsid.volunteerProfile}/main`,
                 recordNsid.volunteerProfile,
                 'f'.repeat(64),
+                now,
+            ],
+        );
+        await pool.query(
+            `INSERT INTO organizations (
+                organization_id, slug, name, description, origin,
+                source_url, source_retrieved_at,
+                source_last_verified_at, non_endorsement_label,
+                created_by_did, created_at, updated_at
+             ) VALUES (
+                '11111111-1111-4111-8111-111111111111',
+                'directory-owner', 'Directory Owner', '',
+                'visitor-created', NULL, NULL, NULL,
+                'No endorsement.', 'did:plc:directory', $1, $1
+             )`,
+            [now],
+        );
+        await pool.query(
+            `INSERT INTO verification_applications (
+                application_id, applicant_did, subject_type,
+                organization_id, subject_ref, status, submitted_at,
+                decided_at, expires_at, revoked_at, updated_at
+             ) VALUES
+                ('22222222-2222-4222-8222-222222222222',
+                 'did:plc:directory', 'organization',
+                 '11111111-1111-4111-8111-111111111111',
+                 '11111111-1111-4111-8111-111111111111',
+                 'approved', $1, $1,
+                 $1::timestamptz + INTERVAL '1 year', NULL, $1),
+                ('33333333-3333-4333-8333-333333333333',
+                 'did:plc:directory', 'resource',
+                 '11111111-1111-4111-8111-111111111111', $2,
+                 'approved', $1, $1,
+                 $1::timestamptz + INTERVAL '1 year', NULL, $1)`,
+            [
+                now,
+                `at://did:plc:pantry/${recordNsid.directoryResource}/a`,
+            ],
+        );
+        await pool.query(
+            `INSERT INTO organization_memberships (
+                organization_id, member_did, role, status,
+                invited_by_did, joined_at, updated_at
+             ) VALUES (
+                '11111111-1111-4111-8111-111111111111',
+                'did:plc:directory', 'owner', 'active',
+                'did:plc:directory', $1, $1
+             )`,
+            [now],
+        );
+        await pool.query(
+            `INSERT INTO organization_resource_stewardships (
+                stewardship_id, organization_id, resource_uri,
+                steward_did, status, last_reconfirmed_at,
+                reconfirm_due_at, created_at, updated_at
+             ) VALUES (
+                '55555555-5555-4555-8555-555555555555',
+                '11111111-1111-4111-8111-111111111111', $2,
+                'did:plc:directory', 'active', $1,
+                $1::timestamptz + INTERVAL '90 days', $1, $1
+             )`,
+            [
+                now,
+                `at://did:plc:pantry/${recordNsid.directoryResource}/a`,
+            ],
+        );
+        await pool.query(
+            `INSERT INTO exact_public_address_requests (
+                request_id, organization_id, resource_uri, applicant_did,
+                street_address, latitude, longitude,
+                confidential_facility, status, requested_at, decided_at,
+                decided_by_did, decision_reason, approval_expires_at,
+                updated_at
+             ) VALUES (
+                '44444444-4444-4444-8444-444444444444',
+                '11111111-1111-4111-8111-111111111111', $1,
+                'did:plc:directory', '100 Public Way, Chicago, IL',
+                41.881, -87.631, FALSE, 'approved', $2, $2,
+                'did:plc:moderator', 'Verified public facility.',
+                $2::timestamptz + INTERVAL '1 year', $2
+             )`,
+            [
+                `at://did:plc:pantry/${recordNsid.directoryResource}/a`,
                 now,
             ],
         );
@@ -339,6 +435,43 @@ describePostgres('PostgresProjectionQueryService', () => {
         expect(JSON.stringify(result.body)).not.toContain('contactEmail');
         expect(JSON.stringify(result.body)).not.toContain(
             'matchingPreferences',
+        );
+    });
+
+    it('projects an exact public address only while all three approval gates remain active', async () => {
+        const service = new PostgresProjectionQueryService(pool);
+        const active = await service.queryDirectory(
+            new URLSearchParams({ searchText: 'pantry' }),
+        );
+        expect(active).toMatchObject({
+            statusCode: 200,
+            body: {
+                results: [
+                    expect.objectContaining({
+                        exactPublicAddress: expect.objectContaining({
+                            kind: 'exact-public-resource',
+                            streetAddress: '100 Public Way, Chicago, IL',
+                            latitude: 41.881,
+                            longitude: -87.631,
+                        }),
+                    }),
+                ],
+            },
+        });
+
+        await pool.query(
+            `UPDATE verification_applications
+             SET status = 'revoked'
+             WHERE subject_type = 'organization'`,
+        );
+        const revoked = await service.queryDirectory(
+            new URLSearchParams({ searchText: 'pantry' }),
+        );
+        expect(JSON.stringify(revoked.body)).not.toContain(
+            'exactPublicAddress',
+        );
+        expect(JSON.stringify(revoked.body)).not.toContain(
+            '100 Public Way',
         );
     });
 });

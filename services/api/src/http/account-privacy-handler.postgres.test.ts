@@ -94,6 +94,7 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             '0014_account_onboarding.sql',
             '0015_volunteer_private_profiles.sql',
             '0016_organizations_and_stewardship.sql',
+            '0017_verification_and_exact_public_addresses.sql',
         ]) {
             await pool.query(
                 await readFile(
@@ -143,6 +144,13 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         }
         await pool.query(
             `TRUNCATE organization_notification_events,
+                      verification_audit_events,
+                      exact_public_address_requests,
+                      verification_appeals,
+                      verification_decisions,
+                      verification_evidence_metadata,
+                      verification_applications,
+                      private_attachments,
                       organization_audit_events,
                       organization_resource_stewardships,
                       organization_invitations,
@@ -152,7 +160,9 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                       user_blocks, request_handoff_events,
                       request_assignment_events, request_transition_events,
                       request_workflows, http_idempotency_commands,
-                      account_deactivations, moderation_audit_records,
+                      account_preference_audit, account_preferences,
+                      account_policy_consents, account_deactivations,
+                      moderation_audit_records,
                       moderation_queue_items,
                       indexer_projection_events,
                       indexer_projection_tombstones,
@@ -385,6 +395,74 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
              )`,
             [viewerDid],
         );
+        await pool.query(
+            `INSERT INTO private_attachments (
+                attachment_id, owner_did, purpose, object_key,
+                declared_mime, detected_mime, byte_size, status,
+                created_at, updated_at
+             ) VALUES (
+                '55555555-5555-4555-8555-555555555555',
+                'did:plc:privacyviewer',
+                'verification-evidence',
+                'verification/private-viewer-evidence.pdf',
+                'application/pdf', 'application/pdf', 2048, 'clean',
+                NOW(), NOW()
+             );
+             INSERT INTO verification_applications (
+                application_id, applicant_did, subject_type,
+                organization_id, subject_ref, status, submitted_at,
+                decided_at, expires_at, revoked_at, updated_at
+             ) VALUES (
+                '66666666-6666-4666-8666-666666666666',
+                'did:plc:privacyviewer',
+                'organization',
+                '11111111-1111-4111-8111-111111111111',
+                '11111111-1111-4111-8111-111111111111',
+                'denied', NOW(), NOW(), NULL, NULL, NOW()
+             );
+             INSERT INTO verification_evidence_metadata (
+                evidence_id, application_id, evidence_kind, label,
+                issuer, issued_at, attachment_id, private_notes, created_at
+             ) VALUES (
+                '77777777-7777-4777-8777-777777777777',
+                '66666666-6666-4666-8666-666666666666',
+                'organization-registration', 'Registration record',
+                'State registry', CURRENT_DATE,
+                '55555555-5555-4555-8555-555555555555',
+                'Private applicant note', NOW()
+             );
+             INSERT INTO verification_appeals (
+                appeal_id, application_id, applicant_did, reason,
+                status, submitted_at
+             ) VALUES (
+                '88888888-8888-4888-8888-888888888888',
+                '66666666-6666-4666-8666-666666666666',
+                'did:plc:privacyviewer',
+                'Please review the updated registration.', 'pending', NOW()
+             );
+             INSERT INTO exact_public_address_requests (
+                request_id, organization_id, resource_uri, applicant_did,
+                street_address, latitude, longitude, confidential_facility,
+                status, requested_at, updated_at
+             ) VALUES (
+                '99999999-9999-4999-8999-999999999999',
+                '11111111-1111-4111-8111-111111111111',
+                'at://did:plc:privacyviewer/app.patchwork.directory.resource/one',
+                'did:plc:privacyviewer',
+                '123 Private Review Street', 41.88, -87.63,
+                FALSE, 'pending', NOW(), NOW()
+             );
+             INSERT INTO verification_audit_events (
+                actor_did, action, subject_type, subject_id,
+                public_summary, private_details, occurred_at
+             ) VALUES (
+                'did:plc:privacyviewer',
+                'verification-appeal-submitted', 'application',
+                '66666666-6666-4666-8666-666666666666',
+                'Verification appeal submitted.',
+                '{"privateApplicantContext":"must be redacted"}', NOW()
+             )`,
+        );
     });
 
     afterAll(async () => {
@@ -455,6 +533,35 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                         }),
                     ],
                 },
+                verification: {
+                    applications: [
+                        expect.objectContaining({
+                            subjectType: 'organization',
+                            status: 'denied',
+                        }),
+                    ],
+                    evidence: [
+                        expect.objectContaining({
+                            label: 'Registration record',
+                            privateNotes: 'Private applicant note',
+                        }),
+                    ],
+                    appeals: [
+                        expect.objectContaining({ status: 'pending' }),
+                    ],
+                    exactAddressRequests: [
+                        expect.objectContaining({
+                            streetAddress: '123 Private Review Street',
+                            status: 'pending',
+                        }),
+                    ],
+                },
+                attachments: [
+                    expect.objectContaining({
+                        purpose: 'verification-evidence',
+                        status: 'clean',
+                    }),
+                ],
             },
             exclusions: expect.arrayContaining([
                 expect.objectContaining({ category: 'at-repository' }),
@@ -464,6 +571,9 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
         const serialized = JSON.stringify(body);
         expect(serialized).not.toContain('encrypted-secret-payload');
         expect(serialized).not.toContain('private-session-hash');
+        expect(serialized).not.toContain(
+            'verification/private-viewer-evidence.pdf',
+        );
         expect(serialized).not.toContain('Other aid post');
         expect(serialized).not.toContain('Other clinic');
         expect(serialized).not.toContain(otherDid);
@@ -509,6 +619,9 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
                 organizationInvitations: 1,
                 organizationNotifications: 1,
                 organizations: 0,
+                verificationApplications: 1,
+                exactAddressRequests: 1,
+                privateAttachments: 1,
                 policyConsents: 1,
                 preferences: 1,
             },
@@ -559,6 +672,21 @@ describePostgres('authenticated account privacy HTTP boundary', () => {
             details: null,
             actor_did: `deactivated:${hash(viewerDid)}`,
         });
+        const verificationRetained = await pool.query<{
+            actor_did: string | null;
+            private_details: Record<string, unknown>;
+        }>(
+            `SELECT actor_did, private_details
+             FROM verification_audit_events
+             WHERE subject_id =
+                   '66666666-6666-4666-8666-666666666666'`,
+        );
+        expect(verificationRetained.rows).toEqual([
+            {
+                actor_did: null,
+                private_details: { redactedForDeactivation: true },
+            },
+        ]);
 
         const viewerExport = (await fetch(`${running.origin}/account/export`, {
             headers: { cookie: 'patchwork_session=privacy-session' },

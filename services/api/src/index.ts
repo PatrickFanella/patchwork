@@ -56,6 +56,11 @@ import {
 } from './http/organization-handler.js';
 import { OrganizationService } from './organization-service.js';
 import {
+    createVerificationHandler,
+    isVerificationRoute,
+} from './http/verification-handler.js';
+import { VerificationCaseService } from './verification-case-service.js';
+import {
     createDurableSafetyHandler,
     isDurableSafetyRoute,
 } from './http/durable-safety-handler.js';
@@ -116,6 +121,7 @@ if (postgresPool) {
         volunteer_projection_table: string | null;
         state_table: string | null;
         organization_table: string | null;
+        verification_table: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
@@ -124,13 +130,16 @@ if (postgresPool) {
             to_regclass('indexer_volunteer_profile_projections')::TEXT
                 AS volunteer_projection_table,
             to_regclass('indexer_projection_state')::TEXT AS state_table,
-            to_regclass('organizations')::TEXT AS organization_table`,
+            to_regclass('organizations')::TEXT AS organization_table,
+            to_regclass('verification_applications')::TEXT
+                AS verification_table`,
     );
     if (
         !projectionSchema.rows[0]?.projection_table ||
         !projectionSchema.rows[0]?.directory_projection_table ||
         !projectionSchema.rows[0]?.volunteer_projection_table ||
         !projectionSchema.rows[0]?.organization_table ||
+        !projectionSchema.rows[0]?.verification_table ||
         !projectionSchema.rows[0]?.state_table
     ) {
         await postgresPool.end();
@@ -186,6 +195,8 @@ const accountOnboardingService =
     postgresPool ? new AccountOnboardingService(postgresPool) : undefined;
 const organizationService =
     postgresPool ? new OrganizationService(postgresPool) : undefined;
+const verificationCaseService =
+    postgresPool ? new VerificationCaseService(postgresPool) : undefined;
 const consentExemptPaths = new Set([
     '/account/onboarding',
     '/account/consent',
@@ -361,6 +372,14 @@ const organizationHandler =
     authenticateApiRequest && organizationService ?
         createOrganizationHandler({
             service: organizationService,
+            authenticate: authenticateApiRequest,
+            executeIdempotent: executeIdempotentMutation,
+        })
+    :   undefined;
+const verificationHandler =
+    authenticateApiRequest && verificationCaseService ?
+        createVerificationHandler({
+            service: verificationCaseService,
             authenticate: authenticateApiRequest,
             executeIdempotent: executeIdempotentMutation,
         })
@@ -1375,6 +1394,15 @@ const contractRoutes = [
     '/organizations/stewardships',
     '/organizations/stewardships/reconfirm',
     '/organizations/audit',
+    '/verification/mine',
+    '/verification/applications',
+    '/verification/appeals',
+    '/verification/review',
+    '/verification/decisions',
+    '/verification/appeal-decisions',
+    '/verification/exact-address/requests',
+    '/verification/exact-address/review',
+    '/verification/exact-address/decisions',
     '/health',
     '/health/ready',
     '/metrics',
@@ -1582,6 +1610,19 @@ export const createApiServer = () => {
         }
 
         if (organizationHandler?.(request, response, requestUrl)) {
+            return;
+        }
+
+        if (verificationHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isVerificationRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'VERIFICATION_SERVICE_UNAVAILABLE',
+                    message: 'Verification services are unavailable.',
+                },
+            });
             return;
         }
         if (isOrganizationRoute(request, requestUrl)) {
@@ -1827,6 +1868,7 @@ export const startApiServer = () => {
     const server = createApiServer();
     let retentionScheduler: RetentionScheduler | undefined;
     let organizationScheduler: RetentionScheduler | undefined;
+    let verificationScheduler: RetentionScheduler | undefined;
     if (postgresPool) {
         const retention = new PostgresRetentionService(postgresPool);
         retentionScheduler = startRetentionScheduler({
@@ -1876,6 +1918,30 @@ export const startApiServer = () => {
                 },
             });
         }
+        if (verificationCaseService) {
+            verificationScheduler = startRetentionScheduler({
+                intervalMs: 60 * 60 * 1_000,
+                enforce: async () => {
+                    const result =
+                        await verificationCaseService.runExpirySweep();
+                    console.log(
+                        JSON.stringify({
+                            level: 'info',
+                            event: 'verification_expiry_sweep_completed',
+                            ...result,
+                        }),
+                    );
+                },
+                onError: () => {
+                    console.error(
+                        JSON.stringify({
+                            level: 'error',
+                            event: 'verification_expiry_sweep_failed',
+                        }),
+                    );
+                },
+            });
+        }
     }
     server.listen(config.API_PORT, config.API_HOST, () => {
         console.log(
@@ -1885,6 +1951,7 @@ export const startApiServer = () => {
     server.once('close', () => {
         retentionScheduler?.stop();
         organizationScheduler?.stop();
+        verificationScheduler?.stop();
     });
     return server;
 };
