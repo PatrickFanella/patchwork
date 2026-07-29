@@ -21,6 +21,16 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations: { runbook_url: "docs/operations/incident-response.md#moderation-queue-age" }
+      - alert: PatchworkUrgentModerationNotificationPending
+        expr: moderation_urgent_notification_events_pending{service="moderation-worker",environment="staging"} > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations: { runbook_url: "docs/operations/incident-response.md#moderation-queue-age" }
+      - alert: PatchworkMaintenanceModeActive
+        expr: patchwork_maintenance_mode_active{service="api",environment="staging"} == 1
+        for: 5m
+        labels: { severity: warning }
+        annotations: { runbook_url: "docs/operations/incident-response.md#maintenance-mode" }
       - alert: PatchworkDatabaseUnavailable
         expr: up{job="patchwork-postgres",environment="staging"} == 0
         for: 1m

@@ -11,6 +11,8 @@ transitions must still be demonstrated on the authorized staging stack.
 | `PatchworkIndexerDisconnected` | critical | AT source disconnected for 2 minutes | Page within 5 minutes |
 | `PatchworkIndexerLagHigh` | critical | AT delivery lag above 5 minutes for 5 minutes | Page within 5 minutes |
 | `PatchworkModerationQueueOldestItemHigh` | warning | oldest queued case above 15 minutes for 5 minutes | Respond within 15 minutes |
+| `PatchworkUrgentModerationNotificationPending` | critical | urgent moderator notification remains unconsumed for 5 minutes | Page within 5 minutes |
+| `PatchworkMaintenanceModeActive` | warning | safety maintenance remains active for 5 minutes | Confirm incident ownership within 15 minutes |
 | `PatchworkDatabaseUnavailable` | critical | PostgreSQL scrape target down for 1 minute | Page within 5 minutes |
 | `PatchworkBackupFailed` | warning | most recent backup attempt failed | Respond within 15 minutes |
 | `PatchworkBackupStale` | warning | no successful backup for 7.5 hours | Respond within 15 minutes |

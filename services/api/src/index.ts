@@ -750,7 +750,13 @@ const renderPrometheusMetrics = (): string => {
         `patchwork_notification_delivery_sweep_failures_total{project="patchwork",service="api",component="stitch"} ${notificationDeliverySweepFailuresTotal}`,
     ].join('\n');
 
-    return `${baseMetrics}\n${sliMetrics}\n${retentionMetrics.renderPrometheus()}\n${attachmentMetrics}\n${notificationMetrics}`;
+    const maintenanceMetrics = [
+        '# HELP patchwork_maintenance_mode_active New submissions and exact-location exchange are disabled.',
+        '# TYPE patchwork_maintenance_mode_active gauge',
+        `patchwork_maintenance_mode_active{project="patchwork",service="api",component="stitch"} ${maintenanceModeService?.isActive() ? 1 : 0}`,
+    ].join('\n');
+
+    return `${baseMetrics}\n${sliMetrics}\n${retentionMetrics.renderPrometheus()}\n${attachmentMetrics}\n${notificationMetrics}\n${maintenanceMetrics}`;
 };
 
 const writeJson = (

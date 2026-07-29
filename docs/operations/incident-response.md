@@ -145,7 +145,22 @@ minutes.
 
 Inspect the oldest durable queued case, lease owner and expiry, retry time, and
 last failure code. Recover expired leases or repair the failing dependency;
-never delete cases merely to clear the gauge.
+never delete cases merely to clear the gauge. For an urgent-notification alert,
+confirm that a configured moderator role and channel exist, restore the
+notification sweep, and verify the durable event is consumed exactly once.
+Never copy the subject submission, contact data, exact location, or private
+attachment into incident notes.
+
+### Maintenance mode
+
+Confirm an incident commander owns the declared reason and that public reads
+and `/status` remain healthy while every new-submission and exact-location
+write returns the stable maintenance response. Do not resume to clear the
+alert. A moderator with `maintenance_mode:manage` may resume only after the
+declared privacy, authorization, abuse, integrity, backlog, monitoring, or
+backup condition is verified healthy; the resume must appear in the durable
+audit log. An environment override must be cleared through the deployment
+configuration before an in-product resume is possible.
 
 ### Database unavailable
 

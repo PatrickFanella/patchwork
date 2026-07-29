@@ -217,6 +217,11 @@ const routeHandlers: Readonly<Record<string, ModerationRouteDefinition>> = {
         metrics.setOldestItemAgeSeconds(
             oldestRequestedAt === undefined ? 0 : (Date.now() - oldestRequestedAt) / 1000,
         );
+        if (runtime.mode === 'postgres') {
+            metrics.setUrgentNotificationEventsPending(
+                await runtime.submissionSafety.pendingUrgentNotifications(),
+            );
+        }
         return {
             statusCode: 200,
             body: renderPrometheusMetrics(),

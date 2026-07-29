@@ -45,6 +45,7 @@ export class ModerationMetrics {
     private readonly actionCounters = new Map<string, number>();
     private errorCount = 0;
     private oldestItemAgeSeconds = 0;
+    private urgentNotificationEventsPending = 0;
     private retentionLastAttemptSuccess = 1;
     private retentionLastAttemptTimestampSeconds = 0;
     private retentionLastSuccessTimestampSeconds = 0;
@@ -76,6 +77,10 @@ export class ModerationMetrics {
 
     setOldestItemAgeSeconds(ageSeconds: number): void {
         this.oldestItemAgeSeconds = Math.max(0, ageSeconds);
+    }
+
+    setUrgentNotificationEventsPending(count: number): void {
+        this.urgentNotificationEventsPending = Math.max(0, count);
     }
 
     /** Record a policy action being applied. */
@@ -156,6 +161,11 @@ export class ModerationMetrics {
             '# TYPE moderation_queue_oldest_item_age_seconds gauge',
             `moderation_queue_oldest_item_age_seconds{${SERVICE_LABELS}} ${this.oldestItemAgeSeconds}`,
         );
+        lines.push(
+            '# HELP moderation_urgent_notification_events_pending Urgent moderation events waiting for configured moderator delivery.',
+            '# TYPE moderation_urgent_notification_events_pending gauge',
+            `moderation_urgent_notification_events_pending{${SERVICE_LABELS}} ${this.urgentNotificationEventsPending}`,
+        );
 
         lines.push(
             '# HELP moderation_queue_latency_seconds Time from enqueue to dequeue in seconds.',
@@ -227,6 +237,7 @@ export class ModerationMetrics {
         this.actionCounters.clear();
         this.errorCount = 0;
         this.oldestItemAgeSeconds = 0;
+        this.urgentNotificationEventsPending = 0;
         this.retentionLastAttemptSuccess = 1;
         this.retentionLastAttemptTimestampSeconds = 0;
         this.retentionLastSuccessTimestampSeconds = 0;

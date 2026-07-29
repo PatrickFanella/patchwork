@@ -429,6 +429,15 @@ export class SubmissionSafetyService {
         });
     }
 
+    async pendingUrgentNotifications(): Promise<number> {
+        const result = await this.pool.query<{ count: string }>(
+            `SELECT COUNT(*)::text AS count
+               FROM moderation_notification_events
+              WHERE consumed_at IS NULL AND priority = 'urgent'`,
+        );
+        return Number(result.rows[0]?.count ?? 0);
+    }
+
     private render(row: ReviewRow): SubmissionSafetyDecision {
         return {
             decision: row.decision,
