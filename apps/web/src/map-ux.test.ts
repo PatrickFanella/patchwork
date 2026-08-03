@@ -4,6 +4,7 @@ import { haversineDistanceMeters } from './geo-utils.js';
 import {
     buildMapViewModel,
     clusterDistanceMetersForZoom,
+    clusterExpansionZoom,
     clusterMapCards,
     filterMapCards,
     openMapDetailDrawer,
@@ -67,6 +68,25 @@ describe('map ux', () => {
         expect(lowZoomClusters[0]?.count).toBe(2);
         expect(highZoomClusters).toHaveLength(2);
         expect(highZoomClusters.every(cluster => cluster.count === 1)).toBe(true);
+    });
+
+    it('groups broadly at first and expands at the first meaningful split zoom', () => {
+        const cards = [
+            buildCard({
+                id: 'expand-1',
+                location: { lat: 0, lng: 0, precisionKm: 1 },
+            }),
+            buildCard({
+                id: 'expand-2',
+                location: { lat: 0.02, lng: 0, precisionKm: 1 },
+            }),
+        ];
+
+        expect(clusterDistanceMetersForZoom(10, 0)).toBeGreaterThan(
+            clusterDistanceMetersForZoom(11, 0),
+        );
+        expect(clusterMapCards(cards, clusterDistanceMetersForZoom(10, 0))).toHaveLength(1);
+        expect(clusterExpansionZoom(cards, cards.map(card => card.id), 10, 0)).toBe(12);
     });
 
     it('filters cards by category and radius interactions', () => {

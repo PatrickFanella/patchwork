@@ -997,10 +997,13 @@ interface MapRouteProps {
     discoveryState: DiscoveryFilterState;
     onPatchDiscovery: (patch: Partial<DiscoveryFilterState>) => void;
     feedRecords: readonly FeedRecordEnvelope[];
+    resourceCards: readonly ResourceDirectoryCard[];
+    resourceErrorMessage?: string;
     isLoading: boolean;
     errorMessage?: string;
     dataOrigin: ApiDataOrigin;
     onRetry: () => void;
+    onRetryResources: () => void;
     selectedPostId?: string;
     onSelectPost: (id: string | undefined) => void;
     onTriageAction: (postId: string, action: MapTriageAction) => void;
@@ -1017,10 +1020,13 @@ const MapRoute = ({
     discoveryState,
     onPatchDiscovery,
     feedRecords,
+    resourceCards,
+    resourceErrorMessage,
     isLoading,
     errorMessage,
     dataOrigin,
     onRetry,
+    onRetryResources,
     selectedPostId,
     onSelectPost,
     onTriageAction,
@@ -1051,6 +1057,10 @@ const MapRoute = ({
         () => buildMapViewModel(mapCards, discoveryState),
         [mapCards, discoveryState],
     );
+    const mapResourceView = useMemo(
+        () => buildResourceOverlayViewModel(resourceCards, discoveryState),
+        [discoveryState, resourceCards],
+    );
 
     const selectedRecord =
         selectedPostId ?
@@ -1069,34 +1079,56 @@ const MapRoute = ({
                     Map triage
                 </h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Approximate-area clustering with privacy-safe radii and
-                    direct handoff actions.
+                    Privacy-safe request areas plus moderator-approved exact
+                    public places, with direct handoff actions.
                 </p>
                 <div className='mt-3 flex flex-wrap gap-2'>
                     <Badge tone={dataOrigin === 'api' ? 'success' : 'info'}>
                         {dataOriginLabel(dataOrigin)}
                     </Badge>
                 </div>
-                {errorMessage ?
+                {errorMessage || resourceErrorMessage ?
                     <div
                         role='alert'
                         className='mh-alert mt-3 text-xs font-bold'
                     >
-                        <p>API sync issue: {errorMessage}</p>
-                        {feedRecords.length > 0 ?
+                        {errorMessage ?
+                            <p>API sync issue: {errorMessage}</p>
+                        :   null}
+                        {errorMessage && feedRecords.length > 0 ?
                             <p>
                                 Showing previously loaded results; they may be
                                 stale.
                             </p>
                         :   null}
-                        <Button
-                            type='button'
-                            variant='neutral'
-                            className='mt-2 px-3 py-1 text-xs'
-                            onClick={onRetry}
-                        >
-                            Retry discovery
-                        </Button>
+                        {resourceErrorMessage ?
+                            <p>
+                                Public-place sync issue:{' '}
+                                {resourceErrorMessage}
+                            </p>
+                        :   null}
+                        <div className='mt-2 flex flex-wrap gap-2'>
+                            {errorMessage ?
+                                <Button
+                                    type='button'
+                                    variant='neutral'
+                                    className='px-3 py-1 text-xs'
+                                    onClick={onRetry}
+                                >
+                                    Retry discovery
+                                </Button>
+                            :   null}
+                            {resourceErrorMessage ?
+                                <Button
+                                    type='button'
+                                    variant='neutral'
+                                    className='px-3 py-1 text-xs'
+                                    onClick={onRetryResources}
+                                >
+                                    Retry public places
+                                </Button>
+                            :   null}
+                        </div>
                     </div>
                 :   null}
             </header>
@@ -1116,9 +1148,13 @@ const MapRoute = ({
                 <Suspense fallback={<div className='mh-skeleton h-96 w-full' />}>
                     <LazyInteractiveMap
                         cards={mapView.filteredCards}
+                        resources={mapResourceView.cards}
                         selectedPostId={selectedPostId}
                         center={discoveryState.center ?? defaultDiscoveryCenter}
                         onSelectPostId={onSelectPost}
+                        onFocusArea={({ center, radiusMeters }) =>
+                            onPatchDiscovery({ center, radiusMeters })
+                        }
                         onTilesFailed={setTileError}
                     />
                 </Suspense>
@@ -8842,7 +8878,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     }, [aidReload, currentRoute, currentUserDid, discoveryState]);
 
     useEffect(() => {
-        if (currentRoute !== '/resources') {
+        if (currentRoute !== '/resources' && currentRoute !== '/map') {
             return undefined;
         }
         if (webDataMode === 'fixture') return undefined;
@@ -9120,10 +9156,15 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 discoveryState={discoveryState}
                 onPatchDiscovery={patchDiscoveryState}
                 feedRecords={feedRecords}
+                resourceCards={resourceCards}
+                resourceErrorMessage={directoryErrorMessage}
                 isLoading={isAidLoading}
                 errorMessage={aidErrorMessage}
                 dataOrigin={aidDataOrigin}
                 onRetry={() => setAidReload(value => value + 1)}
+                onRetryResources={() =>
+                    setDirectoryReload(value => value + 1)
+                }
                 selectedPostId={selectedMapPostId}
                 onSelectPost={setSelectedMapPostId}
                 onOpenChat={openChatFromRecord}

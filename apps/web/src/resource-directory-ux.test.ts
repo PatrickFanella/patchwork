@@ -104,6 +104,53 @@ describe('phase 6 resource directory overlays + details ui', () => {
         ).toBe(true);
     });
 
+    it('uses moderator-approved public-place coordinates exactly', () => {
+        const resource = buildResource({
+            exactPublicAddress: {
+                kind: 'exact-public-resource',
+                streetAddress: '100 Public Way',
+                latitude: 40.7128123,
+                longitude: -74.0060123,
+                approvalExpiresAt: '2099-01-01T00:00:00.000Z',
+            },
+        });
+
+        const view = buildResourceOverlayViewModel(
+            [resource],
+            defaultDiscoveryFilterState,
+        );
+
+        expect(view.overlays[0]).toMatchObject({
+            lat: 40.712812,
+            lng: -74.006012,
+            radiusMeters: 0,
+            exact: true,
+        });
+    });
+
+    it('falls back to an approximate overlay after exact approval expires', () => {
+        const resource = buildResource({
+            exactPublicAddress: {
+                kind: 'exact-public-resource',
+                streetAddress: '100 Old Way',
+                latitude: 40.7128123,
+                longitude: -74.0060123,
+                approvalExpiresAt: '2020-01-01T00:00:00.000Z',
+            },
+        });
+
+        const view = buildResourceOverlayViewModel(
+            [resource],
+            defaultDiscoveryFilterState,
+        );
+
+        expect(view.overlays[0]).toMatchObject({
+            lat: 1.3001,
+            lng: 103.8001,
+            exact: false,
+        });
+    });
+
     it('returns accessible loading/error/empty/ready ui states', () => {
         const loading = resolveResourceDirectoryUiState({
             loading: true,

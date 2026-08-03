@@ -4,32 +4,48 @@ import L from 'leaflet';
 import { leafletLayer } from 'protomaps-leaflet';
 import type { MapAidCard } from '../../map-ux.js';
 import {
+    clusterExpansionZoom,
     clusterDistanceMetersForZoom,
     clusterMapCards,
     toApproximateMapMarker,
 } from '../../map-ux.js';
+import {
+    currentExactPublicAddress,
+    type ResourceDirectoryCard,
+} from '../../resource-directory-ux.js';
 import { resolveMapTileUrl } from '../../config.js';
 
 export interface InteractiveMapProps {
     cards: readonly MapAidCard[];
+    resources?: readonly ResourceDirectoryCard[];
     selectedPostId?: string;
     center: { lat: number; lng: number };
     onSelectPostId: (postId: string | undefined) => void;
+    onFocusArea?: (area: {
+        center: { lat: number; lng: number };
+        radiusMeters: number;
+    }) => void;
     onTilesFailed: (message: string) => void;
 }
 
 export const InteractiveMap = ({
     cards,
+    resources = [],
     selectedPostId,
     center,
     onSelectPostId,
+    onFocusArea,
     onTilesFailed,
 }: InteractiveMapProps) => {
     const mapRef = useRef<HTMLDivElement | null>(null);
     const mapInstance = useRef<L.Map | null>(null);
     const onTilesFailedRef = useRef(onTilesFailed);
     const onSelectPostIdRef = useRef(onSelectPostId);
+    const onFocusAreaRef = useRef(onFocusArea);
     const [zoom, setZoom] = useState(9);
+    const [circleStyle, setCircleStyle] = useState<
+        'filled' | 'outline' | 'contrast'
+    >('filled');
     const mapId = useId();
     const instructionsId = `map-instructions-${mapId.replace(/:/g, '')}`;
 
@@ -47,6 +63,10 @@ export const InteractiveMap = ({
         onSelectPostIdRef.current = onSelectPostId;
     }, [onSelectPostId]);
 
+    useEffect(() => {
+        onFocusAreaRef.current = onFocusArea;
+    }, [onFocusArea]);
+
     const markers = useMemo(
         () => cards.map(toApproximateMapMarker).filter((value): value is NonNullable<typeof value> => Boolean(value)),
         [cards],
@@ -62,6 +82,17 @@ export const InteractiveMap = ({
     const clusteredPostIds = useMemo(
         () => new Set(clusters.filter(cluster => cluster.count > 1).flatMap(cluster => cluster.postIds)),
         [clusters],
+    );
+    const exactPlaces = useMemo(
+        () =>
+            resources.flatMap(resource => {
+                const exact = currentExactPublicAddress(resource);
+                if (!exact) {
+                    return [];
+                }
+                return [{ resource, exact }];
+            }),
+        [resources],
     );
     const tileUrl = resolveMapTileUrl(import.meta.env, import.meta.env.PROD);
 
@@ -112,12 +143,29 @@ export const InteractiveMap = ({
                         'mh-map-cluster is-selected'
                     :   'mh-map-cluster',
             }).addTo(map);
-            circle.bindTooltip(cluster.label, { permanent: false });
+            circle.bindTooltip(
+                `${cluster.count} · U${cluster.urgencyMax}`,
+                {
+                    permanent: true,
+                    direction: 'center',
+                    className: 'mh-map-circle-label mh-map-cluster-label',
+                },
+            );
             circle.on('click', () => {
+                const nextZoom = clusterExpansionZoom(
+                    cards,
+                    cluster.postIds,
+                    map.getZoom(),
+                    cluster.lat,
+                );
                 map.setView(
                     [cluster.lat, cluster.lng],
-                    Math.min(18, map.getZoom() + 2),
+                    nextZoom,
                 );
+                onFocusAreaRef.current?.({
+                    center: { lat: cluster.lat, lng: cluster.lng },
+                    radiusMeters: Math.ceil(cluster.radiusMeters),
+                });
             });
             layers.push(circle);
         }
@@ -127,25 +175,81 @@ export const InteractiveMap = ({
                 radius: marker.radiusMeters,
                 className: marker.id === selectedPostId ? 'mh-map-circle is-selected' : 'mh-map-circle',
             }).addTo(map);
-            circle.on('click', () => onSelectPostIdRef.current(marker.id));
+            circle.bindTooltip(`${marker.label} · U${marker.urgency}`, {
+                permanent: true,
+                direction: 'center',
+                className: 'mh-map-circle-label mh-map-request-label',
+            });
+            circle.on('click', () => {
+                map.setView([marker.lat, marker.lng], map.getZoom());
+                onFocusAreaRef.current?.({
+                    center: { lat: marker.lat, lng: marker.lng },
+                    radiusMeters: marker.radiusMeters,
+                });
+                onSelectPostIdRef.current(marker.id);
+            });
             layers.push(circle);
         }
+        for (const { resource, exact } of exactPlaces) {
+            const marker = L.circleMarker([exact.latitude, exact.longitude], {
+                radius: 7,
+                className: 'mh-map-place',
+            }).addTo(map);
+            marker.bindTooltip(
+                `${resource.name} · ${resource.openHours ?? 'hours unavailable'}`,
+                {
+                    permanent: true,
+                    direction: 'right',
+                    className: 'mh-map-place-label',
+                },
+            );
+            marker.on('click', () => {
+                map.setView([exact.latitude, exact.longitude], 15);
+                onFocusAreaRef.current?.({
+                    center: { lat: exact.latitude, lng: exact.longitude },
+                    radiusMeters: 1000,
+                });
+            });
+            layers.push(marker);
+        }
         return () => layers.forEach(layer => layer.remove());
-    }, [clusteredPostIds, clusters, markers, selectedPostId]);
+    }, [cards, clusteredPostIds, clusters, exactPlaces, markers, selectedPostId]);
 
-    const hasItems = markers.length > 0 || clusters.length > 0;
+    const hasItems =
+        markers.length > 0 || clusters.length > 0 || exactPlaces.length > 0;
 
     return (
-        <div className="mh-map-container">
+        <div className={`mh-map-container mh-map-style-${circleStyle}`}>
+            <fieldset className="mh-map-style-control">
+                <legend>Circle style</legend>
+                {([
+                    ['filled', 'Filled'],
+                    ['outline', 'Outline'],
+                    ['contrast', 'High contrast'],
+                ] as const).map(([value, label]) => (
+                    <label key={value}>
+                        <input
+                            type="radio"
+                            name={`circle-style-${mapId}`}
+                            value={value}
+                            checked={circleStyle === value}
+                            onChange={() => setCircleStyle(value)}
+                        />
+                        <span>{label}</span>
+                    </label>
+                ))}
+            </fieldset>
             {!hasItems && (
                 <p id={instructionsId} className="mh-map-empty-message">
-                    No aid requests in the current area. Try widening the search radius or clearing filters.
+                    No aid requests or approved public places in the current
+                    area. Try widening the search radius or clearing filters.
                 </p>
             )}
             {hasItems && (
                 <p id={instructionsId} className="mh-map-instructions">
-                    Use arrow keys to pan and plus/minus to zoom. Use the request
-                    list below for keyboard-accessible selection.
+                    Click a circle to center and filter to its area. Use arrow
+                    keys to pan and plus/minus to zoom. Use the request list
+                    below for keyboard-accessible selection.
                 </p>
             )}
             <div
@@ -176,8 +280,17 @@ export const InteractiveMap = ({
                     />
                     <span>Multiple requests cluster</span>
                 </div>
+                <div className="mh-map-legend-item">
+                    <span
+                        className="mh-map-legend-place"
+                        aria-hidden="true"
+                    />
+                    <span>Approved public place (exact)</span>
+                </div>
                 <div className="mh-map-legend-note">
-                    Centers are displaced within approximate areas (≥1km) for privacy
+                    Request centers are displaced within approximate areas
+                    (≥1km). Exact points are approved public resource addresses
+                    only. Cluster labels show count · maximum urgency.
                 </div>
             </div>
         </div>

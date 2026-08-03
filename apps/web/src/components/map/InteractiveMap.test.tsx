@@ -29,6 +29,12 @@ const leafletMock = vi.hoisted(() => {
     circle.remove = remove;
     circle.on = circleOn;
     circle.bindTooltip = vi.fn(() => circle);
+    const placeOn = vi.fn();
+    const circleMarker: any = vi.fn(() => circleMarker);
+    circleMarker.addTo = vi.fn(() => circleMarker);
+    circleMarker.remove = remove;
+    circleMarker.on = placeOn;
+    circleMarker.bindTooltip = vi.fn(() => circleMarker);
     const getContainer = vi.fn(() => ({ addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     const on = vi.fn();
     const off = vi.fn();
@@ -42,13 +48,14 @@ const leafletMock = vi.hoisted(() => {
         setView: vi.fn(() => mapState),
     };
     const map = vi.fn(() => mapState);
-    return { remove, circleOn, circle, map, on, off };
+    return { remove, circleOn, circle, circleMarker, placeOn, map, on, off };
 });
 
 vi.mock('leaflet', () => ({
     default: {
         map: leafletMock.map,
         circle: leafletMock.circle,
+        circleMarker: leafletMock.circleMarker,
         control: { attribution: vi.fn(() => ({ addTo: vi.fn() })) },
     },
 }));
@@ -218,5 +225,145 @@ describe('InteractiveMap', () => {
             'zoomend',
             expect.any(Function),
         );
+    });
+
+    it('centers and filters when a request circle is clicked', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = createRoot(container);
+        const onFocusArea = vi.fn();
+
+        await act(async () => {
+            root.render(
+                <InteractiveMap
+                    cards={[{ id: 'card-focus', title: 'Need rice', summary: 'Help', category: 'food', status: 'open', urgency: 3, updatedAt: '2026-07-01T00:00:00.000Z', location: { lat: 1.3, lng: 103.8, precisionKm: 1 } }]}
+                    center={{ lat: 1.3, lng: 103.8 }}
+                    onSelectPostId={vi.fn()}
+                    onFocusArea={onFocusArea}
+                    onTilesFailed={vi.fn()}
+                />,
+            );
+        });
+
+        (leafletMock.circleOn.mock.calls as unknown as Array<[string, () => void]>)[0]?.[1]?.();
+        expect(onFocusArea).toHaveBeenCalledWith(
+            expect.objectContaining({ radiusMeters: 1000 }),
+        );
+        expect(leafletMock.map.mock.results[0]?.value.setView).toHaveBeenCalled();
+        await act(async () => root.unmount());
+    });
+
+    it('renders only approved current public places at exact coordinates', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = createRoot(container);
+        const onFocusArea = vi.fn();
+
+        await act(async () => {
+            root.render(
+                <InteractiveMap
+                    cards={[]}
+                    resources={[{
+                        uri: 'at://did:example:org/app.patchwork.directory.resource/clinic',
+                        id: 'clinic',
+                        name: 'Public Clinic',
+                        category: 'clinic',
+                        location: { lat: 40.7, lng: -74, precisionMeters: 1000 },
+                        contact: {},
+                        exactPublicAddress: {
+                            kind: 'exact-public-resource',
+                            streetAddress: '100 Public Way',
+                            latitude: 40.7128,
+                            longitude: -74.006,
+                            approvalExpiresAt: '2099-01-01T00:00:00.000Z',
+                        },
+                    }]}
+                    center={{ lat: 40.7, lng: -74 }}
+                    onSelectPostId={vi.fn()}
+                    onFocusArea={onFocusArea}
+                    onTilesFailed={vi.fn()}
+                />,
+            );
+        });
+
+        expect(leafletMock.circleMarker).toHaveBeenCalledWith(
+            [40.7128, -74.006],
+            expect.objectContaining({ className: 'mh-map-place' }),
+        );
+        (leafletMock.placeOn.mock.calls as unknown as Array<[string, () => void]>)[0]?.[1]?.();
+        expect(onFocusArea).toHaveBeenCalledWith({
+            center: { lat: 40.7128, lng: -74.006 },
+            radiusMeters: 1000,
+        });
+        await act(async () => root.unmount());
+    });
+
+    it('fails closed for expired exact public-place approvals', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <InteractiveMap
+                    cards={[]}
+                    resources={[{
+                        uri: 'at://did:example:org/app.patchwork.directory.resource/expired',
+                        id: 'expired',
+                        name: 'Expired Place',
+                        category: 'clinic',
+                        location: { lat: 40.7, lng: -74, precisionMeters: 1000 },
+                        contact: {},
+                        exactPublicAddress: {
+                            kind: 'exact-public-resource',
+                            streetAddress: '100 Old Way',
+                            latitude: 40.7128,
+                            longitude: -74.006,
+                            approvalExpiresAt: '2020-01-01T00:00:00.000Z',
+                        },
+                    }]}
+                    center={{ lat: 40.7, lng: -74 }}
+                    onSelectPostId={vi.fn()}
+                    onTilesFailed={vi.fn()}
+                />,
+            );
+        });
+
+        expect(leafletMock.circleMarker).not.toHaveBeenCalled();
+        expect(container.textContent).toContain(
+            'No aid requests or approved public places',
+        );
+        await act(async () => root.unmount());
+    });
+
+    it('offers filled, outline, and high-contrast circle styles', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <InteractiveMap
+                    cards={[]}
+                    center={{ lat: 1.3, lng: 103.8 }}
+                    onSelectPostId={vi.fn()}
+                    onTilesFailed={vi.fn()}
+                />,
+            );
+        });
+
+        const choices = container.querySelectorAll<HTMLInputElement>(
+            'input[name^="circle-style-"]',
+        );
+        expect([...choices].map(choice => choice.value)).toEqual([
+            'filled',
+            'outline',
+            'contrast',
+        ]);
+        await act(async () => {
+            choices[1]?.click();
+        });
+        expect(container.querySelector('.mh-map-style-outline')).not.toBeNull();
+        await act(async () => root.unmount());
     });
 });

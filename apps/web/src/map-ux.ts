@@ -338,11 +338,36 @@ export function clusterDistanceMetersForZoom(
     zoom: number,
     latitude: number,
 ): number {
+    const clusterRadiusPixels =
+        zoom <= 10 ? 96
+        : zoom === 11 ? 52
+        : 44;
     const metersPerPixel =
         (156_543.033_92 *
             Math.max(0.05, Math.cos((latitude * Math.PI) / 180))) /
         2 ** Math.max(0, zoom);
-    return Math.max(250, metersPerPixel * 72);
+    return Math.max(250, metersPerPixel * clusterRadiusPixels);
+}
+
+export function clusterExpansionZoom(
+    cards: readonly MapAidCard[],
+    postIds: readonly string[],
+    currentZoom: number,
+    latitude: number,
+): number {
+    const selectedIds = new Set(postIds);
+    const selectedCards = cards.filter(card => selectedIds.has(card.id));
+    for (let zoom = Math.floor(currentZoom) + 1; zoom <= 18; zoom += 1) {
+        if (
+            clusterMapCards(
+                selectedCards,
+                clusterDistanceMetersForZoom(zoom, latitude),
+            ).length > 1
+        ) {
+            return zoom;
+        }
+    }
+    return Math.min(18, Math.floor(currentZoom) + 1);
 }
 
 export function buildMapViewModel(

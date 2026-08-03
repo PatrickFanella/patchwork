@@ -18,6 +18,20 @@ Focused map tests and the full `npm run check` gate pass. This display hardening
 does not alter the fixed server-side boundary: exact personal coordinates remain
 absent from public map data and durable Patchwork surfaces.
 
+**Interaction follow-up (2026-08-03):** Clustering now uses a broad low-zoom
+radius followed by a roughly 50px mid-zoom radius, and cluster clicks move to
+the first zoom where that cluster actually expands. Permanent in-circle labels
+show request count and maximum urgency for clusters, or category/urgency for a
+single request. Clicking any circle centers the map and applies its center and
+radius to the shared discovery filters. Users can switch among filled, outline,
+and high-contrast circle treatments. The map also loads directory discovery and
+renders only current moderator-approved `exact-public-resource` addresses as
+exact point markers; aid requests remain displaced minimum-1km circles, and an
+expired or malformed address approval fails closed. These choices follow the
+[Mapbox cluster-count and expansion-zoom pattern](https://docs.mapbox.com/mapbox-gl-js/example/cluster/),
+the [Google marker-clustering guidance](https://developers.google.com/maps/documentation/javascript/marker-clustering),
+and [Leaflet's permanent centered tooltip API](https://leafletjs.com/reference.html#tooltip).
+
 **Fixed decisions:**
 
 - US coverage only.

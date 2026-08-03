@@ -61,6 +61,7 @@ export interface ResourceOverlayMarker {
     lng: number;
     radiusMeters: number;
     label: string;
+    exact: boolean;
 }
 
 export interface ResourceOverlayFilters {
@@ -73,6 +74,17 @@ export interface ResourceOverlayViewModel {
     overlays: readonly ResourceOverlayMarker[];
     activeCategoryFilter?: DirectoryResourceCategory;
 }
+
+export const currentExactPublicAddress = (
+    resource: ResourceDirectoryCard,
+    nowMs = Date.now(),
+): ResourceDirectoryCard['exactPublicAddress'] | undefined => {
+    const exact = resource.exactPublicAddress;
+    const expiresAt = exact ? Date.parse(exact.approvalExpiresAt) : NaN;
+    return exact && Number.isFinite(expiresAt) && expiresAt > nowMs
+        ? exact
+        : undefined;
+};
 
 export interface ResourceDetailAction {
     id: 'request_intake' | 'view_contact' | 'open_map';
@@ -133,6 +145,20 @@ const resourceMatchesText = (
 const toOverlayMarker = (
     resource: ResourceDirectoryCard,
 ): ResourceOverlayMarker => {
+    const exact = currentExactPublicAddress(resource);
+    if (exact) {
+        return {
+            uri: resource.uri,
+            id: resource.id,
+            category: resource.category,
+            lat: Number(exact.latitude.toFixed(6)),
+            lng: Number(exact.longitude.toFixed(6)),
+            radiusMeters: 0,
+            label: resource.name,
+            exact: true,
+        };
+    }
+
     const precisionMeters = Math.max(
         MINIMUM_GEO_PRIVACY_RADIUS_METERS,
         Math.round(resource.location.precisionMeters),
@@ -146,6 +172,7 @@ const toOverlayMarker = (
         lng: Number(resource.location.lng.toFixed(6)),
         radiusMeters: precisionMeters,
         label: resource.location.areaLabel ?? resource.name,
+        exact: false,
     };
 };
 
@@ -236,6 +263,7 @@ export const openResourceDetailPanel = (
             actions: [],
         };
     }
+    const exactPublicAddress = currentExactPublicAddress(selected);
 
     return {
         open: true,
@@ -245,9 +273,9 @@ export const openResourceDetailPanel = (
         openHours: selected.openHours ?? 'Hours unavailable',
         eligibilityNotes:
             selected.eligibilityNotes ?? 'Eligibility details unavailable',
-        exactPublicAddress: selected.exactPublicAddress?.streetAddress,
+        exactPublicAddress: exactPublicAddress?.streetAddress,
         exactAddressApprovalExpiresAt:
-            selected.exactPublicAddress?.approvalExpiresAt,
+            exactPublicAddress?.approvalExpiresAt,
         actions: [
             {
                 id: 'request_intake',
