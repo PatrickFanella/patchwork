@@ -4,7 +4,7 @@
 
 **Goal:** Replace the current map placeholder behavior with a real interactive map for US-only approximate discovery while preserving the existing semantic list/detail fallback and the privacy boundary.
 
-**Architecture:** Use Leaflet + protomaps-leaflet in a lazy-loaded map chunk inside the existing `/map` shell. The map consumes approximate location data only, never exact pins; it renders circles and clusters at a minimum 1km precision floor, binds selection with the list and drawer, and distinguishes no records, no location, API failure, and tile failure states. Nginx serves a same-origin, content-addressed `/tiles/us.<sha256>.pmtiles` artifact with Range support and immutable caching; the mutable `/tiles/us.pmtiles` path is intentionally unavailable.
+**Architecture:** Use Leaflet + protomaps-leaflet in a lazy-loaded map chunk inside the existing `/map` shell. Aid requests consume approximate location data only and render displaced circles and clusters at a minimum 1km precision floor. Exact point markers are reserved for current moderator-approved public-resource addresses held in private operational state; they are never derived from personal aid-request coordinates. Selection stays bound to the list and drawer, and the route distinguishes no records, no location, API failure, and tile failure states. Nginx serves a same-origin, content-addressed `/tiles/us.<sha256>.pmtiles` artifact with Range support and immutable caching; the mutable `/tiles/us.pmtiles` path is intentionally unavailable.
 
 **Execution status (2026-07-20):** Complete and deployed. Runtime revision `796795b57e13ccf9a4955851c9239cb00f426db0` is healthy. The deployed archive is `us.9a7697125792ba1aa267fca4fa8751172ddd9347e00e9462beb727edf9bbde82.pmtiles`, capped at zoom 10. The current artifact was generated before the later territory context boxes were added to the source region and therefore covers the CONUS/Alaska/Hawaii pilot context; regenerate it before claiming the additional territory context documented for future archives.
 
@@ -32,13 +32,26 @@ expired or malformed address approval fails closed. These choices follow the
 the [Google marker-clustering guidance](https://developers.google.com/maps/documentation/javascript/marker-clustering),
 and [Leaflet's permanent centered tooltip API](https://leafletjs.com/reference.html#tooltip).
 
+**Interaction deployment verification (2026-08-03):** Immutable revision
+`0269853c6bd5193b2623994e151b444b64adfc9a` is deployed and healthy. All four
+runtime images passed HIGH/CRITICAL vulnerability scans and signature
+verification. The deployment completed clean migration replay, readiness, and
+zero-restart checks after a validated PostgreSQL backup. A live Chromium pass
+observed no map alert, 206 PMTiles responses, labeled circles, progressive
+cluster splitting across six zoom steps, the outline style mode, and a cluster
+click that centered the map and applied `r`, `lat`, and `lng` discovery filters.
+The live directory result set contained no approved exact public place, so that
+marker path is verified by focused component/contract tests rather than a claim
+that an exact marker was observed in live data.
+
 **Fixed decisions:**
 
 - US coverage only.
 - Existing semantic list/detail fallback stays intact.
 - Server `approximateGeo.precisionKm` is preserved end-to-end.
 - `>= 1km` public precision floor.
-- Never render exact pins.
+- Never render an exact personal or aid-request pin. Exact point markers are
+  allowed only for current moderator-approved public-resource addresses.
 - Remove fabricated fallback location and 300m precision.
 - No real aid-request creation unless explicitly approved.
 
