@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useAuth } from './AuthProvider.js';
 import { sanitizeReturnTo } from './auth-api.js';
+import { useLocale } from '../i18n';
 
 const safeReturnTo = (): string => {
     if (typeof window === 'undefined') return '/';
@@ -10,24 +11,28 @@ const safeReturnTo = (): string => {
     return sanitizeReturnTo(candidate ?? '/');
 };
 
-const recoveryMessage = (code: string): string => {
+const recoveryMessage = (
+    code: string,
+    t: ReturnType<typeof useLocale>['t'],
+): string => {
     if (code === 'PDS_UNAVAILABLE') {
-        return 'Your AT Protocol server is temporarily unavailable. Check its status and retry.';
+        return t('auth.pdsUnavailable');
     }
     if (code === 'OAUTH_DENIED' || code === 'UNAUTHORIZED') {
-        return 'Authorization was denied. You can try again when you are ready.';
+        return t('auth.denied');
     }
     if (code === 'OAUTH_STATE_INVALID') {
-        return 'This login callback is stale or invalid. Start a new login.';
+        return t('auth.stateInvalid');
     }
     if (code === 'SESSION_EXPIRED') {
-        return 'Your session expired. Sign in again to continue.';
+        return t('auth.sessionExpired');
     }
-    return 'Authentication could not be completed. Retry, or contact support if it continues.';
+    return t('auth.authFailed');
 };
 
 export const LoginPage = () => {
     const auth = useAuth();
+    const { t } = useLocale();
     const [handle, setHandle] = useState('');
 
     const returnTo = safeReturnTo();
@@ -50,28 +55,25 @@ export const LoginPage = () => {
                         P
                     </span>
                     <span>
-                        <strong>Patchwork</strong>
-                        <small>Mutual aid, block by block</small>
+                        <strong>{t('app.title')}</strong>
+                        <small>{t('auth.tagline')}</small>
                     </span>
                 </a>
-                <p className='mh-kicker mt-12'>A safer way into the network</p>
+                <p className='mh-kicker mt-12'>{t('auth.safer')}</p>
                 <h1
                     id='login-heading'
                     className='font-heading mt-3 text-5xl font-black leading-none tracking-[-0.045em] sm:text-6xl'
                 >
-                    Come on in.
-                    <br />
-                    Your neighbors are here.
+                    {t('auth.loginHeading')}
                 </h1>
                 <p className='mt-5 max-w-md text-mh-textMuted'>
-                    Sign in through your AT Protocol server. Patchwork never
-                    sees, asks for, or stores your password.
+                    {t('auth.loginHelp')}
                 </p>
             </section>
             <form className='mh-card space-y-4 p-6 sm:p-8' onSubmit={submit}>
-                <p className='mh-kicker'>Connect your account</p>
+                <p className='mh-kicker'>{t('auth.connect')}</p>
                 <label htmlFor='at-handle' className='block font-bold'>
-                    AT Protocol handle
+                    {t('auth.handle')}
                 </label>
                 <input
                     id='at-handle'
@@ -80,7 +82,7 @@ export const LoginPage = () => {
                     spellCheck={false}
                     required
                     value={handle}
-                    onChange={event => setHandle(event.target.value)}
+                    onChange={(event) => setHandle(event.target.value)}
                     className='mh-input w-full px-3 py-2'
                 />
                 <button
@@ -88,42 +90,41 @@ export const LoginPage = () => {
                     disabled={auth.status === 'redirecting'}
                     className='mh-button mh-button--primary px-4 py-2 font-bold'
                 >
-                    {auth.status === 'redirecting' ?
-                        'Opening your provider…'
-                    :   'Continue with AT Protocol'}
+                    {auth.status === 'redirecting'
+                        ? t('auth.opening')
+                        : t('auth.continue')}
                 </button>
                 <p className='text-xs leading-relaxed text-mh-textSoft'>
-                    You will continue on your own provider's secure sign-in
-                    page, then return here.
+                    {t('auth.providerHelp')}
                 </p>
             </form>
             <div aria-live='polite' className='mh-login-status'>
-                {auth.status === 'booting' ? 'Checking your session…' : null}
-                {auth.status === 'refreshing' ?
-                    'Refreshing your session…'
-                :   null}
-                {auth.status === 'authenticated' && auth.session ?
-                    <p>Signed in as {auth.session.did}</p>
-                :   null}
+                {auth.status === 'booting' ? t('auth.checkingSession') : null}
+                {auth.status === 'refreshing'
+                    ? t('auth.refreshingSession')
+                    : null}
+                {auth.status === 'authenticated' && auth.session ? (
+                    <p>{t('auth.signedIn', { did: auth.session.did })}</p>
+                ) : null}
             </div>
-            {auth.error ?
+            {auth.error ? (
                 <div role='alert' className='mh-alert mh-login-error p-4'>
                     <p>{auth.error.message}</p>
-                    <p>{recoveryMessage(auth.error.code)}</p>
+                    <p>{recoveryMessage(auth.error.code, t)}</p>
                     <button type='button' onClick={() => void auth.restore()}>
-                        Retry
+                        {t('auth.retry')}
                     </button>
                 </div>
-            :   null}
+            ) : null}
             <div className='mt-6 text-center sm:mt-8'>
                 <a
                     href={`/signup${returnTo !== '/' ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`}
                     className='mh-button mh-button--secondary inline-block px-6 py-3 text-base font-bold'
                 >
-                    Create a Subcult account
+                    {t('auth.createSubcult')}
                 </a>
                 <p className='mt-3 text-xs text-mh-textMuted'>
-                    New to the network? Get your own handle and join the community.
+                    {t('auth.newNetwork')}
                 </p>
             </div>
         </main>

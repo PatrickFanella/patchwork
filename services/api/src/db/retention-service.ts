@@ -11,6 +11,9 @@ export interface RetentionResult {
     workflows: number;
     maintenanceAudit: number;
     coordinationWindows: number;
+    groups: number;
+    chatMessages: number;
+    chatConversations: number;
 }
 
 const REPLAY_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
@@ -69,6 +72,18 @@ export class PostgresRetentionService {
                  WHERE retention_until <= $1`,
                 [now.toISOString()],
             );
+            const groups = await client.query(
+                `DELETE FROM groups WHERE retention_until <= $1`,
+                [now.toISOString()],
+            );
+            const chatMessages = await client.query(
+                `DELETE FROM chat_messages WHERE retention_until <= $1`,
+                [now.toISOString()],
+            );
+            const chatConversations = await client.query(
+                `DELETE FROM chat_conversations WHERE retention_until <= $1`,
+                [now.toISOString()],
+            );
             const blocks = await deleteExpired(client, 'user_blocks', now);
             const reports = await deleteExpired(client, 'abuse_reports', now);
             const auditEvents = await deleteExpired(
@@ -88,6 +103,9 @@ export class PostgresRetentionService {
                 workflows: workflows.rowCount ?? 0,
                 maintenanceAudit: maintenanceAudit.rowCount ?? 0,
                 coordinationWindows: coordinationWindows.rowCount ?? 0,
+                groups: groups.rowCount ?? 0,
+                chatMessages: chatMessages.rowCount ?? 0,
+                chatConversations: chatConversations.rowCount ?? 0,
             };
         } catch (error) {
             await client.query('ROLLBACK');

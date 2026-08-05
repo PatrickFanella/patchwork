@@ -11,9 +11,30 @@ vi.mock('web-push', () => ({ default: webPushMock }));
 import {
     HttpEmailProvider,
     VapidPushProvider,
+    localizedNotificationCopy,
 } from './durable-notification-service.js';
 
 describe('notification delivery providers', () => {
+    it('renders privacy-safe notification templates in the account locale', () => {
+        expect(
+            localizedNotificationCopy('offer_received', 'es', {
+                title: 'New offer',
+                body: 'Someone offered to help with your request.',
+            }),
+        ).toEqual({
+            title: 'Nueva oferta',
+            body: 'Alguien se ofreció a ayudar con tu solicitud.',
+        });
+        expect(
+            localizedNotificationCopy('offer_received', 'en', {
+                title: 'New offer',
+                body: 'Someone offered to help with your request.',
+            }),
+        ).toEqual({
+            title: 'New offer',
+            body: 'Someone offered to help with your request.',
+        });
+    });
     it('sends provider-neutral email with bounded content and stable idempotency', async () => {
         const fetchImpl = vi.fn().mockResolvedValue(
             new Response(JSON.stringify({ id: 'provider-message-one' }), {

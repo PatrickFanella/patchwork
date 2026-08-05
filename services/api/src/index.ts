@@ -76,6 +76,10 @@ import {
     createCoordinationSchedulingHandler,
     isCoordinationSchedulingRoute,
 } from './http/coordination-scheduling-handler.js';
+import { DurableGroupService } from './durable-group-service.js';
+import { createGroupHandler, isGroupRoute } from './http/group-handler.js';
+import { DurableChatService } from './durable-chat-service.js';
+import { createChatHandler, isChatRoute } from './http/chat-handler.js';
 import {
     createAttachmentHandler,
     isAttachmentRoute,
@@ -170,6 +174,8 @@ if (postgresPool) {
         attachment_table: string | null;
         notification_table: string | null;
         maintenance_table: string | null;
+        group_table: string | null;
+        chat_table: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
@@ -188,7 +194,9 @@ if (postgresPool) {
             to_regclass('notification_intents')::TEXT
                 AS notification_table,
             to_regclass('platform_maintenance_state')::TEXT
-                AS maintenance_table`,
+                AS maintenance_table,
+            to_regclass('groups')::TEXT AS group_table,
+            to_regclass('chat_messages')::TEXT AS chat_table`,
     );
     if (
         !projectionSchema.rows[0]?.projection_table ||
@@ -200,6 +208,8 @@ if (postgresPool) {
         !projectionSchema.rows[0]?.attachment_table ||
         !projectionSchema.rows[0]?.notification_table ||
         !projectionSchema.rows[0]?.maintenance_table ||
+        !projectionSchema.rows[0]?.group_table ||
+        !projectionSchema.rows[0]?.chat_table ||
         !projectionSchema.rows[0]?.state_table
     ) {
         await postgresPool.end();
@@ -261,6 +271,10 @@ const coordinationService =
     postgresPool ? new CoordinationService(postgresPool) : undefined;
 const coordinationSchedulingService =
     postgresPool ? new CoordinationSchedulingService(postgresPool) : undefined;
+const durableGroupService =
+    postgresPool ? new DurableGroupService(postgresPool) : undefined;
+const durableChatService =
+    postgresPool ? new DurableChatService(postgresPool) : undefined;
 const maintenanceModeService =
     postgresPool ?
         new MaintenanceModeService(
@@ -559,6 +573,22 @@ const coordinationSchedulingHandler =
     authenticateApiRequest && coordinationSchedulingService ?
         createCoordinationSchedulingHandler({
             service: coordinationSchedulingService,
+            authenticate: authenticateApiRequest,
+            executeIdempotent: executeIdempotentMutation,
+        })
+    :   undefined;
+const groupHandler =
+    authenticateApiRequest && durableGroupService ?
+        createGroupHandler({
+            service: durableGroupService,
+            authenticate: authenticateApiRequest,
+            executeIdempotent: executeIdempotentMutation,
+        })
+    :   undefined;
+const chatHandler =
+    authenticateApiRequest && durableChatService ?
+        createChatHandler({
+            service: durableChatService,
             authenticate: authenticateApiRequest,
             executeIdempotent: executeIdempotentMutation,
         })
@@ -1685,10 +1715,28 @@ const contractRoutes = [
     '/coordination/offer-decisions',
     '/coordination/connections',
     '/coordination/matches',
+    '/coordination/windows',
+    '/coordination/window-decisions',
     '/inbox',
     '/inbox/read',
     '/outcomes',
     '/outcomes/mine',
+    '/groups',
+    '/groups/invitations',
+    '/groups/invitation-responses',
+    '/groups/invitation-revocations',
+    '/groups/member-removals',
+    '/groups/role-changes',
+    '/groups/departures',
+    '/groups/ownership-transfers',
+    '/groups/closures',
+    '/groups/rooms',
+    '/groups/room-closures',
+    '/chat/conversations',
+    '/chat/messages',
+    '/chat/read',
+    '/chat/messages/redactions',
+    '/chat/reports',
     '/location/session',
     '/location/consent',
     '/location/signal',
@@ -1955,6 +2003,12 @@ export const createApiServer = () => {
         if (coordinationSchedulingHandler?.(request, response, requestUrl)) {
             return;
         }
+        if (groupHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (chatHandler?.(request, response, requestUrl)) {
+            return;
+        }
         if (coordinationHandler?.(request, response, requestUrl)) {
             return;
         }
@@ -2010,6 +2064,24 @@ export const createApiServer = () => {
                 error: {
                     code: 'COORDINATION_SCHEDULING_UNAVAILABLE',
                     message: 'Coordination scheduling is unavailable.',
+                },
+            });
+            return;
+        }
+        if (isGroupRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'GROUP_SERVICE_UNAVAILABLE',
+                    message: 'Groups are unavailable.',
+                },
+            });
+            return;
+        }
+        if (isChatRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'CHAT_SERVICE_UNAVAILABLE',
+                    message: 'Chat is unavailable.',
                 },
             });
             return;
@@ -2268,6 +2340,8 @@ export const startApiServer = () => {
     let organizationScheduler: RetentionScheduler | undefined;
     let verificationScheduler: RetentionScheduler | undefined;
     let coordinationScheduler: RetentionScheduler | undefined;
+    let groupScheduler: RetentionScheduler | undefined;
+    let chatScheduler: RetentionScheduler | undefined;
     let exactLocationScheduler: RetentionScheduler | undefined;
     let attachmentScheduler: RetentionScheduler | undefined;
     let notificationScheduler: RetentionScheduler | undefined;
@@ -2368,6 +2442,44 @@ export const startApiServer = () => {
                             event: 'coordination_expiry_sweep_failed',
                         }),
                     );
+                },
+            });
+        }
+        if (durableGroupService) {
+            groupScheduler = startRetentionScheduler({
+                intervalMs: 60 * 60 * 1_000,
+                enforce: async () => {
+                    const result = await durableGroupService.runSweep();
+                    console.log(JSON.stringify({
+                        level: 'info',
+                        event: 'group_invitation_sweep_completed',
+                        ...result,
+                    }));
+                },
+                onError: () => {
+                    console.error(JSON.stringify({
+                        level: 'error',
+                        event: 'group_invitation_sweep_failed',
+                    }));
+                },
+            });
+        }
+        if (durableChatService) {
+            chatScheduler = startRetentionScheduler({
+                intervalMs: 60 * 60 * 1_000,
+                enforce: async () => {
+                    const result = await durableChatService.runSweep();
+                    console.log(JSON.stringify({
+                        level: 'info',
+                        event: 'chat_lifecycle_sweep_completed',
+                        ...result,
+                    }));
+                },
+                onError: () => {
+                    console.error(JSON.stringify({
+                        level: 'error',
+                        event: 'chat_lifecycle_sweep_failed',
+                    }));
                 },
             });
         }
@@ -2481,6 +2593,8 @@ export const startApiServer = () => {
         organizationScheduler?.stop();
         verificationScheduler?.stop();
         coordinationScheduler?.stop();
+        groupScheduler?.stop();
+        chatScheduler?.stop();
         exactLocationScheduler?.stop();
         attachmentScheduler?.stop();
         notificationScheduler?.stop();

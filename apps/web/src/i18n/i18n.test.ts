@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import en from './en.json';
 import es from './es.json';
 import {
@@ -21,8 +24,14 @@ const extractKeys = (obj: Record<string, unknown>, prefix = ''): string[] => {
     for (const [key, value] of Object.entries(obj)) {
         const fullKey = prefix ? `${prefix}.${key}` : key;
 
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-            keys.push(...extractKeys(value as Record<string, unknown>, fullKey));
+        if (
+            typeof value === 'object' &&
+            value !== null &&
+            !Array.isArray(value)
+        ) {
+            keys.push(
+                ...extractKeys(value as Record<string, unknown>, fullKey),
+            );
         } else {
             keys.push(fullKey);
         }
@@ -44,12 +53,12 @@ describe('i18n translation key completeness', () => {
     });
 
     it('all English keys exist in Spanish translations', () => {
-        const missingInEs = enKeys.filter(key => !esKeys.includes(key));
+        const missingInEs = enKeys.filter((key) => !esKeys.includes(key));
         expect(missingInEs).toEqual([]);
     });
 
     it('all Spanish keys exist in English translations', () => {
-        const missingInEn = esKeys.filter(key => !enKeys.includes(key));
+        const missingInEn = esKeys.filter((key) => !enKeys.includes(key));
         expect(missingInEn).toEqual([]);
     });
 
@@ -58,31 +67,175 @@ describe('i18n translation key completeness', () => {
     });
 
     it('no English values are empty strings', () => {
-        const emptyKeys = enKeys.filter(key => {
-            const value = key.split('.').reduce<unknown>(
-                (obj, segment) =>
-                    typeof obj === 'object' && obj !== null
-                        ? (obj as Record<string, unknown>)[segment]
-                        : undefined,
-                en,
-            );
+        const emptyKeys = enKeys.filter((key) => {
+            const value = key
+                .split('.')
+                .reduce<unknown>(
+                    (obj, segment) =>
+                        typeof obj === 'object' && obj !== null
+                            ? (obj as Record<string, unknown>)[segment]
+                            : undefined,
+                    en,
+                );
             return typeof value === 'string' && value.trim().length === 0;
         });
         expect(emptyKeys).toEqual([]);
     });
 
     it('no Spanish values are empty strings', () => {
-        const emptyKeys = esKeys.filter(key => {
-            const value = key.split('.').reduce<unknown>(
-                (obj, segment) =>
-                    typeof obj === 'object' && obj !== null
-                        ? (obj as Record<string, unknown>)[segment]
-                        : undefined,
-                es,
-            );
+        const emptyKeys = esKeys.filter((key) => {
+            const value = key
+                .split('.')
+                .reduce<unknown>(
+                    (obj, segment) =>
+                        typeof obj === 'object' && obj !== null
+                            ? (obj as Record<string, unknown>)[segment]
+                            : undefined,
+                    es,
+                );
             return typeof value === 'string' && value.trim().length === 0;
         });
         expect(emptyKeys).toEqual([]);
+    });
+});
+
+describe('production source localization', () => {
+    it('contains no untranslated JSX copy outside explicit fixture-only routes', () => {
+        const sourcePaths = [
+            '../features/frontend-shell.tsx',
+            '../auth/LoginPage.tsx',
+            '../auth/SignupPage.tsx',
+            '../auth/AuthCallbackPage.tsx',
+            '../components/Badge.tsx',
+            '../components/TextLink.tsx',
+            '../components/map/InteractiveMap.tsx',
+            '../features/exact-location-exchange.tsx',
+            '../features/production-groups.tsx',
+        ].map((relative) => fileURLToPath(new URL(relative, import.meta.url)));
+        const fixtureOnly = new Set([
+            'LegacyFixtureVolunteerRoute',
+            'ChatRoute',
+            'SettingsRoute',
+        ]);
+        const translatableAttributes = new Set([
+            'alt',
+            'aria-label',
+            'placeholder',
+            'title',
+        ]);
+        const punctuationOnly = /^[\s·,:#()—–+P→-]+$/u;
+        const technicalIdentifiers = new Set(['.subcult.tv']);
+        const findings: string[] = [];
+        for (const sourcePath of sourcePaths) {
+            const file = ts.createSourceFile(
+                sourcePath,
+                readFileSync(sourcePath, 'utf8'),
+                ts.ScriptTarget.Latest,
+                true,
+                ts.ScriptKind.TSX,
+            );
+            const componentStack: string[] = [];
+            const visit = (node: ts.Node): void => {
+                let pushed = false;
+                if (
+                    ts.isVariableDeclaration(node) &&
+                    ts.isIdentifier(node.name) &&
+                    node.initializer &&
+                    (ts.isArrowFunction(node.initializer) ||
+                        ts.isFunctionExpression(node.initializer))
+                ) {
+                    componentStack.push(node.name.text);
+                    pushed = true;
+                }
+                const component = componentStack.at(-1) ?? '<module>';
+                if (!fixtureOnly.has(component)) {
+                    let text: string | undefined;
+                    if (ts.isJsxText(node)) {
+                        text = node.text.replace(/\s+/g, ' ').trim();
+                    } else if (
+                        ts.isJsxAttribute(node) &&
+                        translatableAttributes.has(node.name.getText(file)) &&
+                        node.initializer &&
+                        ts.isStringLiteral(node.initializer)
+                    ) {
+                        text = node.initializer.text.trim();
+                    }
+                    if (
+                        text &&
+                        !punctuationOnly.test(text) &&
+                        !technicalIdentifiers.has(text)
+                    ) {
+                        const line =
+                            file.getLineAndCharacterOfPosition(
+                                node.getStart(file),
+                            ).line + 1;
+                        findings.push(`${component}:${line}: ${text}`);
+                    }
+                }
+                ts.forEachChild(node, visit);
+                if (pushed) componentStack.pop();
+            };
+            visit(file);
+        }
+        expect(findings).toEqual([]);
+    });
+
+    it('references only translation keys present in both locales', () => {
+        const sourcePaths = [
+            '../features/frontend-shell.tsx',
+            '../auth/LoginPage.tsx',
+            '../auth/SignupPage.tsx',
+            '../auth/AuthCallbackPage.tsx',
+            '../components/Badge.tsx',
+            '../components/TextLink.tsx',
+            '../components/map/InteractiveMap.tsx',
+            '../features/exact-location-exchange.tsx',
+            '../features/production-groups.tsx',
+        ].map((relative) => fileURLToPath(new URL(relative, import.meta.url)));
+        const referenced = new Set<string>();
+        const visit = (node: ts.Node): void => {
+            if (
+                ts.isCallExpression(node) &&
+                ts.isIdentifier(node.expression) &&
+                node.expression.text === 't' &&
+                node.arguments[0] &&
+                ts.isStringLiteral(node.arguments[0])
+            ) {
+                referenced.add(node.arguments[0].text);
+            }
+            ts.forEachChild(node, visit);
+        };
+        for (const sourcePath of sourcePaths) {
+            const file = ts.createSourceFile(
+                sourcePath,
+                readFileSync(sourcePath, 'utf8'),
+                ts.ScriptTarget.Latest,
+                true,
+                ts.ScriptKind.TSX,
+            );
+            visit(file);
+        }
+        const has = (resource: Record<string, unknown>, key: string): boolean =>
+            key
+                .split('.')
+                .reduce<unknown>(
+                    (value, segment) =>
+                        value && typeof value === 'object'
+                            ? (value as Record<string, unknown>)[segment]
+                            : undefined,
+                    resource,
+                ) !== undefined;
+        const hasTranslation = (
+            resource: Record<string, unknown>,
+            key: string,
+        ): boolean =>
+            has(resource, key) ||
+            (has(resource, `${key}_one`) && has(resource, `${key}_other`));
+        expect(
+            [...referenced].filter(
+                (key) => !hasTranslation(en, key) || !hasTranslation(es, key),
+            ),
+        ).toEqual([]);
     });
 });
 

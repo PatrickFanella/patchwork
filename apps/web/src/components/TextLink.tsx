@@ -1,4 +1,5 @@
 import type { AnchorHTMLAttributes, PropsWithChildren } from 'react';
+import { useLocale } from '../i18n';
 
 interface TextLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
     /** When true, indicates the link opens in a new window/tab */
@@ -11,6 +12,7 @@ export const TextLink = ({
     external,
     ...props
 }: PropsWithChildren<TextLinkProps>) => {
+    const { t } = useLocale();
     const externalProps = external
         ? { target: '_blank', rel: 'noopener noreferrer' }
         : {};
@@ -26,7 +28,7 @@ export const TextLink = ({
         >
             {children}
             {external ? (
-                <span className='sr-only'> (opens in a new tab)</span>
+                <span className='sr-only'> {t('shared.opensNewTab')}</span>
             ) : null}
         </a>
     );

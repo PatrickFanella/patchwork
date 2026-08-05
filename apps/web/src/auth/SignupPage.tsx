@@ -1,10 +1,16 @@
 import { useState, type FormEvent } from 'react';
 import { useAuth } from './AuthProvider.js';
-import { sanitizeReturnTo, signup, type SignupResult, AuthApiError } from './auth-api.js';
+import {
+    sanitizeReturnTo,
+    signup,
+    type SignupResult,
+    AuthApiError,
+} from './auth-api.js';
 import {
     CURRENT_POLICY_VERSION,
     requiredPolicyDocuments,
 } from '@patchwork/shared';
+import { useLocale } from '../i18n';
 
 const safeReturnTo = (): string => {
     if (typeof window === 'undefined') return '/';
@@ -14,36 +20,43 @@ const safeReturnTo = (): string => {
     return sanitizeReturnTo(candidate ?? '/');
 };
 
-const signupErrorMessage = (error: AuthApiError): string => {
+const signupErrorMessage = (
+    error: AuthApiError,
+    t: ReturnType<typeof useLocale>['t'],
+): string => {
     if (error.code === 'INVALID_SIGNUP_INPUT') {
-        return 'The information you provided is invalid. Please check your entries and try again.';
+        return t('auth.invalidSignup');
     }
     if (error.code === 'INVALID_HANDLE') {
-        return 'The handle format is invalid. Please choose a different one.';
+        return t('auth.invalidHandle');
     }
     if (error.code === 'RESERVED_HANDLE') {
-        return 'This handle is reserved and cannot be used. Please choose a different one.';
+        return t('auth.reservedHandle');
     }
     if (error.code === 'HANDLE_ALREADY_EXISTS') {
-        return 'This handle is already taken. Please choose a different one.';
+        return t('auth.takenHandle');
     }
     if (error.code === 'INVALID_INVITE_CODE') {
-        return 'The invite code you provided is invalid or has already been used.';
+        return t('auth.invalidInvite');
     }
     if (error.code === 'INVALID_PASSWORD') {
-        return 'Your password does not meet the requirements. It must be at least 8 characters.';
+        return t('auth.invalidPassword');
+    }
+    if (error.code === 'PASSWORD_MISMATCH') {
+        return t('auth.passwordMismatch');
     }
     if (error.code === 'PDS_RATE_LIMITED' || error.code === 'RATE_LIMITED') {
-        return 'Too many signup attempts. Please wait a moment and try again.';
+        return t('auth.rateLimited');
     }
     if (error.code === 'PDS_UNAVAILABLE') {
-        return 'The AT Protocol server is temporarily unavailable. Please try again later.';
+        return t('auth.signupPdsUnavailable');
     }
-    return 'Unable to create your account. Please try again or contact support.';
+    return t('auth.signupFailed');
 };
 
 export const SignupPage = () => {
     const auth = useAuth();
+    const { t } = useLocale();
     const [handleLabel, setHandleLabel] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -53,11 +66,13 @@ export const SignupPage = () => {
     const [eligibilityAccepted, setEligibilityAccepted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<AuthApiError | null>(null);
-    const [createdAccount, setCreatedAccount] = useState<SignupResult | null>(null);
+    const [createdAccount, setCreatedAccount] = useState<SignupResult | null>(
+        null,
+    );
 
-    const fullHandle = handleLabel.trim() ?
-        `${handleLabel.trim().toLowerCase()}.subcult.tv`
-    :   '';
+    const fullHandle = handleLabel.trim()
+        ? `${handleLabel.trim().toLowerCase()}.subcult.tv`
+        : '';
 
     const handleLabelValid = /^[a-z0-9](?:[a-z0-9-]{1,16}[a-z0-9])$/.test(
         handleLabel,
@@ -77,28 +92,31 @@ export const SignupPage = () => {
         setError(null);
 
         if (!handleLabelValid) {
-            setError(new AuthApiError(
-                'INVALID_HANDLE',
-                'Handle must be 3-18 characters.',
-            ));
+            setError(
+                new AuthApiError(
+                    'INVALID_HANDLE',
+                    'Handle must be 3-18 characters.',
+                ),
+            );
             clearPasswords();
             return;
         }
 
         if (!passwordsMatch) {
-            setError(new AuthApiError(
-                'INVALID_PASSWORD',
-                'Passwords do not match.',
-            ));
+            setError(
+                new AuthApiError('PASSWORD_MISMATCH', 'Passwords do not match.'),
+            );
             clearPasswords();
             return;
         }
 
         if (!termsAccepted || !eligibilityAccepted) {
-            setError(new AuthApiError(
-                'INVALID_SIGNUP_INPUT',
-                'You must accept the Terms of Service and Privacy Policy.',
-            ));
+            setError(
+                new AuthApiError(
+                    'INVALID_SIGNUP_INPUT',
+                    'You must accept the Terms of Service and Privacy Policy.',
+                ),
+            );
             clearPasswords();
             return;
         }
@@ -124,7 +142,12 @@ export const SignupPage = () => {
             if (err instanceof AuthApiError) {
                 setError(err);
             } else {
-                setError(new AuthApiError('UNKNOWN', 'An unexpected error occurred.'));
+                setError(
+                    new AuthApiError(
+                        'UNKNOWN',
+                        'An unexpected error occurred.',
+                    ),
+                );
             }
         } finally {
             setIsLoading(false);
@@ -144,34 +167,36 @@ export const SignupPage = () => {
             >
                 <section className='mh-login-intro'>
                     <a href='/' className='mh-brand'>
-                        <span className='mh-brand-mark' aria-hidden='true'>P</span>
+                        <span className='mh-brand-mark' aria-hidden='true'>
+                            P
+                        </span>
                         <span>
-                            <strong>Patchwork</strong>
-                            <small>Mutual aid, block by block</small>
+                            <strong>{t('app.title')}</strong>
+                            <small>{t('auth.tagline')}</small>
                         </span>
                     </a>
-                    <p className='mh-kicker mt-12'>Your account is ready</p>
+                    <p className='mh-kicker mt-12'>{t('auth.accountReady')}</p>
                     <h1
                         id='signup-recovery-heading'
                         className='font-heading mt-3 text-5xl font-black leading-none tracking-[-0.045em] sm:text-6xl'
                     >
-                        One more step.
+                        {t('auth.oneMoreStep')}
                     </h1>
                 </section>
                 <div role='status' className='mh-card space-y-4 p-6 sm:p-8'>
                     <p>
-                        Account created for <strong>{createdAccount.handle}</strong>.
+                        {t('auth.accountCreated', {
+                            handle: createdAccount.handle,
+                        })}
                     </p>
                     <p className='text-mh-textMuted'>
-                        We could not open sign-in automatically. Your invite was
-                        already used successfully, so continue with the account
-                        you just created.
+                        {t('auth.autoLoginFailed')}
                     </p>
                     <a
                         href={loginUrl}
                         className='mh-button mh-button--primary inline-flex px-4 py-2 font-bold'
                     >
-                        Continue to the login page
+                        {t('auth.continueLogin')}
                     </a>
                 </div>
             </main>
@@ -191,28 +216,22 @@ export const SignupPage = () => {
                         P
                     </span>
                     <span>
-                        <strong>Patchwork</strong>
-                        <small>Mutual aid, block by block</small>
+                        <strong>{t('app.title')}</strong>
+                        <small>{t('auth.tagline')}</small>
                     </span>
                 </a>
-                <p className='mh-kicker mt-12'>A safer way into the network</p>
+                <p className='mh-kicker mt-12'>{t('auth.safer')}</p>
                 <h1
                     id='signup-heading'
                     className='font-heading mt-3 text-5xl font-black leading-none tracking-[-0.045em] sm:text-6xl'
                 >
-                    Join your
-                    <br />
-                    neighbors.
+                    {t('auth.joinHeading')}
                 </h1>
                 <p className='mt-5 max-w-md text-mh-textMuted'>
-                    Create a new AT Protocol account through Patchwork.
-                    You will need an invite code to register.
+                    {t('auth.joinHelp')}
                 </p>
                 <p className='mt-4 max-w-md text-sm text-mh-textSoft'>
-                    This creates a permanent account hosted by the Subcult PDS,
-                    not a Patchwork-only login. You own the identity and may use
-                    it with compatible AT Protocol services. Deactivating
-                    Patchwork does not delete that independently hosted account.
+                    {t('auth.pdsOwnership')}
                 </p>
             </section>
             <form
@@ -220,11 +239,11 @@ export const SignupPage = () => {
                 onSubmit={submit}
                 aria-describedby={error ? 'signup-error' : undefined}
             >
-                <p className='mh-kicker'>Create your account</p>
+                <p className='mh-kicker'>{t('auth.createYourAccount')}</p>
 
                 <div>
                     <label htmlFor='handle-label' className='block font-bold'>
-                        Choose your handle
+                        {t('auth.chooseHandle')}
                     </label>
                     <div className='relative'>
                         <input
@@ -233,9 +252,9 @@ export const SignupPage = () => {
                             autoComplete='username'
                             required
                             pattern='^[a-z0-9](?:[a-z0-9-]{1,16}[a-z0-9])$'
-                            title='3-18 lowercase letters, numbers, or interior hyphens'
+                            title={t('auth.handleTitle')}
                             value={handleLabel}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setHandleLabel(
                                     event.target.value
                                         .toLowerCase()
@@ -256,15 +275,17 @@ export const SignupPage = () => {
                         </span>
                     </div>
                     <p className='mt-1 text-xs text-mh-textSoft'>
-                        {handleLabel.length > 0 && !handleLabelValid ?
-                            `${handleLabel.length}/18 - must be 3-18 characters`
-                        :   'This will be your unique identifier'}
+                        {handleLabel.length > 0 && !handleLabelValid
+                            ? t('auth.handleInvalid', {
+                                  count: handleLabel.length,
+                              })
+                            : t('auth.handleUnique')}
                     </p>
                 </div>
 
                 <div>
                     <label htmlFor='email' className='block font-bold'>
-                        Email address
+                        {t('auth.email')}
                     </label>
                     <input
                         id='email'
@@ -273,7 +294,7 @@ export const SignupPage = () => {
                         autoComplete='email'
                         required
                         value={email}
-                        onChange={event => setEmail(event.target.value)}
+                        onChange={(event) => setEmail(event.target.value)}
                         className='mh-input w-full px-3 py-2'
                         disabled={isLoading}
                     />
@@ -281,7 +302,7 @@ export const SignupPage = () => {
 
                 <div>
                     <label htmlFor='password' className='block font-bold'>
-                        Password
+                        {t('auth.password')}
                     </label>
                     <input
                         id='password'
@@ -291,15 +312,18 @@ export const SignupPage = () => {
                         required
                         minLength={8}
                         value={password}
-                        onChange={event => setPassword(event.target.value)}
+                        onChange={(event) => setPassword(event.target.value)}
                         className='mh-input w-full px-3 py-2'
                         disabled={isLoading}
                     />
                 </div>
 
                 <div>
-                    <label htmlFor='password-confirm' className='block font-bold'>
-                        Confirm password
+                    <label
+                        htmlFor='password-confirm'
+                        className='block font-bold'
+                    >
+                        {t('auth.confirmPassword')}
                     </label>
                     <input
                         id='password-confirm'
@@ -309,21 +333,31 @@ export const SignupPage = () => {
                         required
                         minLength={8}
                         value={passwordConfirm}
-                        onChange={event => setPasswordConfirm(event.target.value)}
+                        onChange={(event) =>
+                            setPasswordConfirm(event.target.value)
+                        }
                         className='mh-input w-full px-3 py-2'
                         disabled={isLoading}
-                        aria-describedby={!passwordsMatch && passwordConfirm.length > 0 ? 'password-mismatch' : undefined}
+                        aria-describedby={
+                            !passwordsMatch && passwordConfirm.length > 0
+                                ? 'password-mismatch'
+                                : undefined
+                        }
                     />
                     {passwordConfirm.length > 0 && !passwordsMatch && (
-                        <p id='password-mismatch' className='mt-1 text-xs text-mh-danger' role='alert'>
-                            Passwords do not match
+                        <p
+                            id='password-mismatch'
+                            className='mt-1 text-xs text-mh-danger'
+                            role='alert'
+                        >
+                            {t('auth.passwordMismatch')}
                         </p>
                     )}
                 </div>
 
                 <div>
                     <label htmlFor='invite-code' className='block font-bold'>
-                        Invite code
+                        {t('auth.inviteCode')}
                     </label>
                     <input
                         id='invite-code'
@@ -332,7 +366,7 @@ export const SignupPage = () => {
                         autoComplete='off'
                         required
                         value={inviteCode}
-                        onChange={event => setInviteCode(event.target.value)}
+                        onChange={(event) => setInviteCode(event.target.value)}
                         className='mh-input w-full px-3 py-2'
                         disabled={isLoading}
                     />
@@ -345,31 +379,35 @@ export const SignupPage = () => {
                         type='checkbox'
                         required
                         checked={termsAccepted}
-                        onChange={event => setTermsAccepted(event.target.checked)}
+                        onChange={(event) =>
+                            setTermsAccepted(event.target.checked)
+                        }
                         className='mt-1 h-4 w-4 accent-mh-accent'
                         disabled={isLoading}
                     />
-                    <label htmlFor='terms-accepted' className='text-sm leading-relaxed text-mh-textMuted'>
-                        I accept the current Terms of Use, Privacy Notice,
-                        Community Guidelines, synthetic-data disclosure, and
-                        location-sharing consent (version{' '}
-                        {CURRENT_POLICY_VERSION}). Review the{' '}
+                    <label
+                        htmlFor='terms-accepted'
+                        className='text-sm leading-relaxed text-mh-textMuted'
+                    >
+                        {t('auth.acceptPoliciesPrefix', {
+                            version: CURRENT_POLICY_VERSION,
+                        })}{' '}
                         <a
                             href='https://subcult.tv/terms'
                             target='_blank'
                             rel='noopener noreferrer'
                             className='text-mh-link hover:underline'
                         >
-                            Terms of Service
-                        </a>
-                        {' '}and{' '}
+                            {t('legal.termsNav')}
+                        </a>{' '}
+                        {t('auth.and')}{' '}
                         <a
                             href='https://subcult.tv/privacy'
                             target='_blank'
                             rel='noopener noreferrer'
                             className='text-mh-link hover:underline'
                         >
-                            Privacy Policy
+                            {t('legal.privacyNav')}
                         </a>
                     </label>
                 </div>
@@ -381,7 +419,7 @@ export const SignupPage = () => {
                         type='checkbox'
                         required
                         checked={eligibilityAccepted}
-                        onChange={event =>
+                        onChange={(event) =>
                             setEligibilityAccepted(event.target.checked)
                         }
                         className='mt-1 h-4 w-4 accent-mh-accent'
@@ -391,7 +429,7 @@ export const SignupPage = () => {
                         htmlFor='eligibility-accepted'
                         className='text-sm font-bold leading-relaxed'
                     >
-                        I confirm that I am at least 18 years old.
+                        {t('auth.age')}
                     </label>
                 </div>
 
@@ -406,31 +444,38 @@ export const SignupPage = () => {
                     }
                     className='mh-button mh-button--primary px-4 py-2 font-bold w-full sm:w-auto'
                 >
-                    {isLoading ? 'Creating account…' : 'Create account'}
+                    {isLoading ? t('auth.creating') : t('auth.create')}
                 </button>
 
                 <p className='text-xs leading-relaxed text-mh-textSoft'>
-                    Already have an account?{' '}
-                    <a href={`/login${returnTo !== '/' ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} className='text-mh-link hover:underline'>
-                        Sign in
+                    {t('auth.already')}{' '}
+                    <a
+                        href={`/login${returnTo !== '/' ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`}
+                        className='text-mh-link hover:underline'
+                    >
+                        {t('auth.signIn')}
                     </a>
                 </p>
                 <p className='text-xs leading-relaxed text-mh-textSoft'>
-                    Account recovery belongs to your PDS identity. Keep access
-                    to the recovery email you enter here. Self-service recovery
-                    is not yet available in Patchwork; contact the Subcult PDS
-                    operator if you lose access.
+                    {t('auth.recovery')}
                 </p>
             </form>
-            <div aria-live='polite' aria-atomic='true' className='mh-login-status'>
-                {isLoading ? 'Creating your account…' : null}
+            <div
+                aria-live='polite'
+                aria-atomic='true'
+                className='mh-login-status'
+            >
+                {isLoading ? t('auth.creatingYour') : null}
             </div>
             {error && (
-                <div id='signup-error' role='alert' className='mh-alert mh-login-error p-4'>
-                    <p>{error.message}</p>
-                    <p>{signupErrorMessage(error)}</p>
+                <div
+                    id='signup-error'
+                    role='alert'
+                    className='mh-alert mh-login-error p-4'
+                >
+                    <p>{signupErrorMessage(error, t)}</p>
                     <button type='button' onClick={() => setError(null)}>
-                        Try again
+                        {t('auth.tryAgain')}
                     </button>
                 </div>
             )}

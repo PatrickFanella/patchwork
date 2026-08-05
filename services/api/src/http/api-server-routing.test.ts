@@ -48,7 +48,10 @@ describe('API server method routing', () => {
         expect(response.status).toBe(200);
         expect(new Set(body.routes).size).toBe(body.routes.length);
         expect(body.routes).not.toContain('/chat/initiate');
-        expect(body.routes).not.toContain('/chat/messages');
+        expect(body.routes).toEqual(expect.arrayContaining([
+            '/chat/conversations', '/chat/messages', '/chat/read',
+            '/chat/messages/redactions', '/chat/reports',
+        ]));
     });
 
     it('keeps fixture chat mutation unreachable from the API runtime', async () => {

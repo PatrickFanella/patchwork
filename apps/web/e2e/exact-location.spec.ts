@@ -292,7 +292,7 @@ test('two connected accounts exchange an exact location only over an authenticat
         .getByRole('button', { name: 'Start private location sharing' })
         .click();
     await expect(
-        helperPage.getByText(/disabled during maintenance/),
+        helperPage.getByText('Location sharing could not start.'),
     ).toBeVisible();
 
     await requesterContext.close();

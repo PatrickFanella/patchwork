@@ -2679,6 +2679,217 @@ export const decideCoordinationWindowViaApi = async (
     return result.ok ? parseRecordPayload(result.data, 'window', 'Schedule decision response was malformed.') : result;
 };
 
+export interface ProductionGroupRoom {
+    id: string;
+    groupId: string;
+    name: string;
+    linkedRequestUri: string | null;
+    status: 'active' | 'closed';
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+    closedAt: string | null;
+}
+
+export interface ProductionGroupMember {
+    did: string;
+    role: 'owner' | 'moderator' | 'member';
+    status: 'active' | 'left' | 'removed';
+    joinedAt: string;
+    updatedAt: string;
+}
+
+export interface ProductionGroup {
+    id: string;
+    ownerDid: string;
+    name: string;
+    description: string;
+    purpose: string;
+    visibility: 'private' | 'public';
+    status: 'active' | 'closed';
+    version: number;
+    actorRole: 'owner' | 'moderator' | 'member';
+    rooms: ProductionGroupRoom[];
+    members: ProductionGroupMember[];
+    createdAt: string;
+    updatedAt: string;
+    closedAt: string | null;
+}
+
+export interface ProductionGroupInvitation {
+    id: string;
+    groupId: string;
+    groupName: string;
+    invitedByDid: string;
+    role: 'moderator' | 'member';
+    expiresAt: string;
+    inviteeDid?: string;
+}
+
+export const fetchGroupsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ groups: ProductionGroup[]; invitations: ProductionGroupInvitation[]; outgoingInvitations: ProductionGroupInvitation[] }>> => {
+    const result = await requestJson('/groups', new URLSearchParams(), signal);
+    if (!result.ok) return result;
+    const groups = parseArrayProperty<ProductionGroup>(result.data, 'groups', 'Groups response was malformed.');
+    const invitations = parseArrayProperty<ProductionGroupInvitation>(result.data, 'invitations', 'Groups response was malformed.');
+    const outgoingInvitations = parseArrayProperty<ProductionGroupInvitation>(result.data, 'outgoingInvitations', 'Groups response was malformed.');
+    if (!groups.ok) return groups;
+    if (!invitations.ok) return invitations;
+    if (!outgoingInvitations.ok) return outgoingInvitations;
+    return {
+        ok: true,
+        data: {
+            groups: groups.data,
+            invitations: invitations.data,
+            outgoingInvitations: outgoingInvitations.data,
+        },
+    };
+};
+
+const mutateGroup = async <T>(path: string, input: unknown, property: string): Promise<ApiClientResult<T>> => {
+    const result = await requestJsonPost(path, input);
+    return result.ok ? parseRecordPayload(result.data, property, 'Group response was malformed.') as ApiClientResult<T> : result;
+};
+
+export const createGroupViaApi = (input: {
+    name: string; description: string; purpose: string;
+    visibility: 'private' | 'public'; linkedRequestUri?: string;
+}): Promise<ApiClientResult<{ group: ProductionGroup }>> => mutateGroup('/groups', input, 'group');
+
+export const inviteGroupMemberViaApi = (input: {
+    groupId: string; inviteeDid: string; role: 'moderator' | 'member';
+}): Promise<ApiClientResult<{ invitation: { id: string; groupId: string; inviteeDid: string; role: string; token: string; expiresAt: string } }>> =>
+    mutateGroup('/groups/invitations', input, 'invitation');
+
+export const respondToGroupInvitationViaApi = (input: { token: string; action: 'accept' | 'reject' }): Promise<ApiClientResult<{ invitation: { id: string; status: string } }>> =>
+    mutateGroup('/groups/invitation-responses', input, 'invitation');
+
+export const revokeGroupInvitationViaApi = (input: { groupId: string; invitationId: string }): Promise<ApiClientResult<{ invitation: { id: string; status: string } }>> =>
+    mutateGroup('/groups/invitation-revocations', input, 'invitation');
+
+export const removeGroupMemberViaApi = (input: { groupId: string; memberDid: string }): Promise<ApiClientResult<{ member: ProductionGroupMember }>> =>
+    mutateGroup('/groups/member-removals', input, 'member');
+
+export const changeGroupMemberRoleViaApi = (input: { groupId: string; memberDid: string; role: 'moderator' | 'member' }): Promise<ApiClientResult<{ member: ProductionGroupMember }>> =>
+    mutateGroup('/groups/role-changes', input, 'member');
+
+export const leaveGroupViaApi = (groupId: string): Promise<ApiClientResult<{ member: ProductionGroupMember }>> =>
+    mutateGroup('/groups/departures', { groupId }, 'member');
+
+export const transferGroupOwnershipViaApi = async (input: { groupId: string; memberDid: string }): Promise<ApiClientResult<{ groupId: string; ownerDid: string }>> => {
+    const result = await requestJsonPost('/groups/ownership-transfers', input);
+    return result.ok && isRecord(result.data) ? { ok: true, data: result.data as { groupId: string; ownerDid: string } } :
+        result.ok ? invalidResponseFailure('Group response was malformed.') : result;
+};
+
+export const closeGroupViaApi = async (groupId: string): Promise<ApiClientResult<{ groupId: string; status: 'closed' }>> => {
+    const result = await requestJsonPost('/groups/closures', { groupId });
+    return result.ok && isRecord(result.data) ? { ok: true, data: result.data as { groupId: string; status: 'closed' } } :
+        result.ok ? invalidResponseFailure('Group response was malformed.') : result;
+};
+
+export const createGroupRoomViaApi = (input: { groupId: string; name: string; linkedRequestUri?: string }): Promise<ApiClientResult<{ room: ProductionGroupRoom }>> =>
+    mutateGroup('/groups/rooms', input, 'room');
+
+export const closeGroupRoomViaApi = (input: { groupId: string; roomId: string }): Promise<ApiClientResult<{ room: ProductionGroupRoom }>> =>
+    mutateGroup('/groups/room-closures', input, 'room');
+
+export interface ProductionChatConversation {
+    id: string;
+    kind: 'direct' | 'group';
+    connectionId: string | null;
+    roomId: string | null;
+    title: string;
+    counterpartDid?: string;
+    groupId?: string;
+    roomName?: string;
+    status: 'active' | 'closed';
+    version: number;
+    unreadCount: number;
+    lastSequence: number | null;
+    lastReadSequence: number;
+    lastMessageAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+    closedAt: string | null;
+}
+
+export interface ProductionChatMessage {
+    id: string;
+    sequence: number;
+    conversationId: string;
+    authorDid: string | null;
+    body: string | null;
+    status: 'active' | 'redacted';
+    deliveryState: 'delivered' | 'read' | null;
+    createdAt: string;
+    redactedAt: string | null;
+}
+
+export const fetchChatConversationsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ conversations: ProductionChatConversation[] }>> => {
+    const result = await requestJson('/chat/conversations', new URLSearchParams(), signal);
+    if (!result.ok) return result;
+    const conversations = parseArrayProperty<ProductionChatConversation>(
+        result.data, 'conversations', 'Chat response was malformed.');
+    return conversations.ok ? { ok: true, data: { conversations: conversations.data } } : conversations;
+};
+
+export const createChatConversationViaApi = async (
+    input: { kind: 'direct'; connectionId: string } | { kind: 'group'; roomId: string },
+): Promise<ApiClientResult<{ conversation: ProductionChatConversation; created: boolean }>> => {
+    const result = await requestJsonPost('/chat/conversations', input);
+    return result.ok ? parseRecordPayload(result.data, 'conversation', 'Chat response was malformed.') : result;
+};
+
+export const fetchChatMessagesViaApi = async (
+    conversationId: string,
+    options: { before?: number; limit?: number } = {},
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ messages: ProductionChatMessage[]; nextCursor: number | null }>> => {
+    const query = new URLSearchParams({ conversationId });
+    if (options.before !== undefined) query.set('before', String(options.before));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    const result = await requestJson('/chat/messages', query, signal);
+    if (!result.ok) return result;
+    const messages = parseArrayProperty<ProductionChatMessage>(result.data, 'messages', 'Chat response was malformed.');
+    if (!messages.ok) return messages;
+    return isRecord(result.data) ? {
+        ok: true,
+        data: { messages: messages.data,
+            nextCursor: typeof result.data['nextCursor'] === 'number' ? result.data['nextCursor'] : null },
+    } : invalidResponseFailure('Chat response was malformed.');
+};
+
+export const sendChatMessageViaApi = async (input: {
+    conversationId: string; clientMessageId: string; body: string;
+}): Promise<ApiClientResult<{ message: ProductionChatMessage; created: boolean }>> => {
+    const result = await requestJsonPost('/chat/messages', input);
+    return result.ok ? parseRecordPayload(result.data, 'message', 'Chat response was malformed.') : result;
+};
+
+export const markChatReadViaApi = (input: {
+    conversationId: string; throughMessageId: string;
+}): Promise<ApiClientResult<{ conversationId: string; lastReadSequence: number }>> =>
+    requestJsonPost('/chat/read', input) as Promise<ApiClientResult<{ conversationId: string; lastReadSequence: number }>>;
+
+export const redactChatMessageViaApi = async (input: {
+    conversationId: string; messageId: string;
+}): Promise<ApiClientResult<{ message: ProductionChatMessage }>> => {
+    const result = await requestJsonPost('/chat/messages/redactions', input);
+    return result.ok ? parseRecordPayload(result.data, 'message', 'Chat response was malformed.') : result;
+};
+
+export const reportChatMessageViaApi = async (input: {
+    conversationId: string; messageId: string;
+    reason: 'abuse' | 'harassment' | 'spam' | 'fraud' | 'privacy' | 'other';
+}): Promise<ApiClientResult<{ report: { id: string; status: 'pending' } }>> => {
+    const result = await requestJsonPost('/chat/reports', input);
+    return result.ok ? parseRecordPayload(result.data, 'report', 'Chat response was malformed.') : result;
+};
+
 const parseExactLocationState = (
     result: ApiClientResult<unknown>,
 ): ApiClientResult<ExactLocationSessionState> => {

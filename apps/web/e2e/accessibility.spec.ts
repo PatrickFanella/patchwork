@@ -191,17 +191,15 @@ test.describe('Form accessibility', () => {
         await expect(page.getByLabel('Private contact email')).toHaveCount(0);
     });
 
-    test('chat is a truthful non-mutating production placeholder', async ({
+    test('chat requires authentication before any conversation data or mutation UI', async ({
         page,
     }) => {
         await page.goto('/chat');
         await expect(
-            page.getByRole('region', { name: 'Chat is not available' }),
+            page.getByRole('region', { name: 'Sign in required' }),
         ).toBeVisible();
         await expect(
-            page.getByText(
-                'Chat is not available. Patchwork does not provide messaging.',
-            ),
+            page.getByRole('link', { name: 'Sign in to continue' }),
         ).toBeVisible();
         await expect(page.getByRole('button')).toHaveCount(0);
         await expect(page.locator('form')).toHaveCount(0);

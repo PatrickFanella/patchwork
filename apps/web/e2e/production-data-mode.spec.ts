@@ -108,7 +108,8 @@ test('API failure stays visible and never substitutes fixture discovery data', a
 
     await page.goto('/map');
     const alert = page.getByRole('alert');
-    await expect(alert).toContainText('network NETWORK_ERROR');
+    await expect(alert).toContainText('The request could not be completed.');
+    await expect(alert).not.toContainText('NETWORK_ERROR');
     await expect(page.getByText('API unavailable')).toBeVisible();
     await expect(page.getByText('Need groceries before 21:00')).toHaveCount(0);
 
@@ -140,14 +141,14 @@ test('public home advertises only implemented alpha capabilities', async ({
     const more = page.locator('.mh-more-menu-panel');
     await expect(more.getByRole('link', { name: 'Scheduling' })).toHaveCount(0);
     await expect(more.getByRole('link', { name: 'Feedback' })).toHaveCount(0);
-    await expect(more.getByRole('link', { name: 'Groups' })).toHaveCount(0);
+    await expect(more.getByRole('link', { name: 'Groups' })).toBeVisible();
     await expect(more.getByRole('link', { name: 'Chat' })).toBeVisible();
 });
 
-test('direct deferred routes never expose fixture implementations', async ({
+test('direct deferred feedback route never exposes fixture implementations', async ({
     page,
 }) => {
-    for (const route of ['/feedback', '/groups']) {
+    for (const route of ['/feedback']) {
         await page.goto(route);
         await expect(
             page.getByRole('region', { name: 'Deferred from the alpha' }),
@@ -268,7 +269,7 @@ test('legal routes show aligned unapproved buyer-ready policy boundaries', async
         page.getByRole('heading', { name: 'Terms of Service' }),
     ).toBeVisible();
     await expect(page.getByText('at least 18')).toBeVisible();
-    await expect(page.getByText('Production chat is not available.')).toBeVisible();
+    await expect(page.getByText(/Messages are server-readable/)).toBeVisible();
     await expect(page.getByText(/operationally NO-GO/)).toBeVisible();
 
     await page.goto('/legal/privacy');
@@ -444,13 +445,13 @@ test('authenticated production settings expose durable account controls only', a
     await page.getByRole('button', { name: 'Deactivate account' }).click();
     await expect(
         page.getByRole('alertdialog', {
-            name: 'Confirm account deactivation',
+            name: 'Confirm deactivation',
         }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Keep account active' }).click();
     await expect(
         page.getByRole('alertdialog', {
-            name: 'Confirm account deactivation',
+            name: 'Confirm deactivation',
         }),
     ).toHaveCount(0);
 

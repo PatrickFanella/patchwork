@@ -116,7 +116,7 @@ export const moderationLimiter = new RateLimiter({
 /* ------------------------------------------------------------------ */
 
 const AUTH_PREFIXES = ['/auth/', '/oauth/login', '/oauth/callback'];
-const REPORT_PREFIXES = ['/reports', '/chat/safety/report'];
+const REPORT_PREFIXES = ['/reports', '/chat/safety/report', '/chat/reports'];
 const MODERATION_PREFIXES = ['/moderation/'];
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 

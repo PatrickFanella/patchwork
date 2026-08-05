@@ -188,13 +188,13 @@ test('moderators can quarantine, appeal, audit, and shut down submissions withou
 
     await queueItem.click();
     await page.getByRole('button', { name: 'Quarantine now' }).click();
-    await expect(page.getByText('Action recorded: suspend-visibility.')).toBeVisible();
-    await expect(page.getByText('suspend-visibility', { exact: true })).toBeVisible();
+    await expect(page.getByText('Action recorded: Suspend visibility.')).toBeVisible();
+    await expect(page.getByText(/Suspend visibility by/)).toBeVisible();
 
     await page.getByRole('button', { name: 'Open appeal' }).click();
     await page.getByRole('button', { name: 'Start appeal review' }).click();
     await page.getByRole('button', { name: 'Uphold appeal' }).click();
-    await expect(page.getByText('Action recorded: resolve-appeal-upheld.')).toBeVisible();
+    await expect(page.getByText('Action recorded: Resolve appeal as upheld.')).toBeVisible();
 
     await page.getByRole('button', { name: 'Shut down new submissions' }).click();
     await expect(page.getByText('Patchwork is temporarily read-only.')).toBeVisible();

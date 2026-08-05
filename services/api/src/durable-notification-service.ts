@@ -28,12 +28,14 @@ const tokenHash = (value: string): string =>
     createHash('sha256').update(value, 'utf8').digest('hex');
 
 const safeMetadata = (value: unknown): value is Record<string, unknown> => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+        return false;
     const visit = (candidate: unknown): boolean => {
         if (Array.isArray(candidate)) return candidate.every(visit);
         if (!candidate || typeof candidate !== 'object') return true;
         return Object.entries(candidate).every(
-            ([key, nested]) => !FORBIDDEN_PAYLOAD_KEY.test(key) && visit(nested),
+            ([key, nested]) =>
+                !FORBIDDEN_PAYLOAD_KEY.test(key) && visit(nested),
         );
     };
     return visit(value);
@@ -57,6 +59,7 @@ interface NotificationRow {
     updated_at: Date | string;
     read_at: Date | string | null;
     archived_at: Date | string | null;
+    language?: string;
 }
 
 interface DeliveryRow {
@@ -73,7 +76,179 @@ interface DeliveryRow {
     endpoint: string | null;
     p256dh: string | null;
     auth_secret: string | null;
+    language: 'en' | 'es';
+    notification_type: NotificationType;
 }
+
+type NotificationCopy = Readonly<{ title: string; body: string }>;
+
+const spanishNotificationCopy: Readonly<
+    Partial<Record<NotificationType, NotificationCopy>>
+> = {
+    offer_received: {
+        title: 'Nueva oferta',
+        body: 'Alguien se ofreció a ayudar con tu solicitud.',
+    },
+    offer_accepted: {
+        title: 'Oferta aceptada',
+        body: 'Tu oferta fue aceptada. Abre la coordinación para ver los siguientes pasos.',
+    },
+    offer_declined: {
+        title: 'Oferta rechazada',
+        body: 'Tu oferta fue rechazada.',
+    },
+    offer_expired: {
+        title: 'Oferta vencida',
+        body: 'Tu oferta venció antes de ser aceptada.',
+    },
+    connection_started: {
+        title: 'Conexión iniciada',
+        body: 'Tu conexión de ayuda mutua está lista para coordinar.',
+    },
+    connection_completed: {
+        title: 'Entrega completada',
+        body: 'La entrega de ayuda mutua se marcó como completada.',
+    },
+    connection_cancelled: {
+        title: 'Conexión cerrada',
+        body: 'La conexión de ayuda mutua ya no está activa.',
+    },
+    lifecycle_changed: {
+        title: 'Estado de solicitud actualizado',
+        body: 'Tu solicitud pasó a un nuevo estado del ciclo de vida.',
+    },
+    verification_submitted: {
+        title: 'Verificación enviada',
+        body: 'Recibimos tu solicitud privada de verificación.',
+    },
+    verification_decided: {
+        title: 'Verificación actualizada',
+        body: 'Moderación actualizó tu solicitud de verificación.',
+    },
+    appeal_submitted: {
+        title: 'Apelación recibida',
+        body: 'Tu apelación de verificación espera revisión.',
+    },
+    appeal_decided: {
+        title: 'Apelación resuelta',
+        body: 'Moderación resolvió tu apelación de verificación.',
+    },
+    account_expiry: {
+        title: 'Verificación vencida',
+        body: 'Tu verificación venció y puede renovarse.',
+    },
+    moderation_action: {
+        title: 'Estado de denuncia actualizado',
+        body: 'Moderación actualizó el estado de tu denuncia.',
+    },
+    attachment_action: {
+        title: 'Adjunto privado revisado',
+        body: 'Moderación actualizó uno de tus adjuntos privados.',
+    },
+    organization_action: {
+        title: 'Reconfirmación de recurso pendiente',
+        body: 'Un recurso bajo gestión requiere reconfirmación.',
+    },
+    request_created: {
+        title: 'Solicitud creada',
+        body: 'Tu solicitud de ayuda se creó correctamente.',
+    },
+    request_assigned: {
+        title: 'Solicitud asignada',
+        body: 'Una solicitud de ayuda fue asignada para coordinación.',
+    },
+    assignment_accepted: {
+        title: 'Asignación aceptada',
+        body: 'La asignación de ayuda fue aceptada.',
+    },
+    assignment_declined: {
+        title: 'Asignación rechazada',
+        body: 'La asignación de ayuda fue rechazada.',
+    },
+    handoff_completed: {
+        title: 'Entrega completada',
+        body: 'La entrega de ayuda se marcó como completada.',
+    },
+    message_received: {
+        title: 'Mensaje nuevo',
+        body: 'Tienes un mensaje nuevo en Patchwork.',
+    },
+    feedback_requested: {
+        title: 'Comentarios solicitados',
+        body: 'Puedes registrar comentarios estructurados sobre una entrega completada.',
+    },
+    shift_reminder: {
+        title: 'Recordatorio de turno',
+        body: 'Un turno programado comienza pronto.',
+    },
+    shift_conflict: {
+        title: 'Conflicto de turno',
+        body: 'Revisa un conflicto en tu turno programado.',
+    },
+    shift_no_show: {
+        title: 'Turno sin asistencia',
+        body: 'Un turno programado requiere revisión.',
+    },
+    system_announcement: {
+        title: 'Anuncio de Patchwork',
+        body: 'Hay una actualización del servicio disponible.',
+    },
+    schedule_proposed: {
+        title: 'Agenda de coordinación actualizada',
+        body: 'Abre tu conexión para revisar el estado de la agenda.',
+    },
+    schedule_changed: {
+        title: 'Agenda de coordinación actualizada',
+        body: 'Abre tu conexión para revisar el estado de la agenda.',
+    },
+    schedule_confirmed: {
+        title: 'Agenda de coordinación actualizada',
+        body: 'Abre tu conexión para revisar el estado de la agenda.',
+    },
+    schedule_declined: {
+        title: 'Agenda de coordinación actualizada',
+        body: 'Abre tu conexión para revisar el estado de la agenda.',
+    },
+    schedule_cancelled: {
+        title: 'Agenda de coordinación actualizada',
+        body: 'Abre tu conexión para revisar el estado de la agenda.',
+    },
+    schedule_reminder: {
+        title: 'Recordatorio de coordinación',
+        body: 'Una ventana de coordinación confirmada comienza pronto.',
+    },
+    schedule_expired: {
+        title: 'Ventana de coordinación vencida',
+        body: 'Abre tu conexión para revisar el estado de la agenda.',
+    },
+    group_invited: {
+        title: 'Invitación a un grupo',
+        body: 'Tienes una nueva invitación a un grupo.',
+    },
+    group_joined: {
+        title: 'Una persona se unió a tu grupo',
+        body: 'Abre el grupo para revisar sus miembros.',
+    },
+    group_removed: {
+        title: 'Membresía de grupo finalizada',
+        body: 'Ya no tienes acceso a este grupo.',
+    },
+    group_role_changed: {
+        title: 'Rol de grupo actualizado',
+        body: 'Abre el grupo para revisar tu rol actual.',
+    },
+    group_closed: {
+        title: 'Grupo cerrado',
+        body: 'Se cerró un grupo al que pertenecías.',
+    },
+};
+
+export const localizedNotificationCopy = (
+    type: NotificationType,
+    locale: string | null | undefined,
+    fallback: NotificationCopy,
+): NotificationCopy =>
+    locale === 'es' ? (spanishNotificationCopy[type] ?? fallback) : fallback;
 
 export interface NotificationListResult {
     items: Notification[];
@@ -141,15 +316,20 @@ export class HttpEmailProvider implements EmailProvider {
                 }),
                 signal: AbortSignal.timeout(10_000),
             });
-            const payload = (await response.json().catch(() => null)) as
-                | Record<string, unknown>
-                | null;
+            const payload = (await response.json().catch(() => null)) as Record<
+                string,
+                unknown
+            > | null;
             const providerMessageId =
                 typeof payload?.['id'] === 'string' ? payload['id'] : undefined;
             if (response.ok) {
                 return { accepted: true, providerMessageId };
             }
-            if (response.status === 400 || response.status === 404 || response.status === 422) {
+            if (
+                response.status === 400 ||
+                response.status === 404 ||
+                response.status === 422
+            ) {
                 return {
                     accepted: false,
                     invalidTarget: true,
@@ -158,7 +338,8 @@ export class HttpEmailProvider implements EmailProvider {
             }
             return {
                 accepted: false,
-                retryable: response.status === 408 ||
+                retryable:
+                    response.status === 408 ||
                     response.status === 429 ||
                     response.status >= 500,
                 errorCode: `email-http-${response.status}`,
@@ -168,9 +349,9 @@ export class HttpEmailProvider implements EmailProvider {
                 accepted: false,
                 retryable: true,
                 errorCode:
-                    error instanceof Error && error.name === 'TimeoutError' ?
-                        'email-timeout'
-                    :   'email-network',
+                    error instanceof Error && error.name === 'TimeoutError'
+                        ? 'email-timeout'
+                        : 'email-network',
             };
         }
     }
@@ -223,9 +404,9 @@ export class VapidPushProvider implements PushProvider {
                 typeof error === 'object' &&
                 error !== null &&
                 'statusCode' in error &&
-                typeof error.statusCode === 'number' ?
-                    error.statusCode
-                :   0;
+                typeof error.statusCode === 'number'
+                    ? error.statusCode
+                    : 0;
             if (statusCode === 404 || statusCode === 410) {
                 return {
                     accepted: false,
@@ -240,8 +421,9 @@ export class VapidPushProvider implements PushProvider {
                     statusCode === 408 ||
                     statusCode === 429 ||
                     statusCode >= 500,
-                errorCode:
-                    statusCode ? `push-http-${statusCode}` : 'push-network',
+                errorCode: statusCode
+                    ? `push-http-${statusCode}`
+                    : 'push-network',
             };
         }
     }
@@ -269,9 +451,9 @@ export class DurableNotificationService {
         } = {},
     ): Promise<NotificationListResult> {
         const filter =
-            input.filter && notificationFilters.has(input.filter) ?
-                input.filter as NotificationFilter
-            :   'all';
+            input.filter && notificationFilters.has(input.filter)
+                ? (input.filter as NotificationFilter)
+                : 'all';
         if (input.filter && !notificationFilters.has(input.filter)) {
             throw new Error('INVALID_NOTIFICATION_FILTER');
         }
@@ -315,7 +497,9 @@ export class DurableNotificationService {
             `SELECT notification_id, recipient_did, notification_type,
                     template_version, title, body, priority, action_url,
                     metadata, deduplication_key, occurred_at, updated_at,
-                    read_at, archived_at
+                    read_at, archived_at,
+                    COALESCE((SELECT language FROM account_preferences
+                              WHERE did = $1), 'en') AS language
                FROM notification_intents
               WHERE ${predicates.join(' AND ')}
               ORDER BY occurred_at DESC, notification_id DESC
@@ -337,12 +521,12 @@ export class DurableNotificationService {
             [ownerDid],
         );
         return {
-            items: page.map(this.render),
+            items: page.map((row) => this.render(row, row.language ?? 'en')),
             total: Number(counts.rows[0]?.total ?? 0),
             unread: Number(counts.rows[0]?.unread ?? 0),
-            ...(rows.rows.length > limit && page.length ?
-                { nextCursor: page[page.length - 1]!.notification_id }
-            :   {}),
+            ...(rows.rows.length > limit && page.length
+                ? { nextCursor: page[page.length - 1]!.notification_id }
+                : {}),
         };
     }
 
@@ -410,16 +594,15 @@ export class DurableNotificationService {
         );
         return {
             preferences: configured,
-            email:
-                email.rows[0] ?
-                    {
-                        address: email.rows[0].email_address,
-                        verified: Boolean(
-                            email.rows[0].verified_at &&
-                            !email.rows[0].disabled_at,
-                        ),
-                    }
-                :   null,
+            email: email.rows[0]
+                ? {
+                      address: email.rows[0].email_address,
+                      verified: Boolean(
+                          email.rows[0].verified_at &&
+                          !email.rows[0].disabled_at,
+                      ),
+                  }
+                : null,
             push: {
                 supported: Boolean(this.providers.push),
                 publicKey: process.env['NOTIFICATION_VAPID_PUBLIC_KEY'] ?? null,
@@ -542,10 +725,9 @@ export class DurableNotificationService {
         if (!this.parsePreferences(preferences.rows[0]?.notifications).push) {
             throw new Error('PUSH_OPT_IN_REQUIRED');
         }
-        const userAgentHash =
-            input.userAgent ?
-                createHash('sha256').update(input.userAgent).digest('hex')
-            :   null;
+        const userAgentHash = input.userAgent
+            ? createHash('sha256').update(input.userAgent).digest('hex')
+            : null;
         const result = await this.pool.query<{ subscription_id: string }>(
             `INSERT INTO notification_push_subscriptions (
                 subscription_id, owner_did, endpoint, p256dh, auth_secret,
@@ -767,12 +949,15 @@ export class DurableNotificationService {
              )
              SELECT c.delivery_id, c.notification_id, c.channel, c.target_id,
                     c.provider_idempotency_key, c.attempt_count,
-                    n.title, n.body, n.action_url,
+                    n.title, n.body, n.action_url, n.notification_type,
+                    COALESCE(pref.language, 'en') AS language,
                     e.email_address, p.endpoint, p.p256dh,
                     p.auth_secret
                FROM claimed c
                JOIN notification_intents n
                  ON n.notification_id = c.notification_id
+               LEFT JOIN account_preferences pref
+                 ON pref.did = n.recipient_did
                LEFT JOIN notification_email_endpoints e
                  ON c.channel = 'email' AND e.endpoint_id = c.target_id
                LEFT JOIN notification_push_subscriptions p
@@ -810,7 +995,10 @@ export class DurableNotificationService {
                         SET status = 'skipped', locked_at = NULL,
                             last_error_code = $2, updated_at = NOW()
                       WHERE delivery_id = $1`,
-                    [delivery.delivery_id, result.errorCode ?? 'invalid-target'],
+                    [
+                        delivery.delivery_id,
+                        result.errorCode ?? 'invalid-target',
+                    ],
                 );
                 continue;
             }
@@ -957,22 +1145,31 @@ export class DurableNotificationService {
         return result.rowCount ?? 0;
     }
 
-    private readonly render = (row: NotificationRow): Notification => ({
-        id: row.notification_id,
-        type: row.notification_type,
-        recipientDid: row.recipient_did,
-        title: row.title,
-        body: row.body,
-        priority: row.priority,
-        read: Boolean(row.read_at),
-        archived: Boolean(row.archived_at),
-        actionUrl: row.action_url,
-        metadata: safeMetadata(row.metadata) ? row.metadata : {},
-        templateVersion: row.template_version,
-        deduplicationKey: row.deduplication_key,
-        createdAt: iso(row.occurred_at),
-        updatedAt: iso(row.updated_at),
-    });
+    private readonly render = (
+        row: NotificationRow,
+        locale = 'en',
+    ): Notification => {
+        const copy = localizedNotificationCopy(row.notification_type, locale, {
+            title: row.title,
+            body: row.body,
+        });
+        return {
+            id: row.notification_id,
+            type: row.notification_type,
+            recipientDid: row.recipient_did,
+            title: copy.title,
+            body: copy.body,
+            priority: row.priority,
+            read: Boolean(row.read_at),
+            archived: Boolean(row.archived_at),
+            actionUrl: row.action_url,
+            metadata: safeMetadata(row.metadata) ? row.metadata : {},
+            templateVersion: row.template_version,
+            deduplicationKey: row.deduplication_key,
+            createdAt: iso(row.occurred_at),
+            updatedAt: iso(row.updated_at),
+        };
+    };
 
     private parsePreferences(value: unknown): {
         inApp: boolean;
@@ -1014,6 +1211,11 @@ export class DurableNotificationService {
     private async deliver(
         delivery: DeliveryRow,
     ): Promise<DeliveryProviderResult> {
+        const copy = localizedNotificationCopy(
+            delivery.notification_type,
+            delivery.language,
+            { title: delivery.title, body: delivery.body },
+        );
         if (delivery.channel === 'email') {
             if (!this.providers.email || !delivery.email_address) {
                 return {
@@ -1024,8 +1226,8 @@ export class DurableNotificationService {
             }
             return this.providers.email.send({
                 to: delivery.email_address,
-                subject: delivery.title,
-                text: `${delivery.body}\n\n${this.options.publicWebOrigin ?? ''}${delivery.action_url}`,
+                subject: copy.title,
+                text: `${copy.body}\n\n${this.options.publicWebOrigin ?? ''}${delivery.action_url}`,
                 idempotencyKey: delivery.provider_idempotency_key,
             });
         }
@@ -1047,17 +1249,14 @@ export class DurableNotificationService {
             auth: delivery.auth_secret,
             idempotencyKey: delivery.provider_idempotency_key,
             payload: JSON.stringify({
-                title: delivery.title,
-                body: delivery.body,
+                title: copy.title,
+                body: copy.body,
                 actionUrl: delivery.action_url,
             }),
         });
     }
 
-    private async invalidateTarget(
-        delivery: DeliveryRow,
-        errorCode?: string,
-    ) {
+    private async invalidateTarget(delivery: DeliveryRow, errorCode?: string) {
         if (delivery.channel === 'email') {
             await this.pool.query(
                 `UPDATE notification_email_endpoints

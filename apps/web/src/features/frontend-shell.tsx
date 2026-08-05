@@ -194,6 +194,8 @@ import {
 } from './api-client';
 import { useLocale } from '../i18n';
 import { ExactLocationExchange } from './exact-location-exchange';
+import { ProductionGroups } from './production-groups';
+import { ProductionChat } from './production-chat';
 import {
     type SettingsPatch,
     type SettingsSection,
@@ -207,7 +209,6 @@ import {
 } from '../settings-ux';
 import {
     CURRENT_POLICY_VERSION,
-    CHAT_PLACEHOLDER_CONTRACT,
     defaultAccountPreferences,
     type Notification as DurableNotification,
     type NotificationFilter,
@@ -233,9 +234,11 @@ const webDataMode = resolveWebDataMode(import.meta.env, {
 });
 
 const dataOriginLabel = (origin: ApiDataOrigin): string =>
-    origin === 'api' ? 'DB-backed API'
-    : origin === 'fixture' ? 'Local fixture demo'
-    : 'API unavailable';
+    origin === 'api'
+        ? 'DB-backed API'
+        : origin === 'fixture'
+          ? 'Local fixture demo'
+          : 'API unavailable';
 
 const appRoutes = [
     '/',
@@ -260,9 +263,7 @@ const appRoutes = [
 ] as const;
 
 const deferredFixtureRoutes = new Set<AppRoute>([
-    '/chat',
     '/feedback',
-    '/groups',
 ]);
 
 type AppRoute = (typeof appRoutes)[number];
@@ -271,26 +272,26 @@ interface FrontendShellProps {
     appTitle: string;
 }
 
-const routeLabels: Readonly<Record<AppRoute, string>> = {
-    '/': 'Home',
-    '/map': 'Map',
-    '/feed': 'Feed',
-    '/resources': 'Resources',
-    '/volunteer': 'Volunteer',
-    '/organizations': 'Organizations',
-    '/verification': 'Verification',
-    '/posting': 'Posting',
-    '/chat': 'Chat',
-    '/settings': 'Settings',
-    '/moderation': 'Moderation',
-    '/inbox': 'Inbox',
-    '/notifications': 'Notifications',
-    '/scheduling': 'Scheduling',
-    '/feedback': 'Feedback',
-    '/groups': 'Groups',
-    '/legal/terms': 'Terms of Service',
-    '/legal/privacy': 'Privacy Policy',
-    '/legal/community-guidelines': 'Community Guidelines',
+const routeLabelKeys: Readonly<Record<AppRoute, string>> = {
+    '/': 'route.home',
+    '/map': 'route.map',
+    '/feed': 'route.feed',
+    '/resources': 'route.resources',
+    '/volunteer': 'route.volunteer',
+    '/organizations': 'route.organizations',
+    '/verification': 'route.verification',
+    '/posting': 'route.posting',
+    '/chat': 'route.chat',
+    '/settings': 'route.settings',
+    '/moderation': 'route.moderation',
+    '/inbox': 'route.inbox',
+    '/notifications': 'route.notifications',
+    '/scheduling': 'route.scheduling',
+    '/feedback': 'route.feedback',
+    '/groups': 'route.groups',
+    '/legal/terms': 'route.terms',
+    '/legal/privacy': 'route.privacy',
+    '/legal/community-guidelines': 'route.guidelines',
 };
 
 const primaryRoutes: readonly AppRoute[] = [
@@ -313,13 +314,13 @@ const productionAccountRoutes: readonly AppRoute[] = [
 ];
 
 const secondaryRoutes = appRoutes.filter(
-    route =>
+    (route) =>
         !primaryRoutes.includes(route) &&
         !accountRoutes.includes(route) &&
         !route.startsWith('/legal/'),
 );
 const productionSecondaryRoutes = secondaryRoutes.filter(
-    route => !deferredFixtureRoutes.has(route),
+    (route) => !deferredFixtureRoutes.has(route),
 );
 
 const resourceCategoryOptions: readonly DirectoryResourceCategory[] = [
@@ -413,26 +414,24 @@ const toMapAidCard = (record: FeedRecordEnvelope): MapAidCard => {
 const parseCommaList = (value: string): string[] => {
     return value
         .split(',')
-        .map(item => item.trim())
-        .filter(item => item.length > 0);
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
 };
 
 const formatCategoryLabel = (value: string): string => {
     return value
         .split('-')
-        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
         .join(' ');
 };
 
-const formatDateTime = (value: string): string => {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ?
-            'an unavailable date'
-        :   parsed.toLocaleString();
-};
+const formatLocalizedLabel = (
+    t: ReturnType<typeof useLocale>['t'],
+    value: string,
+): string => t(`labels.${value}`, { defaultValue: formatCategoryLabel(value) });
 
 const normalizeRoute = (pathname: string): AppRoute => {
-    return appRoutes.find(route => route === pathname) ?? '/';
+    return appRoutes.find((route) => route === pathname) ?? '/';
 };
 
 const readCurrentRoute = (): AppRoute => {
@@ -464,6 +463,7 @@ const DiscoveryFiltersPanel = ({
     state,
     onPatch,
 }: DiscoveryFiltersPanelProps) => {
+    const { t } = useLocale();
     const chipModel = useMemo(
         () => buildDiscoveryFilterChipModel(state),
         [state],
@@ -473,20 +473,20 @@ const DiscoveryFiltersPanel = ({
     const lngValue = state.center?.lng ?? defaultDiscoveryCenter.lng;
 
     return (
-        <Panel title='Discovery filters'>
+        <Panel title={String(t('discovery.title'))}>
             <label
                 htmlFor={`${idPrefix}-search`}
                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
             >
-                Search text
+                {t('discovery.searchText')}
             </label>
             <Input
                 id={`${idPrefix}-search`}
                 name={`${idPrefix}-search`}
                 autoComplete='off'
-                placeholder='Search by title, description, or area…'
+                placeholder={String(t('discovery.searchPlaceholder'))}
                 value={state.text ?? ''}
-                onChange={event => {
+                onChange={(event) => {
                     const nextValue = event.target.value.trim();
                     onPatch({
                         text: nextValue.length > 0 ? nextValue : undefined,
@@ -497,10 +497,10 @@ const DiscoveryFiltersPanel = ({
             <div className='mt-4 grid gap-4'>
                 <div>
                     <p className='mb-2 text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
-                        Feed tab
+                        {t('discovery.feedTab')}
                     </p>
                     <div className='flex flex-wrap gap-2'>
-                        {chipModel.tabs.map(tab => (
+                        {chipModel.tabs.map((tab) => (
                             <Button
                                 key={tab.id}
                                 variant={tab.active ? 'secondary' : 'neutral'}
@@ -515,10 +515,10 @@ const DiscoveryFiltersPanel = ({
 
                 <div>
                     <p className='mb-2 text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
-                        Category
+                        {t('discovery.category')}
                     </p>
                     <div className='flex flex-wrap gap-2'>
-                        {chipModel.categories.map(category => (
+                        {chipModel.categories.map((category) => (
                             <Button
                                 key={category.id}
                                 variant={
@@ -527,10 +527,9 @@ const DiscoveryFiltersPanel = ({
                                 className='px-3 py-1 text-xs'
                                 onClick={() => {
                                     onPatch({
-                                        category:
-                                            category.active ? undefined : (
-                                                category.value
-                                            ),
+                                        category: category.active
+                                            ? undefined
+                                            : category.value,
                                     });
                                 }}
                             >
@@ -542,10 +541,10 @@ const DiscoveryFiltersPanel = ({
 
                 <div>
                     <p className='mb-2 text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
-                        Status
+                        {t('discovery.status')}
                     </p>
                     <div className='flex flex-wrap gap-2'>
-                        {chipModel.statuses.map(status => (
+                        {chipModel.statuses.map((status) => (
                             <Button
                                 key={status.id}
                                 variant={
@@ -554,10 +553,9 @@ const DiscoveryFiltersPanel = ({
                                 className='px-3 py-1 text-xs'
                                 onClick={() => {
                                     onPatch({
-                                        status:
-                                            status.active ? undefined : (
-                                                status.value
-                                            ),
+                                        status: status.active
+                                            ? undefined
+                                            : status.value,
                                     });
                                 }}
                             >
@@ -569,20 +567,19 @@ const DiscoveryFiltersPanel = ({
 
                 <div>
                     <p className='mb-2 text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
-                        Minimum urgency
+                        {t('discovery.minimumUrgency')}
                     </p>
                     <div className='flex flex-wrap gap-2'>
-                        {chipModel.urgency.map(level => (
+                        {chipModel.urgency.map((level) => (
                             <Button
                                 key={level.id}
                                 variant={level.active ? 'secondary' : 'neutral'}
                                 className='px-3 py-1 text-xs'
                                 onClick={() => {
                                     onPatch({
-                                        minUrgency:
-                                            level.active ? undefined : (
-                                                level.value
-                                            ),
+                                        minUrgency: level.active
+                                            ? undefined
+                                            : level.value,
                                     });
                                 }}
                             >
@@ -598,7 +595,7 @@ const DiscoveryFiltersPanel = ({
                             htmlFor={`${idPrefix}-radius`}
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'
                         >
-                            Radius (m)
+                            {t('discovery.radiusMeters')}
                         </label>
                         <Input
                             id={`${idPrefix}-radius`}
@@ -609,14 +606,15 @@ const DiscoveryFiltersPanel = ({
                             max={100000}
                             placeholder={String(nearbyDefaultRadiusMeters)}
                             value={state.radiusMeters ?? ''}
-                            onChange={event => {
+                            onChange={(event) => {
                                 const value = Number.parseInt(
                                     event.target.value,
                                     10,
                                 );
                                 onPatch({
-                                    radiusMeters:
-                                        Number.isNaN(value) ? undefined : value,
+                                    radiusMeters: Number.isNaN(value)
+                                        ? undefined
+                                        : value,
                                 });
                             }}
                         />
@@ -626,7 +624,7 @@ const DiscoveryFiltersPanel = ({
                             htmlFor={`${idPrefix}-lat`}
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'
                         >
-                            Center lat
+                            {t('discovery.centerLat')}
                         </label>
                         <Input
                             id={`${idPrefix}-lat`}
@@ -635,7 +633,7 @@ const DiscoveryFiltersPanel = ({
                             type='number'
                             step='0.0001'
                             value={latValue}
-                            onChange={event => {
+                            onChange={(event) => {
                                 const value = Number.parseFloat(
                                     event.target.value,
                                 );
@@ -656,7 +654,7 @@ const DiscoveryFiltersPanel = ({
                             htmlFor={`${idPrefix}-lng`}
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'
                         >
-                            Center lng
+                            {t('discovery.centerLng')}
                         </label>
                         <Input
                             id={`${idPrefix}-lng`}
@@ -665,7 +663,7 @@ const DiscoveryFiltersPanel = ({
                             type='number'
                             step='0.0001'
                             value={lngValue}
-                            onChange={event => {
+                            onChange={(event) => {
                                 const value = Number.parseFloat(
                                     event.target.value,
                                 );
@@ -700,10 +698,10 @@ const DiscoveryFiltersPanel = ({
                             });
                         }}
                     >
-                        Reset filters
+                        {t('discovery.resetFilters')}
                     </Button>
                     <p className='text-xs text-mh-textSoft'>
-                        Filters persist in the URL for sharable triage context.
+                        {t('discovery.filtersPersist')}
                     </p>
                 </div>
             </div>
@@ -721,74 +719,72 @@ interface DashboardRouteProps {
 const LegalPolicyRoute = ({
     route,
 }: {
-    route:
-        | '/legal/terms'
-        | '/legal/privacy'
-        | '/legal/community-guidelines';
+    route: '/legal/terms' | '/legal/privacy' | '/legal/community-guidelines';
 }) => {
+    const { t } = useLocale();
     const content =
-        route === '/legal/terms' ?
-            {
-                title: 'Terms of Service',
-                summary:
-                    'Patchwork is peer-to-peer mutual-aid coordination, not an emergency, professional, fulfillment, or identity-guarantee service.',
-                points: [
-                    'You must be at least 18 and accept the current policy version before protected actions.',
-                    'Public aid, volunteer, and directory records can federate through AT Protocol; private offers, connections, evidence, and attachments do not.',
-                    'Production chat is not available. Activity inbox items are workflow events, not messages.',
-                    'Synthetic records are fictional. Public-source organization references do not imply participation or endorsement.',
-                ],
-            }
-        : route === '/legal/privacy' ?
-            {
-                title: 'Privacy Policy',
-                summary:
-                    'Patchwork separates public AT records from private operational state and minimizes location, attachment, notification, and moderation data.',
-                points: [
-                    'Personal and volunteer locations are public only at 1 km precision or coarser.',
-                    'Exact personal coordinates move only over a freshly consented encrypted peer channel and are not persisted by Patchwork.',
-                    'A verified, non-confidential resource address is public only after separate moderator approval.',
-                    'Private attachments are scanned and transformed; clean access is authenticated and short-lived.',
-                    'Exports omit credentials, file bodies, signed URLs, third-party casework, and exact personal coordinates.',
-                ],
-            }
-        :   {
-                title: 'Community Guidelines',
-                summary:
-                    'Use Patchwork in good faith, protect privacy, and report fraud, harassment, discrimination, illegal activity, or attempts to bypass safety controls.',
-                points: [
-                    'Never publish another person’s private contact or exact-location information.',
-                    'Moderators can delist, suspend visibility, restore content, and review appeals with an audit trail.',
-                    'The report-review aim is two business days on a best-effort basis; it is not an emergency response or guaranteed service level.',
-                    'Use emergency and professional services outside Patchwork when the situation requires them.',
-                ],
-            };
+        route === '/legal/terms'
+            ? {
+                  title: t('legal.termsTitle'),
+                  summary: t('legal.termsSummary'),
+                  points: [
+                      t('legal.terms1'),
+                      t('legal.terms2'),
+                      t('legal.terms3'),
+                      t('legal.terms4'),
+                  ],
+              }
+            : route === '/legal/privacy'
+              ? {
+                    title: t('legal.privacyTitle'),
+                    summary: t('legal.privacySummary'),
+                    points: [
+                        t('legal.privacy1'),
+                        t('legal.privacy2'),
+                        t('legal.privacy3'),
+                        t('legal.privacy4'),
+                        t('legal.privacy5'),
+                    ],
+                }
+              : {
+                    title: t('legal.guidelinesTitle'),
+                    summary: t('legal.guidelinesSummary'),
+                    points: [
+                        t('legal.guidelines1'),
+                        t('legal.guidelines2'),
+                        t('legal.guidelines3'),
+                        t('legal.guidelines4'),
+                    ],
+                };
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <p className='mh-kicker'>Unapproved draft — not in force</p>
+                <p className='mh-kicker'>{t('legal.draft')}</p>
                 <h1 className='mh-route-title'>{content.title}</h1>
                 <p className='mt-2 max-w-3xl text-mh-textMuted'>
                     {content.summary}
                 </p>
             </header>
-            <Panel title='Buyer-ready policy summary'>
+            <Panel title={t('legal.summaryTitle')}>
                 <ul className='list-disc space-y-2 pl-5'>
-                    {content.points.map(point => (
+                    {content.points.map((point) => (
                         <li key={point}>{point}</li>
                     ))}
                 </ul>
-                <p className='mt-4 text-sm font-bold'>
-                    Patchwork remains operationally NO-GO. These drafts require
-                    legal and product-owner approval before publication as
-                    effective terms.
-                </p>
+                <p className='mt-4 text-sm font-bold'>{t('legal.noGo')}</p>
             </Panel>
-            <nav aria-label='Policy drafts' className='flex flex-wrap gap-4'>
-                <a className='mh-link' href='/legal/terms'>Terms</a>
-                <a className='mh-link' href='/legal/privacy'>Privacy</a>
+            <nav
+                aria-label={t('legal.navLabel')}
+                className='flex flex-wrap gap-4'
+            >
+                <a className='mh-link' href='/legal/terms'>
+                    {t('legal.termsNav')}
+                </a>
+                <a className='mh-link' href='/legal/privacy'>
+                    {t('legal.privacyNav')}
+                </a>
                 <a className='mh-link' href='/legal/community-guidelines'>
-                    Community guidelines
+                    {t('legal.guidelinesNav')}
                 </a>
             </nav>
         </section>
@@ -801,12 +797,13 @@ const DashboardRoute = ({
     discoveryState,
     onPatchDiscovery,
 }: DashboardRouteProps) => {
+    const { t } = useLocale();
     return (
         <>
             <header className='mh-hero mb-8 pb-6 sm:pb-8'>
                 <div className='mb-5 flex flex-wrap items-center justify-between gap-3'>
-                    <p className='mh-kicker'>Your neighborhood response desk</p>
-                    <Badge tone='danger'>Safety guardrails active</Badge>
+                    <p className='mh-kicker'>{t('dashboard.phaseLabel')}</p>
+                    <Badge tone='danger'>{t('dashboard.safetyBadge')}</Badge>
                 </div>
 
                 <div className='grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]'>
@@ -815,9 +812,7 @@ const DashboardRoute = ({
                             {appTitle}
                         </h1>
                         <p className='mt-4 max-w-xl text-base text-mh-textMuted sm:text-lg'>
-                            Find help. Offer what you can. Keep urgent work
-                            moving without exposing more than neighbors need to
-                            know.
+                            {t('dashboard.description')}
                         </p>
                         <div className='mt-5 flex flex-wrap gap-2'>
                             <Button
@@ -826,50 +821,52 @@ const DashboardRoute = ({
                                     onNavigate('/map');
                                 }}
                             >
-                                Open map triage
+                                {t('dashboard.openMapTriage')}
                             </Button>
                             <Button
                                 variant='secondary'
                                 onClick={() => onNavigate('/posting')}
                             >
-                                Open posting form
+                                {t('dashboard.openPostingForm')}
                             </Button>
-                            {webDataMode === 'fixture' ?
+                            {webDataMode === 'fixture' ? (
                                 <Button
                                     variant='neutral'
                                     onClick={() => onNavigate('/chat')}
                                 >
-                                    Open chat handoff
+                                    {t('dashboard.openChatHandoff')}
                                 </Button>
-                            :   null}
+                            ) : null}
                         </div>
                     </div>
 
                     <aside className='mh-card p-4 sm:p-5'>
-                        <p className='mh-kicker'>Current service posture</p>
+                        <p className='mh-kicker'>
+                            {t('dashboard.servicePosture')}
+                        </p>
                         <ul className='mt-3 grid gap-2'>
                             <li className='mh-stat-tile'>
                                 <p className='text-xs uppercase tracking-widest text-mh-textSoft'>
-                                    Discovery source
+                                    {t('dashboard.discoverySource')}
                                 </p>
                                 <p className='mt-1 text-sm font-black text-mh-text'>
-                                    Durable projections
+                                    {t('dashboard.durableProjections')}
                                 </p>
                             </li>
                             <li className='mh-stat-tile'>
                                 <p className='text-xs uppercase tracking-widest text-mh-textSoft'>
-                                    Safety controls
+                                    {t('dashboard.safetyControls')}
                                 </p>
                                 <p className='mt-1 text-sm font-black text-mh-text'>
-                                    Reports and blocks
+                                    {t('dashboard.reportsAndBlocks')}
                                 </p>
                             </li>
                             <li className='mh-stat-tile'>
                                 <p className='text-xs uppercase tracking-widest text-mh-textSoft'>
-                                    Account controls
+                                    {t('dashboard.accountControls')}
                                 </p>
                                 <p className='mt-1 text-sm font-black text-mh-text'>
-                                    Export and deactivation
+                                    {t('dashboard.exportAndDeactivation')}
                                 </p>
                             </li>
                         </ul>
@@ -879,30 +876,31 @@ const DashboardRoute = ({
 
             <div className='grid gap-6 lg:grid-cols-5'>
                 <section className='lg:col-span-3'>
-                    <Panel title='Discovery shell'>
+                    <Panel title={String(t('dashboard.discoveryShellTitle'))}>
                         <p className='mb-3 text-sm text-mh-textMuted'>
-                            Search support requests by category and route to the
-                            safest nearby response path.
+                            {t('dashboard.discoveryShellDescription')}
                         </p>
                         <label
                             htmlFor='search-requests'
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                         >
-                            Search requests
+                            {t('dashboard.searchRequests')}
                         </label>
                         <Input
                             id='search-requests'
                             name='searchRequests'
                             autoComplete='off'
-                            placeholder='e.g., food, shelter, transport…'
+                            placeholder={String(
+                                t('discovery.searchPlaceholder'),
+                            )}
                             value={discoveryState.text ?? ''}
-                            onChange={event => {
+                            onChange={(event) => {
                                 const nextValue = event.target.value.trim();
                                 onPatchDiscovery({
                                     text:
-                                        nextValue.length > 0 ?
-                                            nextValue
-                                        :   undefined,
+                                        nextValue.length > 0
+                                            ? nextValue
+                                            : undefined,
                                 });
                             }}
                         />
@@ -913,62 +911,58 @@ const DashboardRoute = ({
                                     onNavigate('/map');
                                 }}
                             >
-                                Find nearby
+                                {t('dashboard.findNearby')}
                             </Button>
                             <Button
                                 variant='secondary'
                                 onClick={() => onNavigate('/posting')}
                             >
-                                Create post
+                                {t('dashboard.createPost')}
                             </Button>
                             <Button
                                 variant='neutral'
                                 onClick={() => onNavigate('/feed')}
                             >
-                                Open live feed
+                                {t('dashboard.openLiveFeed')}
                             </Button>
                         </div>
                     </Panel>
                 </section>
 
                 <section className='lg:col-span-2'>
-                    <Card title='Pre-alpha operating boundary'>
+                    <Card title={String(t('dashboard.operatingBoundaryTitle'))}>
                         <ul className='list-disc space-y-1 pl-5 text-sm'>
-                            <li>Patchwork is not an emergency service.</li>
-                            <li>Discovery uses approximate public locations.</li>
-                            <li>
-                                Sign in before posting or using private safety
-                                and account controls.
-                            </li>
+                            <li>{t('dashboard.notEmergency')}</li>
+                            <li>{t('dashboard.approximateLocations')}</li>
+                            <li>{t('dashboard.signInBoundary')}</li>
                         </ul>
                         <p className='mt-3'>
-                            Read the{' '}
+                            {t('dashboard.readGuidelinesPrefix')}{' '}
                             <TextLink href='/legal/community-guidelines'>
-                                community guidelines
+                                {t('dashboard.communityGuidelines')}
                             </TextLink>{' '}
-                            before participating.
+                            {t('dashboard.readGuidelinesSuffix')}
                         </p>
                     </Card>
                 </section>
 
                 <section className='lg:col-span-5'>
-                    <Card title='Quick route handoffs'>
+                    <Card
+                        title={String(t('dashboard.quickRouteHandoffsTitle'))}
+                    >
                         <ul className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
                             {shellSections
                                 .filter(
-                                    section =>
+                                    (section) =>
                                         primaryRoutes.includes(
                                             section.route as AppRoute,
                                         ) ||
-                                        (
-                                            webDataMode === 'fixture' ?
-                                                accountRoutes
-                                            :   productionAccountRoutes
-                                        ).includes(
-                                            section.route as AppRoute,
-                                        ),
+                                        (webDataMode === 'fixture'
+                                            ? accountRoutes
+                                            : productionAccountRoutes
+                                        ).includes(section.route as AppRoute),
                                 )
-                                .map(section => (
+                                .map((section) => (
                                     <li
                                         key={section.route}
                                         className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'
@@ -987,7 +981,9 @@ const DashboardRoute = ({
                                                     onNavigate(section.route)
                                                 }
                                             >
-                                                Open {section.title}
+                                                {t('dashboard.openSection', {
+                                                    title: section.title,
+                                                })}
                                             </button>
                                         </p>
                                     </li>
@@ -1019,7 +1015,7 @@ interface MapRouteProps {
 }
 
 const LazyInteractiveMap = lazy(() =>
-    import('../components/map/InteractiveMap.js').then(module => ({
+    import('../components/map/InteractiveMap.js').then((module) => ({
         default: module.InteractiveMap,
     })),
 );
@@ -1041,6 +1037,7 @@ const MapRoute = ({
     onTriageAction,
     onOpenChat,
 }: MapRouteProps) => {
+    const { t, fmt } = useLocale();
     const [tileError, setTileError] = useState<string>();
     const [focusedArea, setFocusedArea] = useState<{
         center: { lat: number; lng: number };
@@ -1079,13 +1076,13 @@ const MapRoute = ({
     );
     const activeArea =
         focusedArea ??
-        (discoveryState.center && discoveryState.radiusMeters ?
-            {
-                center: discoveryState.center,
-                radiusMeters: discoveryState.radiusMeters,
-                label: 'Selected map area',
-            }
-        :   undefined);
+        (discoveryState.center && discoveryState.radiusMeters
+            ? {
+                  center: discoveryState.center,
+                  radiusMeters: discoveryState.radiusMeters,
+                  label: String(t('map.selectedArea')),
+              }
+            : undefined);
 
     useEffect(() => {
         if (!focusedArea) return;
@@ -1110,12 +1107,12 @@ const MapRoute = ({
             center: normalized.center,
             radiusMeters: normalized.radiusMeters,
             label: area.label,
-            ...(discoveryState.center ?
-                { previousCenter: discoveryState.center }
-            :   {}),
-            ...(discoveryState.radiusMeters ?
-                { previousRadiusMeters: discoveryState.radiusMeters }
-            :   {}),
+            ...(discoveryState.center
+                ? { previousCenter: discoveryState.center }
+                : {}),
+            ...(discoveryState.radiusMeters
+                ? { previousRadiusMeters: discoveryState.radiusMeters }
+                : {}),
         });
         onPushDiscovery({
             center: normalized.center,
@@ -1123,90 +1120,85 @@ const MapRoute = ({
         });
     };
 
-    const leaveFocusedArea = (
-        target: 'previous' | 'clear',
-    ) => {
+    const leaveFocusedArea = (target: 'previous' | 'clear') => {
         const patch =
-            target === 'previous' && focusedArea ?
-                {
-                    center: focusedArea.previousCenter,
-                    radiusMeters: focusedArea.previousRadiusMeters,
-                }
-            :   { center: undefined, radiusMeters: undefined };
+            target === 'previous' && focusedArea
+                ? {
+                      center: focusedArea.previousCenter,
+                      radiusMeters: focusedArea.previousRadiusMeters,
+                  }
+                : { center: undefined, radiusMeters: undefined };
         setFocusedArea(undefined);
         onSelectPost(undefined);
         onPushDiscovery(patch);
     };
 
-    const selectedRecord =
-        selectedPostId ?
-            feedRecords.find(record => record.card.id === selectedPostId)
-        :   undefined;
+    const selectedRecord = selectedPostId
+        ? feedRecords.find((record) => record.card.id === selectedPostId)
+        : undefined;
 
-    const drawer =
-        selectedPostId ?
-            openMapDetailDrawer(mapView.filteredCards, selectedPostId)
-        :   closeMapDetailDrawer();
+    const drawer = selectedPostId
+        ? openMapDetailDrawer(mapView.filteredCards, selectedPostId)
+        : closeMapDetailDrawer();
 
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>
-                    Map triage
-                </h1>
+                <h1 className='mh-route-title'>{t('map.heading')}</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Privacy-safe request areas plus moderator-approved exact
-                    public places, with direct handoff actions.
+                    {t('map.description')}
                 </p>
                 <div className='mt-3 flex flex-wrap gap-2'>
                     <Badge tone={dataOrigin === 'api' ? 'success' : 'info'}>
                         {dataOriginLabel(dataOrigin)}
                     </Badge>
                 </div>
-                {errorMessage || resourceErrorMessage ?
+                {errorMessage || resourceErrorMessage ? (
                     <div
                         role='alert'
                         className='mh-alert mt-3 text-xs font-bold'
                     >
-                        {errorMessage ?
-                            <p>API sync issue: {errorMessage}</p>
-                        :   null}
-                        {errorMessage && feedRecords.length > 0 ?
+                        {errorMessage ? (
                             <p>
-                                Showing previously loaded results; they may be
-                                stale.
+                                {t('map.apiSyncIssue', {
+                                    message: errorMessage,
+                                })}
                             </p>
-                        :   null}
-                        {resourceErrorMessage ?
+                        ) : null}
+                        {errorMessage && feedRecords.length > 0 ? (
+                            <p>{t('map.staleResults')}</p>
+                        ) : null}
+                        {resourceErrorMessage ? (
                             <p>
-                                Public-place sync issue:{' '}
-                                {resourceErrorMessage}
+                                {t('map.publicPlaceIssue', {
+                                    message: resourceErrorMessage,
+                                })}
                             </p>
-                        :   null}
+                        ) : null}
                         <div className='mt-2 flex flex-wrap gap-2'>
-                            {errorMessage ?
+                            {errorMessage ? (
                                 <Button
                                     type='button'
                                     variant='neutral'
                                     className='px-3 py-1 text-xs'
                                     onClick={onRetry}
                                 >
-                                    Retry discovery
+                                    {t('map.retryDiscovery')}
                                 </Button>
-                            :   null}
-                            {resourceErrorMessage ?
+                            ) : null}
+                            {resourceErrorMessage ? (
                                 <Button
                                     type='button'
                                     variant='neutral'
                                     className='px-3 py-1 text-xs'
                                     onClick={onRetryResources}
                                 >
-                                    Retry public places
+                                    {t('map.retryPlaces')}
                                 </Button>
-                            :   null}
+                            ) : null}
                         </div>
                     </div>
-                :   null}
+                ) : null}
             </header>
 
             <DiscoveryFiltersPanel
@@ -1217,50 +1209,63 @@ const MapRoute = ({
 
             <section className='rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'>
                 {tileError ? (
-                    <div role='alert' className='mh-alert mb-3 text-xs font-bold'>
+                    <div
+                        role='alert'
+                        className='mh-alert mb-3 text-xs font-bold'
+                    >
                         <p>{tileError}</p>
                     </div>
                 ) : null}
-                {activeArea ?
+                {activeArea ? (
                     <div
                         className='mb-3 flex flex-wrap items-center gap-2 border-2 border-mh-borderSoft bg-mh-surface p-3'
                         role='status'
                         aria-live='polite'
                     >
-                        <Badge tone='info'>Filtered to this area</Badge>
+                        <Badge tone='info'>{t('map.filteredArea')}</Badge>
                         <p className='mr-auto text-sm text-mh-textMuted'>
                             <strong className='text-mh-text'>
                                 {activeArea.label}
                             </strong>{' '}
-                            · {mapView.filteredCards.length} requests ·{' '}
-                            {mapResourceView.cards.length} public places · within{' '}
-                            {(activeArea.radiusMeters / 1000).toLocaleString(
-                                undefined,
-                                { maximumFractionDigits: 1 },
-                            )}{' '}
-                            km
+                            ·{' '}
+                            {t('map.areaSummary', {
+                                requests: fmt.number(
+                                    mapView.filteredCards.length,
+                                ),
+                                places: fmt.number(
+                                    mapResourceView.cards.length,
+                                ),
+                                distance: fmt.number(
+                                    activeArea.radiusMeters / 1000,
+                                    {
+                                        maximumFractionDigits: 1,
+                                    },
+                                ),
+                            })}
                         </p>
-                        {focusedArea ?
+                        {focusedArea ? (
                             <Button
                                 type='button'
                                 variant='neutral'
                                 className='px-3 py-1 text-xs'
                                 onClick={() => leaveFocusedArea('previous')}
                             >
-                                Return to previous area
+                                {t('map.returnArea')}
                             </Button>
-                        :   null}
+                        ) : null}
                         <Button
                             type='button'
                             variant='neutral'
                             className='px-3 py-1 text-xs'
                             onClick={() => leaveFocusedArea('clear')}
                         >
-                            Clear area filter
+                            {t('map.clearArea')}
                         </Button>
                     </div>
-                :   null}
-                <Suspense fallback={<div className='mh-skeleton h-96 w-full' />}>
+                ) : null}
+                <Suspense
+                    fallback={<div className='mh-skeleton h-96 w-full' />}
+                >
                     <LazyInteractiveMap
                         cards={mapView.filteredCards}
                         resources={mapResourceView.cards}
@@ -1275,8 +1280,8 @@ const MapRoute = ({
             </section>
 
             <div className='grid gap-6 xl:grid-cols-2'>
-                <Card title='Cluster overview'>
-                    {isLoading ?
+                <Card title={String(t('map.clusterOverviewTitle'))}>
+                    {isLoading ? (
                         <ul className='space-y-3' aria-live='polite'>
                             {Array.from({ length: 3 }).map((_, index) => (
                                 <li
@@ -1289,23 +1294,20 @@ const MapRoute = ({
                                 </li>
                             ))}
                         </ul>
-                    : mapView.clusters.length === 0 ?
-                        <p>
-                            No clusters for current filters. Try widening radius
-                            or clearing category/status chips.
-                        </p>
-                    :   <ul className='space-y-3'>
-                            {mapView.clusters.map(cluster => (
-                                <li
-                                    key={cluster.id}
-                                    className='mh-record-card'
-                                >
+                    ) : mapView.clusters.length === 0 ? (
+                        <p>{t('map.noClusters')}</p>
+                    ) : (
+                        <ul className='space-y-3'>
+                            {mapView.clusters.map((cluster) => (
+                                <li key={cluster.id} className='mh-record-card'>
                                     <p className='text-sm font-bold text-mh-text'>
                                         {cluster.label}
                                     </p>
                                     <p className='mt-1 text-xs text-mh-textSoft'>
-                                        {cluster.count} requests · Max urgency{' '}
-                                        {cluster.urgencyMax}
+                                        {t('map.clusterRequests', {
+                                            count: cluster.count,
+                                            urgency: cluster.urgencyMax,
+                                        })}
                                     </p>
                                     <div className='mt-2'>
                                         <Badge
@@ -1319,11 +1321,11 @@ const MapRoute = ({
                                 </li>
                             ))}
                         </ul>
-                    }
+                    )}
                 </Card>
 
-                <Card title='Request markers'>
-                    {isLoading ?
+                <Card title={String(t('map.requestMarkersTitle'))}>
+                    {isLoading ? (
                         <ul className='space-y-3' aria-live='polite'>
                             {Array.from({ length: 3 }).map((_, index) => (
                                 <li
@@ -1337,17 +1339,12 @@ const MapRoute = ({
                                 </li>
                             ))}
                         </ul>
-                    : mapView.filteredCards.length === 0 ?
-                        <p>
-                            No requests in selected area. Set a wider radius or
-                            switch to latest feed tab.
-                        </p>
-                    :   <ul className='space-y-3'>
-                            {mapView.filteredCards.map(card => (
-                                <li
-                                    key={card.id}
-                                    className='mh-record-card'
-                                >
+                    ) : mapView.filteredCards.length === 0 ? (
+                        <p>{t('map.noRequests')}</p>
+                    ) : (
+                        <ul className='space-y-3'>
+                            {mapView.filteredCards.map((card) => (
+                                <li key={card.id} className='mh-record-card'>
                                     <div className='flex flex-wrap items-start justify-between gap-2'>
                                         <p className='text-sm font-bold text-mh-text'>
                                             {card.title}
@@ -1358,7 +1355,9 @@ const MapRoute = ({
                                                     card.urgency,
                                                 )}
                                             >
-                                                Urgency {card.urgency}
+                                                {t('map.urgencyLabel', {
+                                                    level: card.urgency,
+                                                })}
                                             </Badge>
                                             <Badge
                                                 tone={toSeverityTone(
@@ -1380,20 +1379,24 @@ const MapRoute = ({
                                                 onSelectPost(card.id)
                                             }
                                         >
-                                            Open triage drawer
+                                            {t('map.openTriageDrawer')}
                                         </Button>
                                     </div>
                                 </li>
                             ))}
                         </ul>
-                    }
+                    )}
                 </Card>
             </div>
 
-            {drawer.open && selectedRecord ?
+            {drawer.open && selectedRecord ? (
                 <Panel
-                    title='Map detail drawer'
-                    aria-label={`Details for ${drawer.title ?? 'selected request'}`}
+                    title={String(t('map.mapDetailDrawerTitle'))}
+                    aria-label={String(
+                        t('map.detailsFor', {
+                            title: drawer.title ?? t('map.selectedRequest'),
+                        }),
+                    )}
                 >
                     <p className='text-lg font-bold text-mh-text'>
                         {drawer.title}
@@ -1402,27 +1405,27 @@ const MapRoute = ({
                         {drawer.summary}
                     </p>
                     <div className='mt-3 flex flex-wrap gap-2'>
-                        {drawer.status ?
+                        {drawer.status ? (
                             <Badge tone={toSeverityTone(drawer.status)}>
                                 {drawer.status}
                             </Badge>
-                        :   null}
+                        ) : null}
                         <Badge tone='info'>{selectedRecord.recipientDid}</Badge>
                     </div>
                     <div className='mt-4 flex flex-wrap gap-2'>
                         {drawer.actions
                             .filter(
-                                action =>
+                                (action) =>
                                     webDataMode === 'fixture' ||
                                     action.action !== 'contact_helper',
                             )
-                            .map(action => (
+                            .map((action) => (
                                 <Button
                                     key={action.action}
                                     variant={
-                                        action.action === 'contact_helper' ?
-                                            'primary'
-                                        :   'neutral'
+                                        action.action === 'contact_helper'
+                                            ? 'primary'
+                                            : 'neutral'
                                     }
                                     className='px-3 py-1 text-xs'
                                     aria-label={action.ariaLabel}
@@ -1448,11 +1451,11 @@ const MapRoute = ({
                             className='px-3 py-1 text-xs'
                             onClick={() => onSelectPost(undefined)}
                         >
-                            Close drawer
+                            {t('map.closeDrawer')}
                         </Button>
                     </div>
                 </Panel>
-            :   null}
+            ) : null}
         </section>
     );
 };
@@ -1470,18 +1473,16 @@ const lifecycleStatusFromValue = (
     value: string,
 ): LifecycleStatus | undefined => {
     const normalized = value === 'in-progress' ? 'in_progress' : value;
-    return (
-            [
-                'open',
-                'triaged',
-                'assigned',
-                'in_progress',
-                'resolved',
-                'archived',
-            ].includes(normalized)
-        ) ?
-            (normalized as LifecycleStatus)
-        :   undefined;
+    return [
+        'open',
+        'triaged',
+        'assigned',
+        'in_progress',
+        'resolved',
+        'archived',
+    ].includes(normalized)
+        ? (normalized as LifecycleStatus)
+        : undefined;
 };
 
 const LIFECYCLE_STATUS_TONES: Record<
@@ -1501,10 +1502,11 @@ interface StatusTimelineProps {
 }
 
 const StatusTimeline = ({ timeline }: StatusTimelineProps) => {
+    const { t, fmt } = useLocale();
     if (timeline.length === 0) {
         return (
             <p className='text-xs text-mh-textSoft'>
-                No lifecycle transitions recorded yet.
+                {t('safety.noTransitions')}
             </p>
         );
     }
@@ -1540,14 +1542,17 @@ const StatusTimeline = ({ timeline }: StatusTimelineProps) => {
                             </Badge>
                         </div>
                         <p className='mt-1 text-xs text-mh-textSoft'>
-                            {entry.actorRole} ({entry.actorDid}) at{' '}
-                            {new Date(entry.timestamp).toLocaleString()}
+                            {t('safety.transitionAt', {
+                                role: entry.actorRole,
+                                did: entry.actorDid,
+                                date: fmt.longDate(entry.timestamp),
+                            })}
                         </p>
-                        {entry.reason ?
+                        {entry.reason ? (
                             <p className='mt-1 text-xs text-mh-textMuted'>
-                                Reason: {entry.reason}
+                                {t('safety.reason', { reason: entry.reason })}
                             </p>
-                        :   null}
+                        ) : null}
                     </div>
                 </li>
             ))}
@@ -1590,22 +1595,23 @@ const replaceRecordFromAtResult = (
     records: readonly FeedRecordEnvelope[],
     result: AtAidPostResult,
 ): FeedRecordEnvelope[] =>
-    records.map(record =>
-        record.aidPostUri === result.uri ?
-            {
-                ...record,
-                cid: result.cid,
-                card: {
-                    ...record.card,
-                    status: result.record.status,
-                    updatedAt:
-                        result.record.updatedAt ?? result.record.createdAt,
-                },
-            }
-        :   record,
+    records.map((record) =>
+        record.aidPostUri === result.uri
+            ? {
+                  ...record,
+                  cid: result.cid,
+                  card: {
+                      ...record.card,
+                      status: result.record.status,
+                      updatedAt:
+                          result.record.updatedAt ?? result.record.createdAt,
+                  },
+              }
+            : record,
     );
 
 const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
+    const { t } = useLocale();
     const [mode, setMode] = useState<'report' | 'block'>();
     const [reason, setReason] = useState<AidPostReportReason>('other');
     const [details, setDetails] = useState('');
@@ -1625,13 +1631,13 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
         });
         setPending(false);
         if (!result.ok) {
-            setError(`${result.code}: ${result.error}`);
+            setError(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         setNotice(
-            result.data.created ?
-                'Report submitted.'
-            :   'Report already submitted.',
+            result.data.created
+                ? t('safety.reportSubmitted')
+                : t('safety.reportDuplicate'),
         );
         setMode(undefined);
         setDetails('');
@@ -1643,15 +1649,17 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
         setError(undefined);
         const result = await blockUserViaApi({
             subjectDid: record.recipientDid,
-            reason: 'Blocked from a discovered aid request.',
+            reason: t('safety.blockedReason'),
         });
         setPending(false);
         if (!result.ok) {
-            setError(`${result.code}: ${result.error}`);
+            setError(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         setNotice(
-            result.data.created ? 'Author blocked.' : 'Author already blocked.',
+            result.data.created
+                ? t('safety.authorBlocked')
+                : t('safety.authorAlreadyBlocked'),
         );
         setMode(undefined);
     };
@@ -1663,57 +1671,63 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
                     type='button'
                     variant='neutral'
                     className='px-3 py-1 text-xs'
-                    aria-label={`Report ${record.card.title}`}
+                    aria-label={t('safety.reportLabel', {
+                        title: record.card.title,
+                    })}
                     onClick={() => setMode('report')}
                 >
-                    Report request
+                    {t('safety.report')}
                 </Button>
                 <Button
                     type='button'
                     variant='neutral'
                     className='px-3 py-1 text-xs'
-                    aria-label={`Block author of ${record.card.title}`}
+                    aria-label={t('safety.blockLabel', {
+                        title: record.card.title,
+                    })}
                     onClick={() => setMode('block')}
                 >
-                    Block author
+                    {t('safety.block')}
                 </Button>
             </div>
 
-            {mode === 'report' ?
+            {mode === 'report' ? (
                 <form className='mt-3 space-y-3' onSubmit={submitReport}>
                     <label className='block text-xs font-bold'>
-                        Report reason
+                        {t('safety.reportReason')}
                         <select
                             name='reportReason'
                             autoComplete='off'
                             className='mt-1 block w-full border-2 border-mh-border bg-mh-surface p-2'
                             value={reason}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setReason(
                                     event.target.value as AidPostReportReason,
                                 )
                             }
                         >
-                            <option value='spam'>Spam</option>
-                            <option value='abuse'>Abuse</option>
-                            <option value='fraud'>Fraud</option>
-                            <option value='other'>Other</option>
+                            <option value='spam'>{t('safety.spam')}</option>
+                            <option value='abuse'>{t('safety.abuse')}</option>
+                            <option value='fraud'>{t('safety.fraud')}</option>
+                            <option value='other'>{t('safety.other')}</option>
                         </select>
                     </label>
                     <label className='block text-xs font-bold'>
-                        Private report details
+                        {t('safety.details')}
                         <textarea
                             name='reportDetails'
                             autoComplete='off'
                             className='mt-1 block min-h-24 w-full border-2 border-mh-border bg-mh-surface p-2'
                             maxLength={1000}
                             value={details}
-                            onChange={event => setDetails(event.target.value)}
+                            onChange={(event) => setDetails(event.target.value)}
                         />
                     </label>
                     <div className='flex flex-wrap gap-2'>
                         <Button type='submit' disabled={pending}>
-                            {pending ? 'Submitting...' : 'Submit report'}
+                            {pending
+                                ? t('safety.submitting')
+                                : t('safety.submit')}
                         </Button>
                         <Button
                             type='button'
@@ -1721,30 +1735,29 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
                             onClick={() => setMode(undefined)}
                             disabled={pending}
                         >
-                            Cancel
+                            {t('safety.cancel')}
                         </Button>
                     </div>
                 </form>
-            : mode === 'block' ?
+            ) : mode === 'block' ? (
                 <div
                     role='alertdialog'
-                    aria-label='Confirm block author'
+                    aria-label={t('safety.confirmBlockLabel')}
                     className='mh-alert mt-3'
                 >
                     <p className='text-sm font-bold'>
-                        Block this request author?
+                        {t('safety.confirmBlock')}
                     </p>
-                    <p className='mt-1 text-xs'>
-                        This private safety action is stored by Patchwork and is
-                        not published to AT Protocol.
-                    </p>
+                    <p className='mt-1 text-xs'>{t('safety.blockPrivacy')}</p>
                     <div className='mt-2 flex flex-wrap gap-2'>
                         <Button
                             type='button'
                             onClick={() => void confirmBlock()}
                             disabled={pending}
                         >
-                            {pending ? 'Blocking...' : 'Confirm block author'}
+                            {pending
+                                ? t('safety.blocking')
+                                : t('safety.confirmBlockLabel')}
                         </Button>
                         <Button
                             type='button'
@@ -1752,25 +1765,25 @@ const SafetyActions = ({ record }: { record: FeedRecordEnvelope }) => {
                             onClick={() => setMode(undefined)}
                             disabled={pending}
                         >
-                            Cancel
+                            {t('safety.cancel')}
                         </Button>
                     </div>
                 </div>
-            :   null}
+            ) : null}
 
-            {notice ?
+            {notice ? (
                 <p
                     role='status'
                     className='mt-2 text-xs font-bold text-mh-success'
                 >
                     {notice}
                 </p>
-            :   null}
-            {error ?
+            ) : null}
+            {error ? (
                 <p role='alert' className='mh-alert mt-2 text-xs font-bold'>
                     {error}
                 </p>
-            :   null}
+            ) : null}
         </div>
     );
 };
@@ -1784,6 +1797,7 @@ const OwnerRecordActions = ({
     onReplaceRecord: (record: FeedRecordEnvelope) => void;
     onDeleteRecord: (aidPostUri: string) => void;
 }) => {
+    const { t } = useLocale();
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [pending, setPending] = useState<'close' | 'delete'>();
     const [notice, setNotice] = useState<string>();
@@ -1800,7 +1814,7 @@ const OwnerRecordActions = ({
         });
         setPending(undefined);
         if (!result.ok) {
-            setError(`${result.code}: ${result.error}`);
+            setError(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         onReplaceRecord({
@@ -1814,7 +1828,7 @@ const OwnerRecordActions = ({
                     result.data.record.createdAt,
             },
         });
-        setNotice('Request closed.');
+        setNotice(t('safety.requestClosed'));
     };
 
     const deleteRecord = async () => {
@@ -1827,7 +1841,7 @@ const OwnerRecordActions = ({
         });
         setPending(undefined);
         if (!result.ok) {
-            setError(`${result.code}: ${result.error}`);
+            setError(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         onDeleteRecord(record.aidPostUri);
@@ -1839,7 +1853,9 @@ const OwnerRecordActions = ({
                 <Button
                     type='button'
                     variant='neutral'
-                    aria-label={`Close ${record.card.title.toLowerCase()}`}
+                    aria-label={t('safety.closeLabel', {
+                        title: record.card.title.toLowerCase(),
+                    })}
                     disabled={
                         !record.cid ||
                         record.card.status === 'closed' ||
@@ -1847,46 +1863,46 @@ const OwnerRecordActions = ({
                     }
                     onClick={() => void closeRecord()}
                 >
-                    {pending === 'close' ? 'Closing...' : 'Close request'}
+                    {pending === 'close'
+                        ? t('safety.closing')
+                        : t('safety.close')}
                 </Button>
                 <Button
                     type='button'
                     variant='neutral'
-                    aria-label={`Delete ${record.card.title.toLowerCase()}`}
+                    aria-label={t('safety.deleteLabel', {
+                        title: record.card.title.toLowerCase(),
+                    })}
                     disabled={!record.cid || pending !== undefined}
                     onClick={() => setConfirmDelete(true)}
                 >
-                    Delete request
+                    {t('safety.delete')}
                 </Button>
             </div>
-            {!record.cid ?
+            {!record.cid ? (
                 <p className='mt-2 text-xs text-mh-textMuted'>
-                    Waiting for the indexed record revision before owner
-                    mutations are available.
+                    {t('safety.waitingRevision')}
                 </p>
-            :   null}
-            {confirmDelete ?
+            ) : null}
+            {confirmDelete ? (
                 <div
                     role='alertdialog'
-                    aria-label='Confirm delete request'
+                    aria-label={t('safety.confirmDeleteLabel')}
                     className='mh-alert mt-3'
                 >
                     <p className='text-sm font-bold'>
-                        Permanently delete this AT record?
+                        {t('safety.confirmDelete')}
                     </p>
-                    <p className='mt-1 text-xs'>
-                        Deletion also removes its durable private workflow after
-                        the PDS confirms it.
-                    </p>
+                    <p className='mt-1 text-xs'>{t('safety.deletePrivacy')}</p>
                     <div className='mt-2 flex flex-wrap gap-2'>
                         <Button
                             type='button'
                             onClick={() => void deleteRecord()}
                             disabled={pending !== undefined}
                         >
-                            {pending === 'delete' ?
-                                'Deleting...'
-                            :   'Confirm delete request'}
+                            {pending === 'delete'
+                                ? t('safety.deleting')
+                                : t('safety.confirmDeleteLabel')}
                         </Button>
                         <Button
                             type='button'
@@ -1894,24 +1910,24 @@ const OwnerRecordActions = ({
                             onClick={() => setConfirmDelete(false)}
                             disabled={pending !== undefined}
                         >
-                            Cancel
+                            {t('safety.cancel')}
                         </Button>
                     </div>
                 </div>
-            :   null}
-            {notice ?
+            ) : null}
+            {notice ? (
                 <p
                     role='status'
                     className='mt-2 text-xs font-bold text-mh-success'
                 >
                     {notice}
                 </p>
-            :   null}
-            {error ?
+            ) : null}
+            {error ? (
                 <p role='alert' className='mh-alert mt-2 text-xs font-bold'>
                     {error}
                 </p>
-            :   null}
+            ) : null}
         </div>
     );
 };
@@ -1935,11 +1951,12 @@ const FeedRoute = ({
     onTransition,
     currentUserDid,
 }: FeedRouteProps) => {
+    const { t, fmt } = useLocale();
     const [expandedTimelineId, setExpandedTimelineId] = useState<
         string | undefined
     >();
     const cards = useMemo(
-        () => feedRecords.map(record => record.card),
+        () => feedRecords.map((record) => record.card),
         [feedRecords],
     );
     const feedView = useMemo(
@@ -1950,7 +1967,7 @@ const FeedRoute = ({
     const presentationById = useMemo(
         () =>
             new Map(
-                feedView.presentations.map(presentation => [
+                feedView.presentations.map((presentation) => [
                     presentation.id,
                     presentation,
                 ]),
@@ -1961,48 +1978,45 @@ const FeedRoute = ({
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>
-                    Feed operations
-                </h1>
+                <h1 className='mh-route-title'>{t('feed.heading')}</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Manage lifecycle transitions and launch handoffs directly
-                    from feed cards.
+                    {t('feed.description')}
                 </p>
                 <div className='mt-3 flex flex-wrap gap-2'>
                     <Badge tone={dataOrigin === 'api' ? 'success' : 'info'}>
                         {dataOriginLabel(dataOrigin)}
                     </Badge>
                 </div>
-                {errorMessage ?
+                {errorMessage ? (
                     <div
                         role='alert'
                         className='mh-alert mt-3 text-xs font-bold'
                     >
-                        <p>API sync issue: {errorMessage}</p>
-                        {feedRecords.length > 0 ?
-                            <p>
-                                Showing previously loaded results; they may be
-                                stale.
-                            </p>
-                        :   null}
+                        <p>
+                            {t('map.apiSyncIssue', { message: errorMessage })}
+                        </p>
+                        {feedRecords.length > 0 ? (
+                            <p>{t('feed.staleResults')}</p>
+                        ) : null}
                         <Button
                             type='button'
                             variant='neutral'
                             className='mt-2 px-3 py-1 text-xs'
                             onClick={onRetry}
                         >
-                            Retry discovery
+                            {t('feed.retryDiscovery')}
                         </Button>
                     </div>
-                :   null}
-                {publicSyncFailure ?
+                ) : null}
+                {publicSyncFailure ? (
                     <div
                         role='alert'
                         className='mh-alert mt-3 text-xs font-bold'
                     >
                         <p>
-                            Private workflow saved, but its public AT status is
-                            not synchronized: {publicSyncFailure.message}
+                            {t('feed.privateSyncIssue', {
+                                message: publicSyncFailure.message,
+                            })}
                         </p>
                         <Button
                             type='button'
@@ -2011,12 +2025,12 @@ const FeedRoute = ({
                             disabled={publicSyncRetrying}
                             onClick={onRetryPublicSync}
                         >
-                            {publicSyncRetrying ?
-                                'Retrying public sync...'
-                            :   'Retry public status sync'}
+                            {publicSyncRetrying
+                                ? t('feed.retryingSync')
+                                : t('feed.retrySync')}
                         </Button>
                     </div>
-                :   null}
+                ) : null}
             </header>
 
             <DiscoveryFiltersPanel
@@ -2025,8 +2039,8 @@ const FeedRoute = ({
                 onPatch={onPatchDiscovery}
             />
 
-            <Card title='Live request feed'>
-                {isLoading ?
+            <Card title={String(t('feed.liveRequestFeedTitle'))}>
+                {isLoading ? (
                     <ul className='space-y-4' aria-live='polite'>
                         {Array.from({ length: 3 }).map((_, index) => (
                             <li
@@ -2043,12 +2057,9 @@ const FeedRoute = ({
                             </li>
                         ))}
                     </ul>
-                : feedView.cards.length === 0 ?
+                ) : feedView.cards.length === 0 ? (
                     <div className='space-y-3'>
-                        <p>
-                            No requests match the current filters. Reset filters
-                            or publish a new request.
-                        </p>
+                        <p>{t('feed.noRequestsMatch')}</p>
                         <div className='flex flex-wrap gap-2'>
                             <Button
                                 variant='neutral'
@@ -2066,20 +2077,21 @@ const FeedRoute = ({
                                     });
                                 }}
                             >
-                                Reset feed filters
+                                {t('feed.resetFeedFilters')}
                             </Button>
                             <Button
                                 className='px-3 py-1 text-xs'
                                 onClick={() => onNavigate('/posting')}
                             >
-                                Create request
+                                {t('feed.createRequest')}
                             </Button>
                         </div>
                     </div>
-                :   <ul className='space-y-4'>
-                        {feedView.cards.map(card => {
+                ) : (
+                    <ul className='space-y-4'>
+                        {feedView.cards.map((card) => {
                             const record = feedRecords.find(
-                                candidate => candidate.card.id === card.id,
+                                (candidate) => candidate.card.id === card.id,
                             );
                             const presentation = presentationById.get(card.id);
 
@@ -2093,7 +2105,7 @@ const FeedRoute = ({
                                             {card.title}
                                         </p>
                                         <div className='flex flex-wrap gap-2'>
-                                            {presentation ?
+                                            {presentation ? (
                                                 <>
                                                     <Badge
                                                         tone={
@@ -2121,9 +2133,7 @@ const FeedRoute = ({
                                                                 .label
                                                         }
                                                     </Badge>
-                                                    {(
-                                                        presentation.lifecycleBadge
-                                                    ) ?
+                                                    {presentation.lifecycleBadge ? (
                                                         <Badge
                                                             tone={
                                                                 presentation
@@ -2137,20 +2147,24 @@ const FeedRoute = ({
                                                                     .label
                                                             }
                                                         </Badge>
-                                                    :   null}
+                                                    ) : null}
                                                     {record?.recordOrigin ===
-                                                    'synthetic' ?
+                                                    'synthetic' ? (
                                                         <Badge tone='info'>
-                                                            Synthetic showcase
+                                                            {t(
+                                                                'feed.synthetic',
+                                                            )}
                                                         </Badge>
-                                                    : record?.recordOrigin ===
-                                                      'sourced-public' ?
+                                                    ) : record?.recordOrigin ===
+                                                      'sourced-public' ? (
                                                         <Badge tone='info'>
-                                                            Public-source reference
+                                                            {t(
+                                                                'feed.publicSource',
+                                                            )}
                                                         </Badge>
-                                                    :   null}
+                                                    ) : null}
                                                 </>
-                                            :   null}
+                                            ) : null}
                                         </div>
                                     </div>
 
@@ -2158,27 +2172,23 @@ const FeedRoute = ({
                                         {card.description}
                                     </p>
                                     <p className='mt-1 text-xs text-mh-textSoft'>
-                                        Updated{' '}
-                                        {new Date(
-                                            card.updatedAt,
-                                        ).toLocaleString()}
+                                        {t('feed.updatedAt', {
+                                            date: fmt.longDate(card.updatedAt),
+                                        })}
                                     </p>
 
                                     {/* Lifecycle transition actions */}
-                                    {(
-                                        presentation &&
-                                        presentation.transitionActions.length >
-                                            0 &&
-                                        onTransition &&
-                                        record &&
-                                        currentUserDid === record.recipientDid
-                                    ) ?
+                                    {presentation &&
+                                    presentation.transitionActions.length > 0 &&
+                                    onTransition &&
+                                    record &&
+                                    currentUserDid === record.recipientDid ? (
                                         <div className='mt-3 flex flex-wrap gap-2'>
                                             <span className='text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
-                                                Lifecycle:
+                                                {t('feed.lifecycle')}
                                             </span>
                                             {presentation.transitionActions.map(
-                                                action => (
+                                                (action) => (
                                                     <Button
                                                         key={
                                                             action.targetStatus
@@ -2201,21 +2211,21 @@ const FeedRoute = ({
                                                 ),
                                             )}
                                         </div>
-                                    :   null}
+                                    ) : null}
 
                                     <div className='mt-4 flex flex-wrap gap-2'>
-                                        {record && webDataMode === 'fixture' ?
+                                        {record && webDataMode === 'fixture' ? (
                                             <Button
                                                 className='px-3 py-1 text-xs'
                                                 onClick={() =>
                                                     onOpenChat(record, 'feed')
                                                 }
                                             >
-                                                Contact helper
+                                                {t('feed.contactHelper')}
                                             </Button>
-                                        :   null}
+                                        ) : null}
 
-                                        {dataOrigin === 'fixture' ?
+                                        {dataOrigin === 'fixture' ? (
                                             <Button
                                                 variant='secondary'
                                                 className='px-3 py-1 text-xs'
@@ -2230,78 +2240,66 @@ const FeedRoute = ({
                                                 }
                                                 disabled={card.urgency >= 5}
                                             >
-                                                Escalate urgency
+                                                {t('feed.escalateUrgency')}
                                             </Button>
-                                        :   null}
+                                        ) : null}
 
                                         {/* Timeline toggle */}
-                                        {(
-                                            card.timeline &&
-                                            card.timeline.length > 0
-                                        ) ?
+                                        {card.timeline &&
+                                        card.timeline.length > 0 ? (
                                             <Button
                                                 variant='neutral'
                                                 className='px-3 py-1 text-xs'
                                                 onClick={() =>
                                                     setExpandedTimelineId(
-                                                        current =>
-                                                            (
-                                                                current ===
-                                                                card.id
-                                                            ) ?
-                                                                undefined
-                                                            :   card.id,
+                                                        (current) =>
+                                                            current === card.id
+                                                                ? undefined
+                                                                : card.id,
                                                     )
                                                 }
                                             >
-                                                {(
-                                                    expandedTimelineId ===
-                                                    card.id
-                                                ) ?
-                                                    'Hide timeline'
-                                                :   `Timeline (${card.timeline.length})`
-                                                }
+                                                {expandedTimelineId === card.id
+                                                    ? t('feed.hideTimeline')
+                                                    : t('feed.timeline', {
+                                                          count: card.timeline
+                                                              .length,
+                                                      })}
                                             </Button>
-                                        :   null}
+                                        ) : null}
                                     </div>
 
-                                    {(
-                                        record &&
-                                        currentUserDid &&
-                                        currentUserDid !== record.recipientDid
-                                    ) ?
+                                    {record &&
+                                    currentUserDid &&
+                                    currentUserDid !== record.recipientDid ? (
                                         <SafetyActions record={record} />
-                                    :   null}
-                                    {(
-                                        record &&
-                                        currentUserDid === record.recipientDid
-                                    ) ?
+                                    ) : null}
+                                    {record &&
+                                    currentUserDid === record.recipientDid ? (
                                         <OwnerRecordActions
                                             record={record}
                                             onReplaceRecord={onReplaceRecord}
                                             onDeleteRecord={onDeleteRecord}
                                         />
-                                    :   null}
+                                    ) : null}
 
                                     {/* Expanded timeline panel */}
-                                    {(
-                                        expandedTimelineId === card.id &&
-                                        card.timeline
-                                    ) ?
+                                    {expandedTimelineId === card.id &&
+                                    card.timeline ? (
                                         <div className='mt-4 border-t-2 border-mh-borderSoft pt-4'>
                                             <p className='mb-3 text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'>
-                                                Audit timeline
+                                                {t('feed.auditTimeline')}
                                             </p>
                                             <StatusTimeline
                                                 timeline={card.timeline}
                                             />
                                         </div>
-                                    :   null}
+                                    ) : null}
                                 </li>
                             );
                         })}
                     </ul>
-                }
+                )}
             </Card>
         </section>
     );
@@ -2326,6 +2324,7 @@ const PostingRoute = ({
     onNavigate,
     onCreateViaApi,
 }: PostingRouteProps) => {
+    const { t } = useLocale();
     const [title, setTitle] = useState('Need urgent support');
     const [description, setDescription] = useState(
         'Describe the request, constraints, and safest handoff instructions.',
@@ -2361,13 +2360,13 @@ const PostingRoute = ({
                 precisionMeters: Number.parseInt(precisionMeters, 10),
             },
             timeWindow:
-                startAt.length > 0 && endAt.length > 0 ?
-                    {
-                        startAt: new Date(startAt).toISOString(),
-                        endAt: new Date(endAt).toISOString(),
-                    }
-                :   undefined,
-            attachments: attachmentFiles.map(file => ({
+                startAt.length > 0 && endAt.length > 0
+                    ? {
+                          startAt: new Date(startAt).toISOString(),
+                          endAt: new Date(endAt).toISOString(),
+                      }
+                    : undefined,
+            attachments: attachmentFiles.map((file) => ({
                 filename: file.name,
                 mimeType: file.type,
                 sizeBytes: file.size,
@@ -2427,9 +2426,9 @@ const PostingRoute = ({
             }
             setAttachmentFiles([]);
             setAttachmentStatus(
-                uploaded > 0 ?
-                    `${uploaded} private attachment(s) uploaded and queued for malware scanning.`
-                :   undefined,
+                uploaded > 0
+                    ? `${uploaded} private attachment(s) uploaded and queued for malware scanning.`
+                    : undefined,
             );
             setSuccessMessage(
                 `Created post ${localId} and persisted via API/DB.`,
@@ -2442,30 +2441,27 @@ const PostingRoute = ({
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>
-                    Create request
-                </h1>
+                <h1 className='mh-route-title'>{t('posting.heading')}</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Shared posting form with taxonomy, accessibility tags, and
-                    geoprivacy enforcement.
+                    {t('posting.description')}
                 </p>
             </header>
 
-            <Panel title='Posting form'>
+            <Panel title={String(t('posting.formTitle'))}>
                 <form className='space-y-4' onSubmit={handleSubmit}>
                     <div>
                         <label
                             htmlFor='posting-title'
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                         >
-                            Title
+                            {t('posting.titleLabel')}
                         </label>
                         <Input
                             id='posting-title'
                             name='title'
                             autoComplete='off'
                             value={title}
-                            onChange={event => setTitle(event.target.value)}
+                            onChange={(event) => setTitle(event.target.value)}
                         />
                     </div>
 
@@ -2474,7 +2470,7 @@ const PostingRoute = ({
                             htmlFor='posting-description'
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                         >
-                            Description
+                            {t('posting.descriptionLabel')}
                         </label>
                         <textarea
                             id='posting-description'
@@ -2482,7 +2478,7 @@ const PostingRoute = ({
                             autoComplete='off'
                             className='mh-input min-h-35 w-full px-3 py-2 text-base'
                             value={description}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setDescription(event.target.value)
                             }
                         />
@@ -2494,7 +2490,7 @@ const PostingRoute = ({
                                 htmlFor='posting-category'
                                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                             >
-                                Category
+                                {t('posting.categoryLabel')}
                             </label>
                             <select
                                 id='posting-category'
@@ -2502,16 +2498,16 @@ const PostingRoute = ({
                                 autoComplete='off'
                                 className='mh-input w-full px-3 py-2 text-base'
                                 value={category}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setCategory(
                                         event.target
                                             .value as AidPostingCategory,
                                     )
                                 }
                             >
-                                {aidCategories.map(option => (
+                                {aidCategories.map((option) => (
                                     <option key={option} value={option}>
-                                        {formatCategoryLabel(option)}
+                                        {formatLocalizedLabel(t, option)}
                                     </option>
                                 ))}
                             </select>
@@ -2522,7 +2518,7 @@ const PostingRoute = ({
                                 htmlFor='posting-urgency'
                                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                             >
-                                Urgency
+                                {t('posting.urgencyLabel')}
                             </label>
                             <Input
                                 id='posting-urgency'
@@ -2532,7 +2528,7 @@ const PostingRoute = ({
                                 min={1}
                                 max={5}
                                 value={urgency}
-                                onChange={event => {
+                                onChange={(event) => {
                                     const nextUrgency = Number.parseInt(
                                         event.target.value,
                                         10,
@@ -2556,14 +2552,16 @@ const PostingRoute = ({
                             htmlFor='posting-tags'
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                         >
-                            Accessibility tags (comma-separated)
+                            {t('posting.accessibilityTags')}
                         </label>
                         <Input
                             id='posting-tags'
                             name='accessibilityTags'
                             autoComplete='off'
                             value={tagsText}
-                            onChange={event => setTagsText(event.target.value)}
+                            onChange={(event) =>
+                                setTagsText(event.target.value)
+                            }
                         />
                     </div>
 
@@ -2573,7 +2571,7 @@ const PostingRoute = ({
                                 htmlFor='posting-lat'
                                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                             >
-                                Latitude
+                                {t('posting.latitudeLabel')}
                             </label>
                             <Input
                                 id='posting-lat'
@@ -2582,7 +2580,7 @@ const PostingRoute = ({
                                 type='number'
                                 step='0.0001'
                                 value={lat}
-                                onChange={event => setLat(event.target.value)}
+                                onChange={(event) => setLat(event.target.value)}
                             />
                         </div>
                         <div>
@@ -2590,7 +2588,7 @@ const PostingRoute = ({
                                 htmlFor='posting-lng'
                                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                             >
-                                Longitude
+                                {t('posting.longitudeLabel')}
                             </label>
                             <Input
                                 id='posting-lng'
@@ -2599,7 +2597,7 @@ const PostingRoute = ({
                                 type='number'
                                 step='0.0001'
                                 value={lng}
-                                onChange={event => setLng(event.target.value)}
+                                onChange={(event) => setLng(event.target.value)}
                             />
                         </div>
                         <div>
@@ -2607,7 +2605,7 @@ const PostingRoute = ({
                                 htmlFor='posting-precision'
                                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                             >
-                                Precision meters
+                                {t('posting.precisionMetersLabel')}
                             </label>
                             <Input
                                 id='posting-precision'
@@ -2616,7 +2614,7 @@ const PostingRoute = ({
                                 type='number'
                                 min={300}
                                 value={precisionMeters}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setPrecisionMeters(event.target.value)
                                 }
                             />
@@ -2629,7 +2627,7 @@ const PostingRoute = ({
                                 htmlFor='posting-start-at'
                                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                             >
-                                Time window start
+                                {t('posting.timeWindowStart')}
                             </label>
                             <Input
                                 id='posting-start-at'
@@ -2637,7 +2635,7 @@ const PostingRoute = ({
                                 autoComplete='off'
                                 type='datetime-local'
                                 value={startAt}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setStartAt(event.target.value)
                                 }
                             />
@@ -2647,7 +2645,7 @@ const PostingRoute = ({
                                 htmlFor='posting-end-at'
                                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                             >
-                                Time window end
+                                {t('posting.timeWindowEnd')}
                             </label>
                             <Input
                                 id='posting-end-at'
@@ -2655,7 +2653,9 @@ const PostingRoute = ({
                                 autoComplete='off'
                                 type='datetime-local'
                                 value={endAt}
-                                onChange={event => setEndAt(event.target.value)}
+                                onChange={(event) =>
+                                    setEndAt(event.target.value)
+                                }
                             />
                         </div>
                     </div>
@@ -2665,44 +2665,43 @@ const PostingRoute = ({
                             htmlFor='posting-attachments'
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
                         >
-                            Private attachments (optional)
+                            {t('posting.attachments')}
                         </label>
                         <Input
                             id='posting-attachments'
                             type='file'
                             multiple
                             accept='image/jpeg,image/png,image/gif,image/webp,application/pdf'
-                            onChange={event =>
+                            onChange={(event) =>
                                 setAttachmentFiles(
                                     Array.from(event.target.files ?? []),
                                 )
                             }
                         />
                         <p className='mt-1 text-xs text-mh-textSoft'>
-                            Up to five images or PDFs, 10 MB each. Files remain
-                            private, are scanned and transformed, and are
-                            available only to authenticated people.
+                            {t('posting.attachmentHelp')}
                         </p>
-                        {attachmentFiles.length ?
+                        {attachmentFiles.length ? (
                             <ul className='mt-2 text-xs'>
-                                {attachmentFiles.map(file => (
+                                {attachmentFiles.map((file) => (
                                     <li key={`${file.name}-${file.size}`}>
                                         {file.name} ·{' '}
-                                        {Math.ceil(file.size / 1024)} KB
+                                        {Math.ceil(file.size / 1024)}{' '}
+                                        {t('posting.kilobytes')}
                                     </li>
                                 ))}
                             </ul>
-                        :   null}
-                        {attachmentStatus ?
+                        ) : null}
+                        {attachmentStatus ? (
                             <p className='mt-2 text-xs font-bold' role='status'>
                                 {attachmentStatus}
                             </p>
-                        :   null}
+                        ) : null}
                     </div>
 
-                    {errors.length > 0 ?
+                    {errors.length > 0 ? (
                         <div className='space-y-1'>
-                            {errors.map(issue => (
+                            {errors.map((issue) => (
                                 <p
                                     key={`${issue.field}-${issue.message}`}
                                     className='mh-alert text-xs font-bold'
@@ -2711,30 +2710,32 @@ const PostingRoute = ({
                                 </p>
                             ))}
                         </div>
-                    :   null}
+                    ) : null}
 
-                    {successMessage ?
+                    {successMessage ? (
                         <p className='rounded-none border-2 border-mh-border bg-mh-surfaceElev px-3 py-2 text-xs font-bold text-mh-success'>
                             {successMessage}
                         </p>
-                    :   null}
+                    ) : null}
 
-                    {apiError ?
+                    {apiError ? (
                         <p className='mh-alert text-xs font-bold'>
-                            Unable to persist request: {apiError}
+                            {t('posting.unableToPresist', { error: apiError })}
                         </p>
-                    :   null}
+                    ) : null}
 
                     <div className='flex flex-wrap gap-2'>
                         <Button type='submit' disabled={isSubmitting}>
-                            {isSubmitting ? 'Publishing…' : 'Publish request'}
+                            {isSubmitting
+                                ? t('posting.publishing')
+                                : t('posting.publishRequest')}
                         </Button>
                         <Button
                             variant='secondary'
                             type='button'
                             onClick={() => onNavigate('/feed')}
                         >
-                            Open feed
+                            {t('posting.openFeed')}
                         </Button>
                     </div>
                 </form>
@@ -2775,6 +2776,7 @@ const DirectoryResourceManager = ({
     editUri,
     onEditHandled,
 }: DirectoryResourceManagerProps) => {
+    const { t } = useLocale();
     const [isOpen, setIsOpen] = useState(false);
     const [draft, setDraft] = useState<DirectoryResourceDraft>(() =>
         defaultDirectoryDraft(center),
@@ -2806,10 +2808,12 @@ const DirectoryResourceManager = ({
         setError(undefined);
         setNotice(undefined);
         void getAtDirectoryResourceViaApi(editUri)
-            .then(result => {
+            .then((result) => {
                 if (!active) return;
                 if (!result.ok) {
-                    setError(`${result.code}: ${result.error}`);
+                    setError(
+                        `${t('common.error')}: ${t('common.requestFailed')}`,
+                    );
                     setIsOpen(true);
                     return;
                 }
@@ -2841,24 +2845,23 @@ const DirectoryResourceManager = ({
 
         setIsSubmitting(true);
         try {
-            const result =
-                editing ?
-                    await updateAtDirectoryResourceViaApi({
-                        uri: editing.uri,
-                        expectedCid: editing.cid,
-                        record: built.record,
-                    })
-                :   await createAtDirectoryResourceViaApi(built.record);
+            const result = editing
+                ? await updateAtDirectoryResourceViaApi({
+                      uri: editing.uri,
+                      expectedCid: editing.cid,
+                      record: built.record,
+                  })
+                : await createAtDirectoryResourceViaApi(built.record);
             if (!result.ok) {
-                setError(`${result.code}: ${result.error}`);
+                setError(`${t('common.error')}: ${t('common.requestFailed')}`);
                 return;
             }
             setEditing(result.data);
             setDraft(draftFromDirectoryResource(result.data.record));
             setNotice(
-                editing ?
-                    'Resource updated. Directory ingestion may take a moment.'
-                :   'Resource published. It will appear after directory ingestion.',
+                editing
+                    ? t('directoryManager.updated')
+                    : t('directoryManager.published'),
             );
             onChanged();
         } finally {
@@ -2876,12 +2879,12 @@ const DirectoryResourceManager = ({
                 expectedCid: editing.cid,
             });
             if (!result.ok) {
-                setError(`${result.code}: ${result.error}`);
+                setError(`${t('common.error')}: ${t('common.requestFailed')}`);
                 return;
             }
             reset();
             setIsOpen(false);
-            setNotice('Resource deleted from your AT repository.');
+            setNotice(t('directoryManager.deleted'));
             onChanged();
         } finally {
             setIsSubmitting(false);
@@ -2889,18 +2892,16 @@ const DirectoryResourceManager = ({
     };
 
     return (
-        <Card title='Publish and manage'>
-            {currentUserDid ?
+        <Card title={t('directoryManager.title')}>
+            {currentUserDid ? (
                 <>
                     <div className='flex flex-wrap items-center justify-between gap-3'>
                         <div>
                             <p className='text-sm font-bold text-mh-text'>
-                                Community directory steward
+                                {t('directoryManager.steward')}
                             </p>
                             <p className='mt-1 max-w-2xl text-xs text-mh-textMuted'>
-                                Publish public service details from your AT
-                                identity. New listings begin unverified; trusted
-                                verification is a separate review.
+                                {t('directoryManager.description')}
                             </p>
                         </div>
                         <Button
@@ -2909,39 +2910,39 @@ const DirectoryResourceManager = ({
                             className='px-3 py-2 text-xs'
                             onClick={beginCreate}
                         >
-                            Add a resource
+                            {t('directoryManager.add')}
                         </Button>
                     </div>
-                    {notice ?
+                    {notice ? (
                         <p
                             role='status'
                             className='mh-alert mt-4 text-xs font-bold'
                         >
                             {notice}
                         </p>
-                    :   null}
-                    {error ?
+                    ) : null}
+                    {error ? (
                         <p
                             role='alert'
                             className='mh-alert mt-4 text-xs font-bold'
                         >
                             {error}
                         </p>
-                    :   null}
-                    {isOpen ?
+                    ) : null}
+                    {isOpen ? (
                         <form
                             className='mt-5 space-y-4 border-t-2 border-mh-borderSoft pt-5'
                             onSubmit={submit}
                         >
                             <div className='flex flex-wrap items-center justify-between gap-2'>
                                 <h2 className='text-lg font-bold text-mh-text'>
-                                    {editing ?
-                                        'Edit directory resource'
-                                    :   'New directory resource'}
+                                    {editing
+                                        ? t('directoryManager.edit')
+                                        : t('directoryManager.new')}
                                 </h2>
                                 <Badge tone='info'>
                                     {editing?.record.verificationStatus ??
-                                        'unverified'}
+                                        t('directoryManager.unverified')}
                                 </Badge>
                             </div>
                             <div className='grid gap-4 md:grid-cols-2'>
@@ -2950,13 +2951,13 @@ const DirectoryResourceManager = ({
                                         htmlFor='directory-name'
                                         className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                     >
-                                        Resource name
+                                        {t('directoryManager.name')}
                                     </label>
                                     <Input
                                         id='directory-name'
                                         value={draft.name}
-                                        onChange={event =>
-                                            setDraft(current => ({
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
                                                 ...current,
                                                 name: event.target.value,
                                             }))
@@ -2968,14 +2969,14 @@ const DirectoryResourceManager = ({
                                         htmlFor='directory-category'
                                         className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                     >
-                                        Category
+                                        {t('directoryManager.category')}
                                     </label>
                                     <select
                                         id='directory-category'
                                         className='mh-input w-full px-3 py-2 text-base'
                                         value={draft.category}
-                                        onChange={event =>
-                                            setDraft(current => ({
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
                                                 ...current,
                                                 category: event.target
                                                     .value as DirectoryResourceDraft['category'],
@@ -2983,12 +2984,13 @@ const DirectoryResourceManager = ({
                                         }
                                     >
                                         {directoryResourceCategories.map(
-                                            category => (
+                                            (category) => (
                                                 <option
                                                     key={category}
                                                     value={category}
                                                 >
-                                                    {formatCategoryLabel(
+                                                    {formatLocalizedLabel(
+                                                        t,
                                                         category,
                                                     )}
                                                 </option>
@@ -3002,13 +3004,13 @@ const DirectoryResourceManager = ({
                                     htmlFor='directory-service-area'
                                     className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                 >
-                                    Public service area
+                                    {t('directoryManager.serviceArea')}
                                 </label>
                                 <Input
                                     id='directory-service-area'
                                     value={draft.serviceArea}
-                                    onChange={event =>
-                                        setDraft(current => ({
+                                    onChange={(event) =>
+                                        setDraft((current) => ({
                                             ...current,
                                             serviceArea: event.target.value,
                                         }))
@@ -3021,14 +3023,14 @@ const DirectoryResourceManager = ({
                                         htmlFor='directory-url'
                                         className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                     >
-                                        Public website
+                                        {t('directoryManager.website')}
                                     </label>
                                     <Input
                                         id='directory-url'
                                         type='url'
                                         value={draft.contactUrl}
-                                        onChange={event =>
-                                            setDraft(current => ({
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
                                                 ...current,
                                                 contactUrl: event.target.value,
                                             }))
@@ -3040,14 +3042,14 @@ const DirectoryResourceManager = ({
                                         htmlFor='directory-phone'
                                         className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                     >
-                                        Public phone
+                                        {t('directoryManager.phone')}
                                     </label>
                                     <Input
                                         id='directory-phone'
                                         type='tel'
                                         value={draft.contactPhone}
-                                        onChange={event =>
-                                            setDraft(current => ({
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
                                                 ...current,
                                                 contactPhone:
                                                     event.target.value,
@@ -3062,15 +3064,15 @@ const DirectoryResourceManager = ({
                                         htmlFor='directory-latitude'
                                         className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                     >
-                                        Latitude
+                                        {t('directoryManager.latitude')}
                                     </label>
                                     <Input
                                         id='directory-latitude'
                                         type='number'
                                         step='0.0001'
                                         value={draft.latitude}
-                                        onChange={event =>
-                                            setDraft(current => ({
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
                                                 ...current,
                                                 latitude: event.target.value,
                                             }))
@@ -3082,15 +3084,15 @@ const DirectoryResourceManager = ({
                                         htmlFor='directory-longitude'
                                         className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                     >
-                                        Longitude
+                                        {t('directoryManager.longitude')}
                                     </label>
                                     <Input
                                         id='directory-longitude'
                                         type='number'
                                         step='0.0001'
                                         value={draft.longitude}
-                                        onChange={event =>
-                                            setDraft(current => ({
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
                                                 ...current,
                                                 longitude: event.target.value,
                                             }))
@@ -3102,7 +3104,7 @@ const DirectoryResourceManager = ({
                                         htmlFor='directory-precision'
                                         className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                     >
-                                        Precision km
+                                        {t('directoryManager.precision')}
                                     </label>
                                     <Input
                                         id='directory-precision'
@@ -3111,19 +3113,17 @@ const DirectoryResourceManager = ({
                                         max='50'
                                         step='0.5'
                                         value={draft.precisionKm}
-                                        onChange={event =>
-                                            setDraft(current => ({
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
                                                 ...current,
-                                                precisionKm:
-                                                    event.target.value,
+                                                precisionKm: event.target.value,
                                             }))
                                         }
                                     />
                                 </div>
                             </div>
                             <p className='text-xs text-mh-textSoft'>
-                                Coordinates are published only at a precision
-                                of one kilometre or broader.
+                                {t('directoryManager.locationHelp')}
                             </p>
                             <div className='grid gap-4 md:grid-cols-2'>
                                 <div>
@@ -3131,14 +3131,14 @@ const DirectoryResourceManager = ({
                                         htmlFor='directory-hours'
                                         className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                     >
-                                        Open hours
+                                        {t('directoryManager.hours')}
                                     </label>
                                     <textarea
                                         id='directory-hours'
                                         className='mh-input min-h-24 w-full px-3 py-2'
                                         value={draft.openHours}
-                                        onChange={event =>
-                                            setDraft(current => ({
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
                                                 ...current,
                                                 openHours: event.target.value,
                                             }))
@@ -3150,14 +3150,14 @@ const DirectoryResourceManager = ({
                                         htmlFor='directory-eligibility'
                                         className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                     >
-                                        Eligibility notes
+                                        {t('directoryManager.eligibility')}
                                     </label>
                                     <textarea
                                         id='directory-eligibility'
                                         className='mh-input min-h-24 w-full px-3 py-2'
                                         value={draft.eligibilityNotes}
-                                        onChange={event =>
-                                            setDraft(current => ({
+                                        onChange={(event) =>
+                                            setDraft((current) => ({
                                                 ...current,
                                                 eligibilityNotes:
                                                     event.target.value,
@@ -3171,14 +3171,14 @@ const DirectoryResourceManager = ({
                                     htmlFor='directory-operational-status'
                                     className='mb-2 block text-xs font-bold uppercase tracking-[0.12em]'
                                 >
-                                    Operational status
+                                    {t('directoryManager.operationalStatus')}
                                 </label>
                                 <select
                                     id='directory-operational-status'
                                     className='mh-input w-full px-3 py-2 text-base md:max-w-xs'
                                     value={draft.operationalStatus}
-                                    onChange={event =>
-                                        setDraft(current => ({
+                                    onChange={(event) =>
+                                        setDraft((current) => ({
                                             ...current,
                                             operationalStatus: event.target
                                                 .value as DirectoryResourceDraft['operationalStatus'],
@@ -3186,37 +3186,64 @@ const DirectoryResourceManager = ({
                                     }
                                 >
                                     {directoryOperationalStatuses.map(
-                                        status => (
+                                        (status) => (
                                             <option key={status} value={status}>
-                                                {formatCategoryLabel(status)}
+                                                {formatLocalizedLabel(
+                                                    t,
+                                                    status,
+                                                )}
                                             </option>
                                         ),
                                     )}
                                 </select>
                             </div>
-                            {issues.length > 0 ?
+                            {issues.length > 0 ? (
                                 <div role='alert' className='mh-alert text-xs'>
                                     <p className='font-bold'>
-                                        Check the public listing:
+                                        {t('directoryManager.check')}
                                     </p>
                                     <ul className='mt-2 list-disc space-y-1 pl-5'>
-                                        {issues.map(issue => (
-                                            <li key={issue}>{issue}</li>
+                                        {issues.map((issue) => (
+                                            <li key={issue}>
+                                                {issue ===
+                                                'Latitude must be between -90 and 90.'
+                                                    ? t(
+                                                          'directoryManager.latitudeInvalid',
+                                                      )
+                                                    : issue ===
+                                                        'Longitude must be between -180 and 180.'
+                                                      ? t(
+                                                            'directoryManager.longitudeInvalid',
+                                                        )
+                                                      : issue ===
+                                                          'Public location precision must be between 1 and 50 kilometres.'
+                                                        ? t(
+                                                              'directoryManager.precisionInvalid',
+                                                          )
+                                                        : issue ===
+                                                            'Add a public website or phone number.'
+                                                          ? t(
+                                                                'directoryManager.contactInvalid',
+                                                            )
+                                                          : t(
+                                                                'directoryManager.invalid',
+                                                            )}
+                                            </li>
                                         ))}
                                     </ul>
                                 </div>
-                            :   null}
+                            ) : null}
                             <div className='flex flex-wrap gap-2'>
                                 <Button
                                     type='submit'
                                     variant='primary'
                                     disabled={isSubmitting}
                                 >
-                                    {isSubmitting ?
-                                        'Saving…'
-                                    : editing ?
-                                        'Save resource'
-                                    :   'Publish resource'}
+                                    {isSubmitting
+                                        ? t('directoryManager.saving')
+                                        : editing
+                                          ? t('directoryManager.save')
+                                          : t('directoryManager.publish')}
                                 </Button>
                                 <Button
                                     type='button'
@@ -3227,26 +3254,26 @@ const DirectoryResourceManager = ({
                                         setIsOpen(false);
                                     }}
                                 >
-                                    Cancel
+                                    {t('directoryManager.cancel')}
                                 </Button>
-                                {editing && !confirmDelete ?
+                                {editing && !confirmDelete ? (
                                     <Button
                                         type='button'
                                         variant='neutral'
                                         disabled={isSubmitting}
                                         onClick={() => setConfirmDelete(true)}
                                     >
-                                        Delete resource
+                                        {t('directoryManager.delete')}
                                     </Button>
-                                :   null}
+                                ) : null}
                             </div>
-                            {editing && confirmDelete ?
+                            {editing && confirmDelete ? (
                                 <div
                                     role='alert'
                                     className='mh-alert flex flex-wrap items-center gap-3 text-xs'
                                 >
                                     <p className='font-bold'>
-                                        Delete this public AT record?
+                                        {t('directoryManager.confirmDelete')}
                                     </p>
                                     <Button
                                         type='button'
@@ -3254,36 +3281,35 @@ const DirectoryResourceManager = ({
                                         disabled={isSubmitting}
                                         onClick={() => void remove()}
                                     >
-                                        Confirm delete
+                                        {t('directoryManager.confirm')}
                                     </Button>
                                     <Button
                                         type='button'
                                         variant='neutral'
-                                        onClick={() =>
-                                            setConfirmDelete(false)
-                                        }
+                                        onClick={() => setConfirmDelete(false)}
                                     >
-                                        Keep resource
+                                        {t('directoryManager.keep')}
                                     </Button>
                                 </div>
-                            :   null}
+                            ) : null}
                         </form>
-                    :   null}
+                    ) : null}
                     <span className='sr-only' data-directory-manager='ready'>
-                        Directory manager ready
+                        {t('directoryManager.ready')}
                     </span>
                 </>
-            :   <p className='text-sm text-mh-textMuted'>
-                    Directory browsing is public.{' '}
+            ) : (
+                <p className='text-sm text-mh-textMuted'>
+                    {t('directoryManager.public')}{' '}
                     <a
                         className='font-bold underline'
                         href='/login?returnTo=%2Fresources'
                     >
-                        Sign in
+                        {t('directoryManager.signIn')}
                     </a>{' '}
-                    to publish or manage a resource.
+                    {t('directoryManager.signInSuffix')}
                 </p>
-            }
+            )}
         </Card>
     );
 };
@@ -3311,6 +3337,7 @@ const ResourceRoute = ({
     resourceCards,
     currentUserDid,
 }: ResourceRouteProps) => {
+    const { t, fmt } = useLocale();
     const [activeCategory, setActiveCategory] =
         useState<DirectoryResourceCategory>();
     const [selectedUri, setSelectedUri] = useState<string>();
@@ -3355,48 +3382,43 @@ const ResourceRoute = ({
         ],
     );
 
-    const detailPanel =
-        selectedUri ?
-            openResourceDetailPanel(viewModel.cards, selectedUri)
-        :   closeResourceDetailPanel();
+    const detailPanel = selectedUri
+        ? openResourceDetailPanel(viewModel.cards, selectedUri)
+        : closeResourceDetailPanel();
 
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>
-                    Resource directory
-                </h1>
+                <h1 className='mh-route-title'>{t('resources.heading')}</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Overlay verified services on map context and launch intake
-                    handoffs quickly.
+                    {t('resources.description')}
                 </p>
                 <div className='mt-3 flex flex-wrap gap-2'>
                     <Badge tone={dataOrigin === 'api' ? 'success' : 'info'}>
                         {dataOriginLabel(dataOrigin)}
                     </Badge>
                 </div>
-                {errorMessage ?
+                {errorMessage ? (
                     <div
                         role='alert'
                         className='mh-alert mt-3 text-xs font-bold'
                     >
-                        <p>API sync issue: {errorMessage}</p>
-                        {resourceCards.length > 0 ?
-                            <p>
-                                Showing previously loaded results; they may be
-                                stale.
-                            </p>
-                        :   null}
+                        <p>
+                            {t('map.apiSyncIssue', { message: errorMessage })}
+                        </p>
+                        {resourceCards.length > 0 ? (
+                            <p>{t('resources.staleResults')}</p>
+                        ) : null}
                         <Button
                             type='button'
                             variant='neutral'
                             className='mt-2 px-3 py-1 text-xs'
                             onClick={onRetry}
                         >
-                            Retry directory
+                            {t('resources.retryDirectory')}
                         </Button>
                     </div>
-                :   null}
+                ) : null}
             </header>
 
             <DirectoryResourceManager
@@ -3413,37 +3435,37 @@ const ResourceRoute = ({
                 onPatch={onPatchDiscovery}
             />
 
-            <Card title='Directory filters'>
+            <Card title={String(t('resources.directoryFiltersTitle'))}>
                 <div className='flex flex-wrap gap-2'>
                     <Button
                         variant={activeCategory ? 'neutral' : 'secondary'}
                         className='px-3 py-1 text-xs'
                         onClick={() => setActiveCategory(undefined)}
                     >
-                        All categories
+                        {t('resources.allCategories')}
                     </Button>
-                    {resourceCategoryOptions.map(category => (
+                    {resourceCategoryOptions.map((category) => (
                         <Button
                             key={category}
                             variant={
-                                activeCategory === category ? 'secondary' : (
-                                    'neutral'
-                                )
+                                activeCategory === category
+                                    ? 'secondary'
+                                    : 'neutral'
                             }
                             className='px-3 py-1 text-xs'
                             onClick={() =>
-                                setActiveCategory(current =>
+                                setActiveCategory((current) =>
                                     current === category ? undefined : category,
                                 )
                             }
                         >
-                            {formatCategoryLabel(category)}
+                            {formatLocalizedLabel(t, category)}
                         </Button>
                     ))}
                 </div>
             </Card>
 
-            <Card title='Overlay + cards'>
+            <Card title={String(t('resources.overlayCardsTitle'))}>
                 <p className='mb-3 text-sm text-mh-textMuted'>
                     {uiState.message}
                 </p>
@@ -3451,7 +3473,7 @@ const ResourceRoute = ({
                     {uiState.ariaLiveMessage}
                 </div>
 
-                {isLoading ?
+                {isLoading ? (
                     <ul className='space-y-3' aria-live='polite'>
                         {Array.from({ length: 3 }).map((_, index) => (
                             <li
@@ -3468,50 +3490,51 @@ const ResourceRoute = ({
                             </li>
                         ))}
                     </ul>
-                : viewModel.cards.length === 0 ?
+                ) : viewModel.cards.length === 0 ? (
                     <div className='space-y-3'>
                         <p className='text-xs text-mh-textSoft'>
-                            Try broadening radius/category filters or switching
-                            aid category.
+                            {t('resources.tryBroadening')}
                         </p>
                         <Button
                             variant='neutral'
                             className='px-3 py-1 text-xs'
                             onClick={() => setActiveCategory(undefined)}
                         >
-                            Clear directory category
+                            {t('resources.clearDirectoryCategory')}
                         </Button>
                     </div>
-                :   <ul className='space-y-3'>
-                        {viewModel.cards.map(card => (
-                            <li
-                                key={card.uri}
-                                className='mh-record-card'
-                            >
+                ) : (
+                    <ul className='space-y-3'>
+                        {viewModel.cards.map((card) => (
+                            <li key={card.uri} className='mh-record-card'>
                                 <div className='flex flex-wrap items-start justify-between gap-2'>
                                     <p className='text-sm font-bold text-mh-text'>
                                         {card.name}
                                     </p>
                                     <Badge tone='info'>
-                                        {formatCategoryLabel(card.category)}
+                                        {formatLocalizedLabel(t, card.category)}
                                     </Badge>
-                                    {card.recordOrigin === 'synthetic' ?
+                                    {card.recordOrigin === 'synthetic' ? (
                                         <Badge tone='info'>
-                                            Synthetic showcase
+                                            {t('resources.synthetic')}
                                         </Badge>
-                                    : card.recordOrigin === 'sourced-public' ?
+                                    ) : card.recordOrigin ===
+                                      'sourced-public' ? (
                                         <Badge tone='info'>
-                                            Public-source reference
+                                            {t('resources.publicSource')}
                                         </Badge>
-                                    :   null}
+                                    ) : null}
                                 </div>
                                 <p className='mt-1 text-xs text-mh-textSoft'>
-                                    {card.location.areaLabel ?? 'Area pending'}{' '}
-                                    · {card.openHours ?? 'Hours unavailable'}
+                                    {card.location.areaLabel ??
+                                        t('resources.areaPending')}{' '}
+                                    ·{' '}
+                                    {card.openHours ??
+                                        t('resources.hoursUnavailable')}
                                 </p>
                                 <p className='mt-2 text-sm text-mh-textMuted'>
                                     {card.eligibilityNotes ??
-                                        'Eligibility details unavailable.'}
+                                        t('resources.eligibilityUnavailable')}
                                 </p>
                                 <div className='mt-3 flex flex-wrap gap-2'>
                                     <Button
@@ -3519,37 +3542,39 @@ const ResourceRoute = ({
                                         className='px-3 py-1 text-xs'
                                         onClick={() => setSelectedUri(card.uri)}
                                     >
-                                        Open details
+                                        {t('resources.openDetails')}
                                     </Button>
                                     <Button
                                         variant='secondary'
                                         className='px-3 py-1 text-xs'
                                         onClick={() => onNavigate('/posting')}
                                     >
-                                        Start intake
+                                        {t('resources.startIntake')}
                                     </Button>
                                     {currentUserDid &&
                                     (card.authorDid === currentUserDid ||
                                         card.uri.startsWith(
                                             `at://${currentUserDid}/`,
-                                        )) ?
+                                        )) ? (
                                         <Button
                                             variant='neutral'
                                             className='px-3 py-1 text-xs'
-                                            onClick={() => setManageUri(card.uri)}
+                                            onClick={() =>
+                                                setManageUri(card.uri)
+                                            }
                                         >
-                                            Manage listing
+                                            {t('resources.manageListing')}
                                         </Button>
-                                    :   null}
+                                    ) : null}
                                 </div>
                             </li>
                         ))}
                     </ul>
-                }
+                )}
             </Card>
 
-            {detailPanel.open ?
-                <Panel title='Resource detail'>
+            {detailPanel.open ? (
+                <Panel title={String(t('resources.resourceDetailTitle'))}>
                     <p className='text-lg font-bold text-mh-text'>
                         {detailPanel.title}
                     </p>
@@ -3559,31 +3584,30 @@ const ResourceRoute = ({
                     <p className='mt-2 text-sm text-mh-textSoft'>
                         {detailPanel.eligibilityNotes}
                     </p>
-                    {detailPanel.exactPublicAddress ?
+                    {detailPanel.exactPublicAddress ? (
                         <div className='mh-alert mt-3 text-sm'>
                             <p className='font-bold'>
-                                Moderator-approved public address
+                                {t('resources.approvedAddress')}
                             </p>
                             <p>{detailPanel.exactPublicAddress}</p>
                             <p className='mt-1 text-xs text-mh-textSoft'>
-                                Approval expires{' '}
-                                {formatDateTime(
-                                    detailPanel.exactAddressApprovalExpiresAt ??
-                                        '',
-                                )}
-                                . This is a public resource address, not a
-                                person&apos;s location.
+                                {t('resources.approvalExpires', {
+                                    date: fmt.longDate(
+                                        detailPanel.exactAddressApprovalExpiresAt ??
+                                            '',
+                                    ),
+                                })}
                             </p>
                         </div>
-                    :   null}
+                    ) : null}
                     <div className='mt-4 flex flex-wrap gap-2'>
-                        {detailPanel.actions.map(action => (
+                        {detailPanel.actions.map((action) => (
                             <Button
                                 key={action.id}
                                 variant={
-                                    action.id === 'request_intake' ?
-                                        'primary'
-                                    :   'neutral'
+                                    action.id === 'request_intake'
+                                        ? 'primary'
+                                        : 'neutral'
                                 }
                                 className='px-3 py-1 text-xs'
                                 onClick={() => {
@@ -3606,11 +3630,11 @@ const ResourceRoute = ({
                             className='px-3 py-1 text-xs'
                             onClick={() => setSelectedUri(undefined)}
                         >
-                            Close
+                            {t('resources.close')}
                         </Button>
                     </div>
                 </Panel>
-            :   null}
+            ) : null}
         </section>
     );
 };
@@ -3620,7 +3644,7 @@ const toggleInList = <TValue extends string>(
     value: TValue,
 ): TValue[] => {
     if (list.includes(value)) {
-        return list.filter(item => item !== value);
+        return list.filter((item) => item !== value);
     }
 
     return [...list, value];
@@ -3688,9 +3712,7 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>
-                    Volunteer onboarding
-                </h1>
+                <h1 className='mh-route-title'>Volunteer onboarding</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
                     Capture capabilities, availability, and verification
                     checkpoints for safe matching.
@@ -3710,8 +3732,8 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                             <Input
                                 id='volunteer-did'
                                 value={draft.did}
-                                onChange={event =>
-                                    setDraft(current => ({
+                                onChange={(event) =>
+                                    setDraft((current) => ({
                                         ...current,
                                         did: event.target.value,
                                     }))
@@ -3728,8 +3750,8 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                             <Input
                                 id='volunteer-display-name'
                                 value={draft.displayName}
-                                onChange={event =>
-                                    setDraft(current => ({
+                                onChange={(event) =>
+                                    setDraft((current) => ({
                                         ...current,
                                         displayName: event.target.value,
                                     }))
@@ -3750,15 +3772,15 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                 id='volunteer-availability'
                                 className='mh-input w-full px-3 py-2 text-base'
                                 value={draft.availability}
-                                onChange={event =>
-                                    setDraft(current => ({
+                                onChange={(event) =>
+                                    setDraft((current) => ({
                                         ...current,
                                         availability: event.target
                                             .value as VolunteerOnboardingDraft['availability'],
                                     }))
                                 }
                             >
-                                {volunteerAvailabilityOptions.map(option => (
+                                {volunteerAvailabilityOptions.map((option) => (
                                     <option key={option} value={option}>
                                         {formatCategoryLabel(option)}
                                     </option>
@@ -3776,15 +3798,15 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                 id='volunteer-contact-preference'
                                 className='mh-input w-full px-3 py-2 text-base'
                                 value={draft.contactPreference}
-                                onChange={event =>
-                                    setDraft(current => ({
+                                onChange={(event) =>
+                                    setDraft((current) => ({
                                         ...current,
                                         contactPreference: event.target
                                             .value as VolunteerOnboardingDraft['contactPreference'],
                                     }))
                                 }
                             >
-                                {volunteerContactOptions.map(option => (
+                                {volunteerContactOptions.map((option) => (
                                     <option key={option} value={option}>
                                         {formatCategoryLabel(option)}
                                     </option>
@@ -3798,21 +3820,17 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                             Capabilities
                         </p>
                         <div className='flex flex-wrap gap-2'>
-                            {volunteerCapabilityOptions.map(capability => (
+                            {volunteerCapabilityOptions.map((capability) => (
                                 <Button
                                     key={capability}
                                     variant={
-                                        (
-                                            draft.capabilities.includes(
-                                                capability,
-                                            )
-                                        ) ?
-                                            'secondary'
-                                        :   'neutral'
+                                        draft.capabilities.includes(capability)
+                                            ? 'secondary'
+                                            : 'neutral'
                                     }
                                     className='px-3 py-1 text-xs'
                                     onClick={() =>
-                                        setDraft(current => ({
+                                        setDraft((current) => ({
                                             ...current,
                                             capabilities: toggleInList(
                                                 current.capabilities,
@@ -3838,7 +3856,7 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                             <Input
                                 id='volunteer-skills'
                                 value={skillsText}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setSkillsText(event.target.value)
                                 }
                             />
@@ -3853,7 +3871,7 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                             <Input
                                 id='volunteer-windows'
                                 value={windowsText}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setWindowsText(event.target.value)
                                 }
                             />
@@ -3865,21 +3883,19 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                             Preferred categories
                         </p>
                         <div className='flex flex-wrap gap-2'>
-                            {aidCategories.map(category => (
+                            {aidCategories.map((category) => (
                                 <Button
                                     key={category}
                                     variant={
-                                        (
-                                            draft.preferredCategories.includes(
-                                                category,
-                                            )
-                                        ) ?
-                                            'secondary'
-                                        :   'neutral'
+                                        draft.preferredCategories.includes(
+                                            category,
+                                        )
+                                            ? 'secondary'
+                                            : 'neutral'
                                     }
                                     className='px-3 py-1 text-xs'
                                     onClick={() =>
-                                        setDraft(current => ({
+                                        setDraft((current) => ({
                                             ...current,
                                             preferredCategories: toggleInList(
                                                 current.preferredCategories,
@@ -3899,21 +3915,19 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                             Preferred urgencies
                         </p>
                         <div className='flex flex-wrap gap-2'>
-                            {urgencyPreferenceOptions.map(urgency => (
+                            {urgencyPreferenceOptions.map((urgency) => (
                                 <Button
                                     key={urgency}
                                     variant={
-                                        (
-                                            draft.preferredUrgencies.includes(
-                                                urgency,
-                                            )
-                                        ) ?
-                                            'secondary'
-                                        :   'neutral'
+                                        draft.preferredUrgencies.includes(
+                                            urgency,
+                                        )
+                                            ? 'secondary'
+                                            : 'neutral'
                                     }
                                     className='px-3 py-1 text-xs'
                                     onClick={() =>
-                                        setDraft(current => ({
+                                        setDraft((current) => ({
                                             ...current,
                                             preferredUrgencies: toggleInList(
                                                 current.preferredUrgencies,
@@ -3942,7 +3956,7 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                 min={1}
                                 max={250}
                                 value={draft.maxDistanceKm}
-                                onChange={event => {
+                                onChange={(event) => {
                                     const value = Number.parseInt(
                                         event.target.value,
                                         10,
@@ -3950,7 +3964,7 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                     if (Number.isNaN(value)) {
                                         return;
                                     }
-                                    setDraft(current => ({
+                                    setDraft((current) => ({
                                         ...current,
                                         maxDistanceKm: value,
                                     }));
@@ -3963,8 +3977,8 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                     type='checkbox'
                                     className='h-4 w-4'
                                     checked={draft.acceptsLateNight}
-                                    onChange={event =>
-                                        setDraft(current => ({
+                                    onChange={(event) =>
+                                        setDraft((current) => ({
                                             ...current,
                                             acceptsLateNight:
                                                 event.target.checked,
@@ -3988,8 +4002,8 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                 id='checkpoint-identity'
                                 className='mh-input w-full px-3 py-2 text-base'
                                 value={draft.checkpoints.identityCheck}
-                                onChange={event =>
-                                    setDraft(current => ({
+                                onChange={(event) =>
+                                    setDraft((current) => ({
                                         ...current,
                                         checkpoints: {
                                             ...current.checkpoints,
@@ -3999,7 +4013,7 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                     }))
                                 }
                             >
-                                {checkpointStatusOptions.map(status => (
+                                {checkpointStatusOptions.map((status) => (
                                     <option key={status} value={status}>
                                         {formatCategoryLabel(status)}
                                     </option>
@@ -4017,8 +4031,8 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                 id='checkpoint-safety'
                                 className='mh-input w-full px-3 py-2 text-base'
                                 value={draft.checkpoints.safetyTraining}
-                                onChange={event =>
-                                    setDraft(current => ({
+                                onChange={(event) =>
+                                    setDraft((current) => ({
                                         ...current,
                                         checkpoints: {
                                             ...current.checkpoints,
@@ -4028,7 +4042,7 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                     }))
                                 }
                             >
-                                {checkpointStatusOptions.map(status => (
+                                {checkpointStatusOptions.map((status) => (
                                     <option key={status} value={status}>
                                         {formatCategoryLabel(status)}
                                     </option>
@@ -4046,8 +4060,8 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                 id='checkpoint-reference'
                                 className='mh-input w-full px-3 py-2 text-base'
                                 value={draft.checkpoints.communityReference}
-                                onChange={event =>
-                                    setDraft(current => ({
+                                onChange={(event) =>
+                                    setDraft((current) => ({
                                         ...current,
                                         checkpoints: {
                                             ...current.checkpoints,
@@ -4057,7 +4071,7 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                     }))
                                 }
                             >
-                                {checkpointStatusOptions.map(status => (
+                                {checkpointStatusOptions.map((status) => (
                                     <option key={status} value={status}>
                                         {formatCategoryLabel(status)}
                                     </option>
@@ -4066,9 +4080,9 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                         </div>
                     </div>
 
-                    {errors.length > 0 ?
+                    {errors.length > 0 ? (
                         <div className='space-y-1'>
-                            {errors.map(issue => (
+                            {errors.map((issue) => (
                                 <p
                                     key={`${issue.field}-${issue.message}`}
                                     className='mh-alert text-xs font-bold'
@@ -4077,9 +4091,9 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                 </p>
                             ))}
                         </div>
-                    :   null}
+                    ) : null}
 
-                    {savedSummary ?
+                    {savedSummary ? (
                         <div className='rounded-none border-2 border-mh-border bg-mh-surfaceElev p-3'>
                             <div className='flex flex-wrap gap-2'>
                                 <Badge tone='success'>
@@ -4091,12 +4105,12 @@ const LegacyFixtureVolunteerRoute = ({ did }: { did: string }) => {
                                 <Badge tone='danger'>
                                     Rejected {savedSummary.rejected}
                                 </Badge>
-                                {isVerified ?
+                                {isVerified ? (
                                     <Badge tone='success'>Fully verified</Badge>
-                                :   null}
+                                ) : null}
                             </div>
                         </div>
-                    :   null}
+                    ) : null}
 
                     <Button type='submit'>Save volunteer profile</Button>
                 </form>
@@ -4129,9 +4143,11 @@ const emptyVolunteerCommand = (): VolunteerProfileCommandInput => ({
 });
 
 const VolunteerRoute = ({ did }: { did: string }) => {
+    const { t } = useLocale();
     const [profiles, setProfiles] = useState<VolunteerDiscoveryProfile[]>([]);
-    const [discoveryStatus, setDiscoveryStatus] =
-        useState('Loading volunteer profiles…');
+    const [discoveryStatus, setDiscoveryStatus] = useState(
+        t('volunteer.loading'),
+    );
     const [searchText, setSearchText] = useState('');
     const [command, setCommand] = useState<VolunteerProfileCommandInput>(
         emptyVolunteerCommand,
@@ -4143,19 +4159,21 @@ const VolunteerRoute = ({ did }: { did: string }) => {
     const [formStatus, setFormStatus] = useState<string>();
 
     const loadProfiles = useCallback(async () => {
-        setDiscoveryStatus('Loading volunteer profiles…');
+        setDiscoveryStatus(t('volunteer.loading'));
         const result = await fetchVolunteerProfilesViaApi({ searchText });
         if (!result.ok) {
-            setDiscoveryStatus(`Error: ${result.error}`);
+            setDiscoveryStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
         setProfiles(result.data);
         setDiscoveryStatus(
-            result.data.length === 0 ?
-                'No volunteer profiles match these filters.'
-            :   `${result.data.length} volunteer profile${result.data.length === 1 ? '' : 's'}.`,
+            result.data.length === 0
+                ? t('volunteer.noneFound')
+                : t('volunteer.results', { count: result.data.length }),
         );
-        const mine = result.data.find(profile => profile.authorDid === did);
+        const mine = result.data.find((profile) => profile.authorDid === did);
         if (!mine || !did) return;
         const ownedResult = await getAtVolunteerProfileViaApi(mine.uri);
         if (!ownedResult.ok) return;
@@ -4179,12 +4197,11 @@ const VolunteerRoute = ({ did }: { did: string }) => {
         setSkillsText((record.skills ?? []).join(', '));
         setLanguagesText((record.languages ?? []).join(', '));
         setWindowsText(
-            (
-                ownedResult.data.privateProfile?.availabilityWindows ??
-                []
-            ).join(', '),
+            (ownedResult.data.privateProfile?.availabilityWindows ?? []).join(
+                ', ',
+            ),
         );
-    }, [did, searchText]);
+    }, [did, searchText, t]);
 
     useEffect(() => {
         void loadProfiles();
@@ -4193,7 +4210,7 @@ const VolunteerRoute = ({ did }: { did: string }) => {
     const updateProfile = (
         patch: Partial<VolunteerProfileCommandInput['profile']>,
     ) =>
-        setCommand(current => ({
+        setCommand((current) => ({
             ...current,
             profile: { ...current.profile, ...patch },
         }));
@@ -4206,46 +4223,44 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                 ...command.profile,
                 skills: parseCommaList(skillsText),
                 languages: parseCommaList(languagesText),
-                serviceArea:
-                    command.profile.serviceArea?.areaLabel.trim() ?
-                        command.profile.serviceArea
-                    :   undefined,
+                serviceArea: command.profile.serviceArea?.areaLabel.trim()
+                    ? command.profile.serviceArea
+                    : undefined,
             },
             privateProfile: {
                 ...command.privateProfile,
                 availabilityWindows: parseCommaList(windowsText),
             },
         };
-        setFormStatus('Saving volunteer profile…');
-        const result =
-            owned ?
-                await updateAtVolunteerProfileViaApi({
-                    ...next,
-                    uri: owned.uri,
-                    expectedCid: owned.cid,
-                })
-            :   await createAtVolunteerProfileViaApi(next);
+        setFormStatus(t('volunteer.saving'));
+        const result = owned
+            ? await updateAtVolunteerProfileViaApi({
+                  ...next,
+                  uri: owned.uri,
+                  expectedCid: owned.cid,
+              })
+            : await createAtVolunteerProfileViaApi(next);
         if (!result.ok) {
-            setFormStatus(`Error: ${result.error}`);
+            setFormStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         setOwned(result.data);
         setCommand(next);
         setFormStatus(
-            owned ? 'Volunteer profile updated.' : 'Volunteer profile published.',
+            owned ? t('volunteer.updated') : t('volunteer.published'),
         );
         await loadProfiles();
     };
 
     const remove = async () => {
         if (!owned) return;
-        setFormStatus('Deleting volunteer profile…');
+        setFormStatus(t('volunteer.deleting'));
         const result = await deleteAtVolunteerProfileViaApi({
             uri: owned.uri,
             expectedCid: owned.cid,
         });
         if (!result.ok) {
-            setFormStatus(`Error: ${result.error}`);
+            setFormStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         setOwned(undefined);
@@ -4253,84 +4268,102 @@ const VolunteerRoute = ({ did }: { did: string }) => {
         setSkillsText('');
         setLanguagesText('en');
         setWindowsText('');
-        setFormStatus('Volunteer profile deleted.');
+        setFormStatus(t('volunteer.deleted'));
         await loadProfiles();
     };
 
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>Volunteer profiles</h1>
+                <h1 className='mh-route-title'>
+                    {t('volunteer.profilesHeading')}
+                </h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Discover public skills and approximate service areas.
-                    Private contact and matching preferences are visible only
-                    to the profile owner and authorized workflows.
+                    {t('volunteer.profilesDescription')}
                 </p>
             </header>
 
-            <Panel title='Find volunteers'>
+            <Panel title={t('volunteer.find')}>
                 <form
                     className='flex flex-wrap gap-2'
-                    onSubmit={event => {
+                    onSubmit={(event) => {
                         event.preventDefault();
                         void loadProfiles();
                     }}
                 >
                     <label className='grow text-sm font-bold'>
-                        Search public profiles
+                        {t('volunteer.searchPublic')}
                         <Input
                             value={searchText}
-                            onChange={event => setSearchText(event.target.value)}
+                            onChange={(event) =>
+                                setSearchText(event.target.value)
+                            }
                         />
                     </label>
-                    <Button type='submit'>Search</Button>
+                    <Button type='submit'>{t('volunteer.search')}</Button>
                 </form>
                 <p
                     className='mt-3 text-sm text-mh-textMuted'
-                    role={discoveryStatus.startsWith('Error:') ? 'alert' : 'status'}
+                    role={
+                        discoveryStatus.startsWith('Error:')
+                            ? 'alert'
+                            : 'status'
+                    }
                 >
                     {discoveryStatus}
                 </p>
                 <div className='mt-4 grid gap-3 sm:grid-cols-2'>
-                    {profiles.map(profile => (
+                    {profiles.map((profile) => (
                         <Card key={profile.uri} title={profile.displayName}>
-                            {profile.recordOrigin === 'synthetic' ?
-                                <Badge tone='info'>Synthetic showcase</Badge>
-                            : profile.recordOrigin === 'sourced-public' ?
+                            {profile.recordOrigin === 'synthetic' ? (
                                 <Badge tone='info'>
-                                    Public-source reference
+                                    {t('volunteer.synthetic')}
                                 </Badge>
-                            :   null}
+                            ) : profile.recordOrigin === 'sourced-public' ? (
+                                <Badge tone='info'>
+                                    {t('volunteer.publicSource')}
+                                </Badge>
+                            ) : null}
                             <p className='text-sm'>{profile.bio}</p>
                             <p className='mt-2 text-xs text-mh-textMuted'>
                                 {profile.capabilities.join(', ')} ·{' '}
                                 {profile.availability}
                             </p>
                             <p className='mt-1 text-xs text-mh-textMuted'>
-                                Languages: {profile.languages.join(', ') || 'not listed'}
+                                {t('volunteer.languages', {
+                                    languages:
+                                        profile.languages.join(', ') ||
+                                        t('volunteer.notListed'),
+                                })}
                             </p>
-                            {profile.serviceArea ?
+                            {profile.serviceArea ? (
                                 <p className='mt-1 text-xs text-mh-textMuted'>
-                                    Service area: {profile.serviceArea.areaLabel}
-                                    {profile.serviceArea.noPermanentAddress ?
-                                        ' · no permanent address'
-                                    :   ''}
+                                    {t('volunteer.serviceArea', {
+                                        area: profile.serviceArea.areaLabel,
+                                    })}
+                                    {profile.serviceArea.noPermanentAddress
+                                        ? ` · ${t('volunteer.noPermanentAddressShort')}`
+                                        : ''}
                                 </p>
-                            :   null}
+                            ) : null}
                         </Card>
                     ))}
                 </div>
             </Panel>
 
-            {did ?
-                <Panel title={owned ? 'Manage my profile' : 'Create my profile'}>
+            {did ? (
+                <Panel
+                    title={
+                        owned ? t('volunteer.manage') : t('volunteer.create')
+                    }
+                >
                     <form className='space-y-4' onSubmit={save}>
                         <div className='grid gap-3 sm:grid-cols-2'>
                             <label className='text-sm font-bold'>
-                                Display name
+                                {t('volunteer.displayNameLabel')}
                                 <Input
                                     value={command.profile.displayName}
-                                    onChange={event =>
+                                    onChange={(event) =>
                                         updateProfile({
                                             displayName: event.target.value,
                                         })
@@ -4338,84 +4371,101 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                                 />
                             </label>
                             <label className='text-sm font-bold'>
-                                Availability
+                                {t('volunteer.availabilityLabel')}
                                 <select
                                     className='mh-input mt-1 w-full px-3 py-2'
                                     value={command.profile.availability}
-                                    onChange={event =>
+                                    onChange={(event) =>
                                         updateProfile({
                                             availability: event.target
                                                 .value as VolunteerProfileCommandInput['profile']['availability'],
                                         })
                                     }
                                 >
-                                    {volunteerAvailabilityOptions.map(value => (
-                                        <option key={value} value={value}>
-                                            {formatCategoryLabel(value)}
-                                        </option>
-                                    ))}
+                                    {volunteerAvailabilityOptions.map(
+                                        (value) => (
+                                            <option key={value} value={value}>
+                                                {formatLocalizedLabel(t, value)}
+                                            </option>
+                                        ),
+                                    )}
                                 </select>
                             </label>
                         </div>
                         <label className='block text-sm font-bold'>
-                            Public bio
+                            {t('volunteer.publicBio')}
                             <textarea
                                 className='mh-input mt-1 min-h-24 w-full px-3 py-2'
                                 value={command.profile.bio ?? ''}
-                                onChange={event =>
+                                onChange={(event) =>
                                     updateProfile({ bio: event.target.value })
                                 }
                             />
                         </label>
                         <fieldset>
                             <legend className='text-sm font-bold'>
-                                Public capabilities
+                                {t('volunteer.publicCapabilities')}
                             </legend>
                             <div className='mt-2 flex flex-wrap gap-2'>
-                                {volunteerCapabilityOptions.map(value => (
+                                {volunteerCapabilityOptions.map((value) => (
                                     <label key={value} className='text-sm'>
                                         <input
                                             type='checkbox'
-                                            checked={command.profile.capabilities.includes(value)}
+                                            checked={command.profile.capabilities.includes(
+                                                value,
+                                            )}
                                             onChange={() =>
                                                 updateProfile({
                                                     capabilities: toggleInList(
-                                                        command.profile.capabilities,
+                                                        command.profile
+                                                            .capabilities,
                                                         value,
                                                     ) as VolunteerProfileCommandInput['profile']['capabilities'],
                                                 })
                                             }
                                         />{' '}
-                                        {formatCategoryLabel(value)}
+                                        {formatLocalizedLabel(t, value)}
                                     </label>
                                 ))}
                             </div>
                         </fieldset>
                         <div className='grid gap-3 sm:grid-cols-2'>
                             <label className='text-sm font-bold'>
-                                Public skills
+                                {t('volunteer.publicSkills')}
                                 <Input
                                     value={skillsText}
-                                    onChange={event => setSkillsText(event.target.value)}
-                                    placeholder='meal delivery, route planning'
+                                    onChange={(event) =>
+                                        setSkillsText(event.target.value)
+                                    }
+                                    placeholder={t(
+                                        'volunteer.skillsPlaceholder',
+                                    )}
                                 />
                             </label>
                             <label className='text-sm font-bold'>
-                                Public languages
+                                {t('volunteer.publicLanguages')}
                                 <Input
                                     value={languagesText}
-                                    onChange={event => setLanguagesText(event.target.value)}
-                                    placeholder='en, es'
+                                    onChange={(event) =>
+                                        setLanguagesText(event.target.value)
+                                    }
+                                    placeholder={t(
+                                        'volunteer.languagesPlaceholder',
+                                    )}
                                 />
                             </label>
                             <label className='text-sm font-bold'>
-                                Approximate service-area label
+                                {t('volunteer.serviceAreaLabel')}
                                 <Input
-                                    value={command.profile.serviceArea?.areaLabel ?? ''}
-                                    onChange={event =>
+                                    value={
+                                        command.profile.serviceArea
+                                            ?.areaLabel ?? ''
+                                    }
+                                    onChange={(event) =>
                                         updateProfile({
                                             serviceArea: {
-                                                ...(command.profile.serviceArea ?? {
+                                                ...(command.profile
+                                                    .serviceArea ?? {
                                                     noPermanentAddress: false,
                                                 }),
                                                 areaLabel: event.target.value,
@@ -4425,63 +4475,81 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                                 />
                             </label>
                             <label className='text-sm font-bold'>
-                                Precision (km, minimum 1)
+                                {t('volunteer.precision')}
                                 <Input
                                     type='number'
                                     min={1}
-                                    value={command.profile.serviceArea?.precisionKm ?? 2}
-                                    onChange={event =>
+                                    value={
+                                        command.profile.serviceArea
+                                            ?.precisionKm ?? 2
+                                    }
+                                    onChange={(event) =>
                                         updateProfile({
                                             serviceArea: {
-                                                ...(command.profile.serviceArea ?? {
+                                                ...(command.profile
+                                                    .serviceArea ?? {
                                                     areaLabel: '',
                                                     noPermanentAddress: false,
                                                 }),
-                                                precisionKm: Number(event.target.value),
+                                                precisionKm: Number(
+                                                    event.target.value,
+                                                ),
                                             },
                                         })
                                     }
                                 />
                             </label>
                             <label className='text-sm font-bold'>
-                                Approximate latitude
+                                {t('volunteer.latitude')}
                                 <Input
                                     type='number'
                                     step='0.01'
-                                    value={command.profile.serviceArea?.latitude ?? ''}
-                                    onChange={event =>
+                                    value={
+                                        command.profile.serviceArea?.latitude ??
+                                        ''
+                                    }
+                                    onChange={(event) =>
                                         updateProfile({
                                             serviceArea: {
-                                                ...(command.profile.serviceArea ?? {
+                                                ...(command.profile
+                                                    .serviceArea ?? {
                                                     areaLabel: '',
                                                     noPermanentAddress: false,
                                                 }),
                                                 precisionKm:
                                                     command.profile.serviceArea
                                                         ?.precisionKm ?? 2,
-                                                latitude: Number(event.target.value),
+                                                latitude: Number(
+                                                    event.target.value,
+                                                ),
                                             },
                                         })
                                     }
                                 />
                             </label>
                             <label className='text-sm font-bold'>
-                                Approximate longitude
+                                {t('volunteer.longitude')}
                                 <Input
                                     type='number'
                                     step='0.01'
-                                    value={command.profile.serviceArea?.longitude ?? ''}
-                                    onChange={event =>
+                                    value={
+                                        command.profile.serviceArea
+                                            ?.longitude ?? ''
+                                    }
+                                    onChange={(event) =>
                                         updateProfile({
                                             serviceArea: {
-                                                ...(command.profile.serviceArea ?? {
+                                                ...(command.profile
+                                                    .serviceArea ?? {
                                                     areaLabel: '',
                                                     noPermanentAddress: false,
                                                 }),
                                                 precisionKm:
                                                     command.profile.serviceArea
                                                         ?.precisionKm ?? 2,
-                                                longitude: Number(event.target.value),
+                                                longitude: Number(
+                                                    event.target.value,
+                                                ),
                                             },
                                         })
                                     }
@@ -4495,7 +4563,7 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                                     command.profile.serviceArea
                                         ?.noPermanentAddress ?? false
                                 }
-                                onChange={event =>
+                                onChange={(event) =>
                                     updateProfile({
                                         serviceArea: {
                                             ...(command.profile.serviceArea ?? {
@@ -4507,76 +4575,90 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                                     })
                                 }
                             />{' '}
-                            I do not have a permanent address
+                            {t('volunteer.noPermanentAddress')}
                         </label>
-                        <Card title='Private operational details'>
+                        <Card title={t('volunteer.privateDetails')}>
                             <div className='grid gap-3 sm:grid-cols-2'>
                                 <label className='text-sm font-bold'>
-                                    Private contact email
+                                    {t('volunteer.privateEmail')}
                                     <Input
                                         type='email'
-                                        value={command.privateProfile.contactEmail ?? ''}
-                                        onChange={event =>
-                                            setCommand(current => ({
+                                        value={
+                                            command.privateProfile
+                                                .contactEmail ?? ''
+                                        }
+                                        onChange={(event) =>
+                                            setCommand((current) => ({
                                                 ...current,
                                                 privateProfile: {
                                                     ...current.privateProfile,
                                                     contactEmail:
-                                                        event.target.value || null,
+                                                        event.target.value ||
+                                                        null,
                                                 },
                                             }))
                                         }
                                     />
                                 </label>
                                 <label className='text-sm font-bold'>
-                                    Private availability windows
+                                    {t('volunteer.privateWindows')}
                                     <Input
                                         value={windowsText}
-                                        onChange={event => setWindowsText(event.target.value)}
+                                        onChange={(event) =>
+                                            setWindowsText(event.target.value)
+                                        }
                                     />
                                 </label>
                             </div>
                         </Card>
                         <div className='flex flex-wrap items-center gap-2'>
                             <Button type='submit'>
-                                {owned ? 'Save profile' : 'Publish profile'}
+                                {owned
+                                    ? t('volunteer.save')
+                                    : t('volunteer.publish')}
                             </Button>
-                            {owned ?
+                            {owned ? (
                                 <Button
                                     type='button'
                                     variant='neutral'
                                     onClick={() => void remove()}
                                 >
-                                    Delete profile
+                                    {t('volunteer.delete')}
                                 </Button>
-                            :   null}
-                            {formStatus ?
+                            ) : null}
+                            {formStatus ? (
                                 <span
-                                    role={formStatus.startsWith('Error:') ? 'alert' : 'status'}
+                                    role={
+                                        formStatus.startsWith('Error:')
+                                            ? 'alert'
+                                            : 'status'
+                                    }
                                     className='text-sm'
                                 >
                                     {formStatus}
                                 </span>
-                            :   null}
+                            ) : null}
                         </div>
                     </form>
                 </Panel>
-            :   <Panel title='Sign in to volunteer'>
-                    <p>Create and manage a profile with your AT identity.</p>
-                </Panel>}
+            ) : (
+                <Panel title={t('volunteer.signIn')}>
+                    <p>{t('volunteer.signInHelp')}</p>
+                </Panel>
+            )}
         </section>
     );
 };
 
 const VerificationRoute = ({ did }: { did: string }) => {
+    const { t, fmt } = useLocale();
     const [workspace, setWorkspace] = useState<VerificationWorkspace>();
     const [review, setReview] = useState<VerificationReviewQueue>();
     const [attachments, setAttachments] = useState<PrivateAttachment[]>([]);
     const evidenceFileRef = useRef<HTMLInputElement>(null);
     const [accessUrls, setAccessUrls] = useState<Record<string, string>>({});
-    const [exactReview, setExactReview] =
-        useState<ExactAddressRequest[]>();
-    const [status, setStatus] = useState('Loading private verification status…');
+    const [exactReview, setExactReview] = useState<ExactAddressRequest[]>();
+    const [status, setStatus] = useState(t('verification.loading'));
     const [subjectType, setSubjectType] =
         useState<VerificationSubjectType>('volunteer');
     const [organizationId, setOrganizationId] = useState('');
@@ -4599,24 +4681,24 @@ const VerificationRoute = ({ did }: { did: string }) => {
     const load = useCallback(async () => {
         if (!did) return;
         const sequence = ++loadSequence.current;
-        setStatus('Loading private verification status…');
+        setStatus(t('verification.loading'));
         const [mine, privateFiles] = await Promise.all([
             fetchVerificationWorkspaceViaApi(),
             fetchPrivateAttachmentsViaApi(),
         ]);
         if (sequence !== loadSequence.current) return;
         if (!mine.ok) {
-            setStatus(`Error: ${mine.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         setWorkspace(mine.data);
         if (privateFiles.ok) {
             setAttachments(privateFiles.data);
         } else {
-            setStatus(`Error: ${privateFiles.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
-        setStatus('Verification status loaded.');
+        setStatus(t('verification.loaded'));
 
         const [verificationQueue, exactQueue] = await Promise.all([
             fetchVerificationReviewQueueViaApi(),
@@ -4625,7 +4707,7 @@ const VerificationRoute = ({ did }: { did: string }) => {
         if (sequence !== loadSequence.current) return;
         setReview(verificationQueue.ok ? verificationQueue.data : undefined);
         setExactReview(exactQueue.ok ? exactQueue.data : undefined);
-    }, [did]);
+    }, [did, t]);
 
     useEffect(() => {
         void load();
@@ -4633,13 +4715,12 @@ const VerificationRoute = ({ did }: { did: string }) => {
 
     if (!did) {
         return (
-            <Panel title='Sign in to manage verification'>
+            <Panel title={t('verification.signIn')}>
                 <p className='text-sm text-mh-textMuted'>
-                    Verification evidence, decisions, appeals, and exact-address
-                    requests are private authenticated workflows.
+                    {t('verification.signInHelp')}
                 </p>
                 <a className='mh-text-link mt-3 inline-block' href='/login'>
-                    Sign in
+                    {t('verification.signInAction')}
                 </a>
             </Panel>
         );
@@ -4647,7 +4728,7 @@ const VerificationRoute = ({ did }: { did: string }) => {
 
     const submitApplication = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        setStatus('Submitting verification application…');
+        setStatus(t('verification.submittingApplication'));
         const result = await submitVerificationApplicationViaApi({
             subjectType,
             ...(subjectType !== 'volunteer' ? { organizationId } : {}),
@@ -4655,10 +4736,11 @@ const VerificationRoute = ({ did }: { did: string }) => {
             evidence: [
                 {
                     kind:
-                        subjectType === 'volunteer' ? 'identity'
-                        : subjectType === 'organization' ?
-                            'organization-registration'
-                        :   'service-authorization',
+                        subjectType === 'volunteer'
+                            ? 'identity'
+                            : subjectType === 'organization'
+                              ? 'organization-registration'
+                              : 'service-authorization',
                     label: evidenceLabel,
                     issuer: evidenceIssuer || null,
                     issuedAt: null,
@@ -4668,7 +4750,7 @@ const VerificationRoute = ({ did }: { did: string }) => {
             ],
         });
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         setEvidenceLabel('');
@@ -4676,62 +4758,60 @@ const VerificationRoute = ({ did }: { did: string }) => {
         setPrivateNotes('');
         setAttachmentId('');
         await load();
-        setStatus('Verification application submitted privately.');
+        setStatus(t('verification.applicationSubmitted'));
     };
 
     const uploadEvidence = async () => {
         const evidenceFile = evidenceFileRef.current?.files?.[0];
         if (!evidenceFile) {
-            setStatus('Error: Choose an image or PDF to upload.');
+            setStatus(
+                `${t('common.error')}: ${t('verification.chooseFileError')}`,
+            );
             return;
         }
-        setStatus('Uploading private verification evidence…');
+        setStatus(t('verification.uploading'));
         const result = await uploadPrivateAttachmentViaApi(
             evidenceFile,
             'verification-evidence',
             null,
         );
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         if (evidenceFileRef.current) {
             evidenceFileRef.current.value = '';
         }
         await load();
-        setStatus(
-            'Evidence uploaded privately and queued for scanning. Refresh until it is clean before submitting.',
-        );
+        setStatus(t('verification.uploaded'));
     };
 
     const deleteAttachment = async (attachmentIdToDelete: string) => {
-        const result = await deletePrivateAttachmentViaApi(
-            attachmentIdToDelete,
-        );
+        const result =
+            await deletePrivateAttachmentViaApi(attachmentIdToDelete);
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         if (attachmentId === attachmentIdToDelete) {
             setAttachmentId('');
         }
         await load();
-        setStatus('Attachment deletion queued for original and derivative bytes.');
+        setStatus(t('verification.deletionQueued'));
     };
 
     const prepareAccess = async (attachmentIdToOpen: string) => {
-        const result = await requestPrivateAttachmentAccessViaApi(
-            attachmentIdToOpen,
-        );
+        const result =
+            await requestPrivateAttachmentAccessViaApi(attachmentIdToOpen);
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
-        setAccessUrls(current => ({
+        setAccessUrls((current) => ({
             ...current,
             [attachmentIdToOpen]: result.data.url,
         }));
-        setStatus('Short-lived authenticated access is ready for 60 seconds.');
+        setStatus(t('verification.accessReady'));
     };
 
     const moderateAttachment = async (
@@ -4744,37 +4824,37 @@ const VerificationRoute = ({ did }: { did: string }) => {
             reviewReason,
         );
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
-        setAccessUrls(current => {
+        setAccessUrls((current) => {
             const next = { ...current };
             delete next[attachmentIdToReview];
             return next;
         });
         await load();
-        setStatus(`Attachment ${action} action recorded.`);
+        setStatus(t('verification.attachmentAction', { action }));
     };
 
     const submitAppeal = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        setStatus('Submitting appeal…');
+        setStatus(t('verification.submittingAppeal'));
         const result = await submitVerificationAppealViaApi({
             applicationId: appealApplicationId,
             reason: appealReason,
         });
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         setAppealReason('');
         await load();
-        setStatus('Appeal submitted for moderator review.');
+        setStatus(t('verification.appealSubmitted'));
     };
 
     const submitExactAddress = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        setStatus('Submitting exact public-resource address…');
+        setStatus(t('verification.submittingAddress'));
         const result = await requestExactPublicAddressViaApi({
             organizationId,
             resourceUri,
@@ -4784,15 +4864,15 @@ const VerificationRoute = ({ did }: { did: string }) => {
             confidentialFacility,
         });
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         setStreetAddress('');
         await load();
         setStatus(
-            confidentialFacility ?
-                'Confidential address quarantined and kept out of public discovery.'
-            :   'Exact address submitted for separate moderator approval.',
+            confidentialFacility
+                ? t('verification.confidentialQuarantined')
+                : t('verification.addressSubmitted'),
         );
     };
 
@@ -4800,18 +4880,18 @@ const VerificationRoute = ({ did }: { did: string }) => {
         application: VerificationApplication,
         action: 'approve' | 'deny' | 'revoke' | 'renew',
     ) => {
-        setStatus(`Recording ${action} decision…`);
+        setStatus(t('verification.recordingDecision', { action }));
         const result = await decideVerificationViaApi({
             applicationId: application.id,
             action,
             reason: reviewReason,
         });
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         await load();
-        setStatus(`Verification ${action} decision recorded.`);
+        setStatus(t('verification.verificationDecision', { action }));
     };
 
     const decideAppeal = async (
@@ -4824,11 +4904,11 @@ const VerificationRoute = ({ did }: { did: string }) => {
             resolutionNote: reviewReason,
         });
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         await load();
-        setStatus(`Appeal ${decision} decision recorded.`);
+        setStatus(t('verification.appealDecision', { decision }));
     };
 
     const decideExact = async (
@@ -4841,26 +4921,24 @@ const VerificationRoute = ({ did }: { did: string }) => {
             reason: reviewReason,
         });
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         await load();
-        setStatus(`Exact-address ${decision} decision recorded.`);
+        setStatus(t('verification.addressDecision', { decision }));
     };
 
     const appealable =
-        workspace?.applications.filter(application =>
+        workspace?.applications.filter((application) =>
             ['denied', 'revoked', 'expired'].includes(application.status),
         ) ?? [];
 
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>Verification</h1>
+                <h1 className='mh-route-title'>{t('verification.heading')}</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Evidence stays private. Public verification expires
-                    annually, and exact resource addresses require a separate
-                    moderator approval.
+                    {t('verification.description')}
                 </p>
                 <p
                     role={status.startsWith('Error:') ? 'alert' : 'status'}
@@ -4870,81 +4948,85 @@ const VerificationRoute = ({ did }: { did: string }) => {
                 </p>
             </header>
 
-            <Panel title='Apply for verification'>
+            <Panel title={t('verification.apply')}>
                 <form className='space-y-3' onSubmit={submitApplication}>
                     <label className='block text-sm font-bold'>
-                        Subject
+                        {t('verification.subject')}
                         <select
                             className='mh-input mt-1 w-full px-3 py-2'
                             value={subjectType}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setSubjectType(
                                     event.target
                                         .value as VerificationSubjectType,
                                 )
                             }
                         >
-                            <option value='volunteer'>My volunteer identity</option>
-                            <option value='organization'>Organization</option>
-                            <option value='resource'>Organization resource</option>
+                            <option value='volunteer'>
+                                {t('verification.volunteer')}
+                            </option>
+                            <option value='organization'>
+                                {t('verification.organization')}
+                            </option>
+                            <option value='resource'>
+                                {t('verification.resource')}
+                            </option>
                         </select>
                     </label>
-                    {subjectType !== 'volunteer' ?
+                    {subjectType !== 'volunteer' ? (
                         <label className='block text-sm font-bold'>
-                            Organization ID
+                            {t('verification.organizationId')}
                             <Input
                                 className='mt-1'
                                 required
                                 value={organizationId}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setOrganizationId(event.target.value)
                                 }
                             />
                         </label>
-                    :   null}
-                    {subjectType === 'resource' ?
+                    ) : null}
+                    {subjectType === 'resource' ? (
                         <label className='block text-sm font-bold'>
-                            Resource AT URI
+                            {t('verification.resourceUri')}
                             <Input
                                 className='mt-1'
                                 required
                                 value={resourceUri}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setResourceUri(event.target.value)
                                 }
                             />
                         </label>
-                    :   null}
+                    ) : null}
                     <label className='block text-sm font-bold'>
-                        Evidence label
+                        {t('verification.evidenceLabel')}
                         <Input
                             className='mt-1'
                             required
                             value={evidenceLabel}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setEvidenceLabel(event.target.value)
                             }
                         />
                     </label>
                     <label className='block text-sm font-bold'>
-                        Issuer (optional)
+                        {t('verification.issuer')}
                         <Input
                             className='mt-1'
                             value={evidenceIssuer}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setEvidenceIssuer(event.target.value)
                             }
                         />
                     </label>
-                    <Card title='Private evidence file'>
+                    <Card title={t('verification.privateFile')}>
                         <p className='mb-2 text-xs text-mh-textMuted'>
-                            Upload first, wait for a clean scan decision, then
-                            select the file for this application. Object keys
-                            and scanner details never appear here.
+                            {t('verification.fileHelp')}
                         </p>
                         <div className='flex flex-wrap items-end gap-2'>
                             <label className='min-w-64 flex-1 text-sm font-bold'>
-                                Image or PDF
+                                {t('verification.imagePdf')}
                                 <input
                                     className='mt-1'
                                     type='file'
@@ -4957,19 +5039,19 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                 variant='secondary'
                                 onClick={() => void uploadEvidence()}
                             >
-                                Upload privately
+                                {t('verification.upload')}
                             </Button>
                             <Button
                                 type='button'
                                 variant='neutral'
                                 onClick={() => void load()}
                             >
-                                Refresh scan status
+                                {t('verification.refresh')}
                             </Button>
                         </div>
-                        {attachments.length ?
+                        {attachments.length ? (
                             <ul className='mt-3 space-y-2'>
-                                {attachments.map(attachment => (
+                                {attachments.map((attachment) => (
                                     <li
                                         className='mh-record-card text-xs'
                                         key={attachment.id}
@@ -4983,10 +5065,11 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                 {Math.ceil(
                                                     attachment.byteSize / 1024,
                                                 )}{' '}
-                                                KB
+                                                {t('verification.kilobytes')}
                                             </span>
                                             <div className='flex flex-wrap gap-2'>
-                                                {attachment.status === 'clean' ?
+                                                {attachment.status ===
+                                                'clean' ? (
                                                     <Button
                                                         type='button'
                                                         variant='neutral'
@@ -4997,9 +5080,11 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                             )
                                                         }
                                                     >
-                                                        Prepare preview
+                                                        {t(
+                                                            'verification.preview',
+                                                        )}
                                                     </Button>
-                                                :   null}
+                                                ) : null}
                                                 <Button
                                                     type='button'
                                                     variant='neutral'
@@ -5010,47 +5095,47 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                         )
                                                     }
                                                 >
-                                                    Delete
+                                                    {t('verification.delete')}
                                                 </Button>
                                             </div>
                                         </div>
-                                        {accessUrls[attachment.id] ?
+                                        {accessUrls[attachment.id] ? (
                                             <a
                                                 className='mh-text-link mt-2 inline-block'
-                                                href={
-                                                    accessUrls[attachment.id]
-                                                }
+                                                href={accessUrls[attachment.id]}
                                                 target='_blank'
                                                 rel='noreferrer'
                                             >
-                                                Open authenticated file
+                                                {t('verification.openFile')}
                                             </a>
-                                        :   null}
+                                        ) : null}
                                     </li>
                                 ))}
                             </ul>
-                        :   <p className='mt-2 text-xs text-mh-textMuted'>
-                                No private files uploaded.
-                            </p>}
+                        ) : (
+                            <p className='mt-2 text-xs text-mh-textMuted'>
+                                {t('verification.noFiles')}
+                            </p>
+                        )}
                     </Card>
                     <label className='block text-sm font-bold'>
-                        Clean private attachment (optional)
+                        {t('verification.cleanFile')}
                         <select
                             className='mh-input mt-1 w-full px-3 py-2'
                             value={attachmentId}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setAttachmentId(event.target.value)
                             }
                         >
-                            <option value=''>No file</option>
+                            <option value=''>{t('verification.noFile')}</option>
                             {attachments
                                 .filter(
-                                    attachment =>
+                                    (attachment) =>
                                         attachment.status === 'clean' &&
                                         attachment.purpose ===
                                             'verification-evidence',
                                 )
-                                .map(attachment => (
+                                .map((attachment) => (
                                     <option
                                         key={attachment.id}
                                         value={attachment.id}
@@ -5061,77 +5146,88 @@ const VerificationRoute = ({ did }: { did: string }) => {
                         </select>
                     </label>
                     <label className='block text-sm font-bold'>
-                        Private reviewer notes (optional)
+                        {t('verification.notes')}
                         <Input
                             className='mt-1'
                             value={privateNotes}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setPrivateNotes(event.target.value)
                             }
                         />
                     </label>
-                    <Button type='submit'>Submit private application</Button>
+                    <Button type='submit'>{t('verification.submit')}</Button>
                 </form>
             </Panel>
 
-            <Panel title='My status and annual renewal'>
-                {workspace?.applications.length ?
+            <Panel title={t('verification.status')}>
+                {workspace?.applications.length ? (
                     <ul className='space-y-3'>
-                        {workspace.applications.map(application => (
+                        {workspace.applications.map((application) => (
                             <li className='mh-record-card' key={application.id}>
                                 <div className='flex flex-wrap justify-between gap-2'>
                                     <strong>
-                                        {formatCategoryLabel(
+                                        {formatLocalizedLabel(
+                                            t,
                                             application.subjectType,
                                         )}
                                     </strong>
                                     <Badge
                                         tone={
-                                            application.status === 'approved' ?
-                                                'success'
-                                            : application.status === 'pending' ?
-                                                'info'
-                                            :   'danger'
+                                            application.status === 'approved'
+                                                ? 'success'
+                                                : application.status ===
+                                                    'pending'
+                                                  ? 'info'
+                                                  : 'danger'
                                         }
                                     >
-                                        {formatCategoryLabel(
+                                        {formatLocalizedLabel(
+                                            t,
                                             application.status,
                                         )}
                                     </Badge>
                                 </div>
                                 <p className='mt-2 text-xs text-mh-textMuted'>
-                                    Application {application.id}
+                                    {t('verification.application', {
+                                        id: application.id,
+                                    })}
                                 </p>
-                                {application.expiresAt ?
+                                {application.expiresAt ? (
                                     <p className='mt-1 text-xs'>
-                                        Annual approval expires{' '}
-                                        {formatDateTime(application.expiresAt)}
+                                        {t('verification.expires', {
+                                            date: fmt.longDate(
+                                                application.expiresAt,
+                                            ),
+                                        })}
                                     </p>
-                                :   null}
+                                ) : null}
                             </li>
                         ))}
                     </ul>
-                :   <p className='text-sm text-mh-textMuted'>
-                        No verification applications yet.
+                ) : (
+                    <p className='text-sm text-mh-textMuted'>
+                        {t('verification.noApplications')}
                     </p>
-                }
+                )}
             </Panel>
 
-            {appealable.length ?
-                <Panel title='Appeal a decision'>
+            {appealable.length ? (
+                <Panel title={t('verification.appeal')}>
                     <form className='space-y-3' onSubmit={submitAppeal}>
                         <label className='block text-sm font-bold'>
-                            Application
+                            {t('verification.application', { id: '' })}
                             <select
                                 className='mh-input mt-1 w-full px-3 py-2'
                                 required
                                 value={appealApplicationId}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setAppealApplicationId(event.target.value)
                                 }
                             >
-                                <option value=''>Choose an application</option>
-                                {appealable.map(application => (
+                                <option value=''>
+                                    {t('verification.choose')}
+                                </option>
+                                {appealable.map((application) => (
                                     <option
                                         key={application.id}
                                         value={application.id}
@@ -5143,81 +5239,84 @@ const VerificationRoute = ({ did }: { did: string }) => {
                             </select>
                         </label>
                         <label className='block text-sm font-bold'>
-                            Appeal reason
+                            {t('verification.appealReason')}
                             <Input
                                 className='mt-1'
                                 required
                                 value={appealReason}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setAppealReason(event.target.value)
                                 }
                             />
                         </label>
-                        <Button type='submit'>Submit appeal</Button>
+                        <Button type='submit'>
+                            {t('verification.submitAppeal')}
+                        </Button>
                     </form>
                 </Panel>
-            :   null}
+            ) : null}
 
-            <Panel title='Request an exact public-resource address'>
+            <Panel title={t('verification.exactAddress')}>
                 <p className='mb-3 text-sm text-mh-textMuted'>
-                    Active organization and resource verification are required.
-                    Confidential facilities are always quarantined.
+                    {t('verification.exactHelp')}
                 </p>
                 <form className='space-y-3' onSubmit={submitExactAddress}>
                     <label className='block text-sm font-bold'>
-                        Organization ID
+                        {t('verification.organizationId')}
                         <Input
                             className='mt-1'
                             required
                             value={organizationId}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setOrganizationId(event.target.value)
                             }
                         />
                     </label>
                     <label className='block text-sm font-bold'>
-                        Resource AT URI
+                        {t('verification.resourceUri')}
                         <Input
                             className='mt-1'
                             required
                             value={resourceUri}
-                            onChange={event => setResourceUri(event.target.value)}
+                            onChange={(event) =>
+                                setResourceUri(event.target.value)
+                            }
                         />
                     </label>
                     <label className='block text-sm font-bold'>
-                        Street address
+                        {t('verification.street')}
                         <Input
                             className='mt-1'
                             required
                             value={streetAddress}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setStreetAddress(event.target.value)
                             }
                         />
                     </label>
                     <div className='grid gap-3 sm:grid-cols-2'>
                         <label className='block text-sm font-bold'>
-                            Latitude
+                            {t('verification.latitude')}
                             <Input
                                 className='mt-1'
                                 type='number'
                                 step='any'
                                 required
                                 value={latitude}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setLatitude(event.target.value)
                                 }
                             />
                         </label>
                         <label className='block text-sm font-bold'>
-                            Longitude
+                            {t('verification.longitude')}
                             <Input
                                 className='mt-1'
                                 type='number'
                                 step='any'
                                 required
                                 value={longitude}
-                                onChange={event =>
+                                onChange={(event) =>
                                     setLongitude(event.target.value)
                                 }
                             />
@@ -5227,45 +5326,46 @@ const VerificationRoute = ({ did }: { did: string }) => {
                         <input
                             type='checkbox'
                             checked={confidentialFacility}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setConfidentialFacility(event.target.checked)
                             }
                         />
-                        This is a confidential facility
+                        {t('verification.confidential')}
                     </label>
-                    <Button type='submit'>Request separate approval</Button>
+                    <Button type='submit'>
+                        {t('verification.requestApproval')}
+                    </Button>
                 </form>
-                {workspace?.exactAddressRequests.length ?
+                {workspace?.exactAddressRequests.length ? (
                     <ul className='mt-4 space-y-2'>
-                        {workspace.exactAddressRequests.map(request => (
+                        {workspace.exactAddressRequests.map((request) => (
                             <li className='mh-record-card' key={request.id}>
                                 {request.resourceUri} —{' '}
                                 <strong>{request.status}</strong>
                             </li>
                         ))}
                     </ul>
-                :   null}
+                ) : null}
             </Panel>
 
-            {review || exactReview ?
-                <Panel title='Moderator review'>
+            {review || exactReview ? (
+                <Panel title={t('verification.moderator')}>
                     <p className='mb-3 text-sm text-mh-textMuted'>
-                        This section appears only for authorized reviewers.
-                        Evidence metadata is never included in public discovery.
+                        {t('verification.moderatorHelp')}
                     </p>
                     <label className='block text-sm font-bold'>
-                        Decision rationale
+                        {t('verification.rationale')}
                         <Input
                             className='mt-1'
                             required
                             value={reviewReason}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setReviewReason(event.target.value)
                             }
                         />
                     </label>
                     <div className='mt-4 space-y-3'>
-                        {review?.applications.map(application => (
+                        {review?.applications.map((application) => (
                             <Card
                                 key={application.id}
                                 title={`${application.subjectType} verification`}
@@ -5277,21 +5377,21 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                 <ul className='my-2 text-xs'>
                                     {review.evidence
                                         .filter(
-                                            item =>
+                                            (item) =>
                                                 item.applicationId ===
                                                 application.id,
                                         )
-                                        .map(item => (
+                                        .map((item) => (
                                             <li key={item.id}>
                                                 {item.label}
-                                                {item.attachment ?
-                                                    ` — attachment ${item.attachment.status}`
-                                                :   ''}
-                                                {item.attachment ?
+                                                {item.attachment
+                                                    ? ` — attachment ${item.attachment.status}`
+                                                    : ''}
+                                                {item.attachment ? (
                                                     <div className='mt-1 flex flex-wrap gap-2'>
                                                         {item.attachment
                                                             .status ===
-                                                        'clean' ?
+                                                        'clean' ? (
                                                             <Button
                                                                 type='button'
                                                                 variant='neutral'
@@ -5304,9 +5404,11 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                                     )
                                                                 }
                                                             >
-                                                                Prepare file
+                                                                {t(
+                                                                    'verification.prepareFile',
+                                                                )}
                                                             </Button>
-                                                        :   null}
+                                                        ) : null}
                                                         <Button
                                                             type='button'
                                                             variant='neutral'
@@ -5320,7 +5422,9 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                                 )
                                                             }
                                                         >
-                                                            Quarantine
+                                                            {t(
+                                                                'verification.quarantine',
+                                                            )}
                                                         </Button>
                                                         <Button
                                                             type='button'
@@ -5335,7 +5439,9 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                                 )
                                                             }
                                                         >
-                                                            Rescan
+                                                            {t(
+                                                                'verification.rescan',
+                                                            )}
                                                         </Button>
                                                         <Button
                                                             type='button'
@@ -5350,14 +5456,16 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                                 )
                                                             }
                                                         >
-                                                            Delete file
+                                                            {t(
+                                                                'verification.deleteFile',
+                                                            )}
                                                         </Button>
                                                     </div>
-                                                :   null}
+                                                ) : null}
                                                 {item.attachment &&
                                                 accessUrls[
                                                     item.attachment.id
-                                                ] ?
+                                                ] ? (
                                                     <a
                                                         className='mh-text-link mt-1 inline-block'
                                                         href={
@@ -5369,14 +5477,16 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                         target='_blank'
                                                         rel='noreferrer'
                                                     >
-                                                        Open authenticated file
+                                                        {t(
+                                                            'verification.openFile',
+                                                        )}
                                                     </a>
-                                                :   null}
+                                                ) : null}
                                             </li>
                                         ))}
                                 </ul>
                                 <div className='flex flex-wrap gap-2'>
-                                    {application.status === 'approved' ?
+                                    {application.status === 'approved' ? (
                                         <>
                                             <Button
                                                 onClick={() =>
@@ -5386,7 +5496,7 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                     )
                                                 }
                                             >
-                                                Renew one year
+                                                {t('verification.renew')}
                                             </Button>
                                             <Button
                                                 variant='neutral'
@@ -5397,10 +5507,11 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                     )
                                                 }
                                             >
-                                                Revoke
+                                                {t('verification.revoke')}
                                             </Button>
                                         </>
-                                    :   <>
+                                    ) : (
+                                        <>
                                             <Button
                                                 onClick={() =>
                                                     void decideApplication(
@@ -5409,7 +5520,7 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                     )
                                                 }
                                             >
-                                                Approve one year
+                                                {t('verification.approve')}
                                             </Button>
                                             <Button
                                                 variant='neutral'
@@ -5420,15 +5531,18 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                                     )
                                                 }
                                             >
-                                                Deny
+                                                {t('verification.deny')}
                                             </Button>
                                         </>
-                                    }
+                                    )}
                                 </div>
                             </Card>
                         ))}
-                        {review?.appeals.map(appeal => (
-                            <Card key={appeal.id} title='Verification appeal'>
+                        {review?.appeals.map((appeal) => (
+                            <Card
+                                key={appeal.id}
+                                title={t('verification.appealReview')}
+                            >
                                 <p className='text-sm'>{appeal.reason}</p>
                                 <div className='mt-2 flex gap-2'>
                                     <Button
@@ -5436,7 +5550,7 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                             void decideAppeal(appeal, 'upheld')
                                         }
                                     >
-                                        Uphold appeal
+                                        {t('verification.uphold')}
                                     </Button>
                                     <Button
                                         variant='neutral'
@@ -5444,22 +5558,27 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                             void decideAppeal(appeal, 'denied')
                                         }
                                     >
-                                        Deny appeal
+                                        {t('verification.denyAppeal')}
                                     </Button>
                                 </div>
                             </Card>
                         ))}
-                        {exactReview?.map(request => (
-                            <Card key={request.id} title='Exact-address review'>
+                        {exactReview?.map((request) => (
+                            <Card
+                                key={request.id}
+                                title={t('verification.addressReview')}
+                            >
                                 <p className='text-sm'>
                                     {request.streetAddress} ·{' '}
                                     {request.resourceUri}
                                 </p>
-                                {request.confidentialFacility ?
+                                {request.confidentialFacility ? (
                                     <p className='mh-alert mt-2 text-xs font-bold'>
-                                        Confidential: approval is prohibited.
+                                        {t(
+                                            'verification.confidentialProhibited',
+                                        )}
                                     </p>
-                                :   null}
+                                ) : null}
                                 <div className='mt-2 flex gap-2'>
                                     <Button
                                         disabled={request.confidentialFacility}
@@ -5467,7 +5586,7 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                             void decideExact(request, 'approve')
                                         }
                                     >
-                                        Approve public address
+                                        {t('verification.approveAddress')}
                                     </Button>
                                     <Button
                                         variant='neutral'
@@ -5475,14 +5594,14 @@ const VerificationRoute = ({ did }: { did: string }) => {
                                             void decideExact(request, 'reject')
                                         }
                                     >
-                                        Reject
+                                        {t('verification.reject')}
                                     </Button>
                                 </div>
                             </Card>
                         ))}
                     </div>
                 </Panel>
-            :   null}
+            ) : null}
         </section>
     );
 };
@@ -5490,15 +5609,18 @@ const VerificationRoute = ({ did }: { did: string }) => {
 const organizationAdminRoles = new Set(['owner', 'admin']);
 
 const OrganizationsRoute = ({ did }: { did: string }) => {
-    const [organizations, setOrganizations] = useState<PublicOrganization[]>([]);
+    const { t, fmt } = useLocale();
+    const [organizations, setOrganizations] = useState<PublicOrganization[]>(
+        [],
+    );
     const [mine, setMine] = useState<MyOrganization[]>([]);
     const [members, setMembers] = useState<OrganizationMember[]>([]);
-    const [stewardships, setStewardships] = useState<
-        OrganizationStewardship[]
-    >([]);
+    const [stewardships, setStewardships] = useState<OrganizationStewardship[]>(
+        [],
+    );
     const [selectedId, setSelectedId] = useState('');
     const [searchText, setSearchText] = useState('');
-    const [status, setStatus] = useState('Loading organizations…');
+    const [status, setStatus] = useState(t('organizations.loading'));
     const [actionStatus, setActionStatus] = useState<string>();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -5512,19 +5634,19 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
     const [stewardDid, setStewardDid] = useState('');
 
     const loadPublic = useCallback(async () => {
-        setStatus('Loading organizations…');
+        setStatus(t('organizations.loading'));
         const result = await fetchOrganizationsViaApi(searchText);
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         setOrganizations(result.data);
         setStatus(
-            result.data.length ?
-                `${result.data.length} organization${result.data.length === 1 ? '' : 's'}.`
-            :   'No organizations match this search.',
+            result.data.length
+                ? t('organizations.results', { count: result.data.length })
+                : t('organizations.noResults'),
         );
-    }, [searchText]);
+    }, [searchText, t]);
 
     const loadPrivate = useCallback(async () => {
         if (!did) {
@@ -5535,14 +5657,15 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
         }
         const result = await fetchMyOrganizationsViaApi();
         if (!result.ok) {
-            setActionStatus(`Error: ${result.error}`);
+            setActionStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
         setMine(result.data);
-        const nextSelected =
-            result.data.some(item => item.id === selectedId) ?
-                selectedId
-            :   result.data[0]?.id ?? '';
+        const nextSelected = result.data.some((item) => item.id === selectedId)
+            ? selectedId
+            : (result.data[0]?.id ?? '');
         setSelectedId(nextSelected);
         if (!nextSelected) {
             setMembers([]);
@@ -5555,7 +5678,7 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
         ]);
         if (memberResult.ok) setMembers(memberResult.data);
         if (stewardshipResult.ok) setStewardships(stewardshipResult.data);
-    }, [did, selectedId]);
+    }, [did, selectedId, t]);
 
     useEffect(() => {
         void loadPublic();
@@ -5565,93 +5688,98 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
         void loadPrivate();
     }, [loadPrivate]);
 
-    const selected = mine.find(item => item.id === selectedId);
-    const canAdmin =
-        selected ?
-            organizationAdminRoles.has(selected.membership.role)
-        :   false;
+    const selected = mine.find((item) => item.id === selectedId);
+    const canAdmin = selected
+        ? organizationAdminRoles.has(selected.membership.role)
+        : false;
 
     const createOrganization = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        setActionStatus('Creating organization…');
+        setActionStatus(t('organizations.creating'));
         const result = await createOrganizationViaApi({ name, description });
         if (!result.ok) {
-            setActionStatus(`Error: ${result.error}`);
+            setActionStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
         setName('');
         setDescription('');
         setSelectedId(result.data.organization.id);
-        setActionStatus('Organization created.');
+        setActionStatus(t('organizations.created'));
         await Promise.all([loadPublic(), loadPrivate()]);
     };
 
     const invite = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!selected) return;
-        setActionStatus('Creating invitation…');
+        setActionStatus(t('organizations.creatingInvitation'));
         const result = await inviteOrganizationMemberViaApi({
             organizationId: selected.id,
             inviteeDid,
             role: inviteRole,
         });
         if (!result.ok) {
-            setActionStatus(`Error: ${result.error}`);
+            setActionStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
         setInvitationToken(result.data.token);
         setInviteeDid('');
-        setActionStatus(
-            'Invitation created. Share the one-time token privately with the named AT account.',
-        );
+        setActionStatus(t('organizations.invitationCreated'));
     };
 
     const acceptInvitation = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        setActionStatus('Accepting invitation…');
+        setActionStatus(t('organizations.accepting'));
         const result = await acceptOrganizationInvitationViaApi(acceptToken);
         if (!result.ok) {
-            setActionStatus(`Error: ${result.error}`);
+            setActionStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
         setAcceptToken('');
         setSelectedId(result.data.organizationId);
-        setActionStatus('Organization invitation accepted.');
+        setActionStatus(t('organizations.accepted'));
         await loadPrivate();
     };
 
-    const assignStewardship = async (
-        event: FormEvent<HTMLFormElement>,
-    ) => {
+    const assignStewardship = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!selected) return;
-        setActionStatus('Assigning resource stewardship…');
+        setActionStatus(t('organizations.assigning'));
         const result = await assignOrganizationStewardshipViaApi({
             organizationId: selected.id,
             resourceUri,
             stewardDid,
         });
         if (!result.ok) {
-            setActionStatus(`Error: ${result.error}`);
+            setActionStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
         setResourceUri('');
         setStewardDid('');
-        setActionStatus('Resource stewardship assigned.');
+        setActionStatus(t('organizations.assigned'));
         await loadPrivate();
     };
 
     const reconfirm = async (item: OrganizationStewardship) => {
-        setActionStatus('Reconfirming resource…');
+        setActionStatus(t('organizations.reconfirming'));
         const result = await reconfirmOrganizationStewardshipViaApi({
             organizationId: item.organizationId,
             stewardshipId: item.id,
         });
         if (!result.ok) {
-            setActionStatus(`Error: ${result.error}`);
+            setActionStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
-        setActionStatus('Resource reconfirmed for 90 days.');
+        setActionStatus(t('organizations.reconfirmed'));
         await loadPrivate();
     };
 
@@ -5659,61 +5787,67 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
         member: OrganizationMember,
         role: 'admin' | 'steward' | 'member',
     ) => {
-        setActionStatus('Updating member role…');
+        setActionStatus(t('organizations.updatingRole'));
         const result = await updateOrganizationMemberRoleViaApi({
             organizationId: member.organizationId,
             memberDid: member.memberDid,
             role,
         });
         if (!result.ok) {
-            setActionStatus(`Error: ${result.error}`);
+            setActionStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
-        setActionStatus('Organization member role updated.');
+        setActionStatus(t('organizations.roleUpdated'));
         await loadPrivate();
     };
 
     const removeMember = async (member: OrganizationMember) => {
-        setActionStatus('Removing organization member…');
+        setActionStatus(t('organizations.removingMember'));
         const result = await removeOrganizationMemberViaApi({
             organizationId: member.organizationId,
             memberDid: member.memberDid,
         });
         if (!result.ok) {
-            setActionStatus(`Error: ${result.error}`);
+            setActionStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
-        setActionStatus('Organization member removed.');
+        setActionStatus(t('organizations.memberRemoved'));
         await loadPrivate();
     };
 
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>Organizations</h1>
+                <h1 className='mh-route-title'>{t('organizations.heading')}</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Public listings include their origin and provenance. A
-                    listing is informational and is not a Patchwork
-                    endorsement.
+                    {t('organizations.description')}
                 </p>
             </header>
 
-            <Panel title='Find organizations'>
+            <Panel title={String(t('organizations.find'))}>
                 <form
                     className='flex flex-wrap gap-2'
-                    onSubmit={event => {
+                    onSubmit={(event) => {
                         event.preventDefault();
                         void loadPublic();
                     }}
                 >
                     <label className='grow text-sm font-bold'>
-                        Search organizations
+                        {t('organizations.search')}
                         <Input
                             value={searchText}
-                            onChange={event => setSearchText(event.target.value)}
+                            onChange={(event) =>
+                                setSearchText(event.target.value)
+                            }
                         />
                     </label>
-                    <Button type='submit'>Search</Button>
+                    <Button type='submit'>
+                        {t('organizations.submitSearch')}
+                    </Button>
                 </form>
                 <p
                     className='mt-3 text-sm text-mh-textMuted'
@@ -5722,31 +5856,36 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
                     {status}
                 </p>
                 <div className='mt-4 grid gap-3 sm:grid-cols-2'>
-                    {organizations.map(organization => (
+                    {organizations.map((organization) => (
                         <Card key={organization.id} title={organization.name}>
                             <p className='text-sm'>
                                 {organization.description}
                             </p>
                             <p className='mt-2 text-xs font-bold text-mh-textMuted'>
-                                Origin: {formatCategoryLabel(organization.origin)}
+                                {t('organizations.origin', {
+                                    origin: formatLocalizedLabel(
+                                        t,
+                                        organization.origin,
+                                    ),
+                                })}
                             </p>
-                            {organization.provenance ?
+                            {organization.provenance ? (
                                 <p className='mt-1 text-xs text-mh-textMuted'>
-                                    Source:{' '}
+                                    {t('organizations.source')}{' '}
                                     <a
                                         className='mh-link'
                                         href={organization.provenance.sourceUrl}
                                         rel='noreferrer'
                                         target='_blank'
                                     >
-                                        authoritative public record
+                                        {t('organizations.authoritative')}
                                     </a>{' '}
-                                    · last verified{' '}
-                                    {new Date(
+                                    ·{' '}
+                                    {fmt.shortDate(
                                         organization.provenance.lastVerifiedAt,
-                                    ).toLocaleDateString()}
+                                    )}
                                 </p>
-                            :   null}
+                            ) : null}
                             <p className='mt-2 text-xs text-mh-textMuted'>
                                 {organization.nonEndorsementLabel}
                             </p>
@@ -5755,82 +5894,88 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
                 </div>
             </Panel>
 
-            {did ?
+            {did ? (
                 <>
-                    <Panel title='Join with an invitation'>
+                    <Panel title={String(t('organizations.join'))}>
                         <form
                             className='flex flex-wrap gap-2'
                             onSubmit={acceptInvitation}
                         >
                             <label className='grow text-sm font-bold'>
-                                Invitation token
+                                {t('organizations.token')}
                                 <Input
                                     value={acceptToken}
-                                    onChange={event =>
+                                    onChange={(event) =>
                                         setAcceptToken(event.target.value)
                                     }
                                 />
                             </label>
-                            <Button type='submit'>Accept invitation</Button>
+                            <Button type='submit'>
+                                {t('organizations.accept')}
+                            </Button>
                         </form>
                     </Panel>
 
-                    <Panel title='Create an organization'>
+                    <Panel title={String(t('organizations.create'))}>
                         <form
                             className='space-y-3'
                             onSubmit={createOrganization}
                         >
                             <label className='block text-sm font-bold'>
-                                Organization name
+                                {t('organizations.name')}
                                 <Input
                                     value={name}
-                                    onChange={event => setName(event.target.value)}
+                                    onChange={(event) =>
+                                        setName(event.target.value)
+                                    }
                                 />
                             </label>
                             <label className='block text-sm font-bold'>
-                                Organization description
+                                {t('organizations.descriptionLabel')}
                                 <textarea
                                     className='mh-input mt-1 min-h-24 w-full px-3 py-2'
                                     value={description}
-                                    onChange={event =>
+                                    onChange={(event) =>
                                         setDescription(event.target.value)
                                     }
                                 />
                             </label>
-                            <Button type='submit'>Create organization</Button>
+                            <Button type='submit'>
+                                {t('organizations.createAction')}
+                            </Button>
                         </form>
                     </Panel>
 
-                    {mine.length ?
-                        <Panel title='Manage my organizations'>
+                    {mine.length ? (
+                        <Panel title={String(t('organizations.manage'))}>
                             <label className='block text-sm font-bold'>
-                                Organization
+                                {t('organizations.organization')}
                                 <select
                                     className='mh-input mt-1 w-full px-3 py-2'
                                     value={selectedId}
-                                    onChange={event =>
+                                    onChange={(event) =>
                                         setSelectedId(event.target.value)
                                     }
                                 >
-                                    {mine.map(item => (
+                                    {mine.map((item) => (
                                         <option key={item.id} value={item.id}>
                                             {item.name} · {item.membership.role}
                                         </option>
                                     ))}
                                 </select>
                             </label>
-                            {selected ?
+                            {selected ? (
                                 <>
                                     <p className='mt-3 text-sm'>
-                                        Your role:{' '}
-                                        <strong>
-                                            {formatCategoryLabel(
+                                        {t('organizations.role', {
+                                            role: formatLocalizedLabel(
+                                                t,
                                                 selected.membership.role,
-                                            )}
-                                        </strong>
+                                            ),
+                                        })}
                                     </p>
                                     <ul className='mt-3 space-y-2 text-sm'>
-                                        {members.map(member => {
+                                        {members.map((member) => {
                                             const canManageMember =
                                                 canAdmin &&
                                                 member.role !== 'owner' &&
@@ -5846,17 +5991,23 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
                                                         {member.memberDid} ·{' '}
                                                         {member.role}
                                                     </span>
-                                                    {canManageMember ?
+                                                    {canManageMember ? (
                                                         <>
                                                             <label className='text-xs font-bold'>
-                                                                Role for{' '}
-                                                                {member.memberDid}
+                                                                {t(
+                                                                    'organizations.roleFor',
+                                                                    {
+                                                                        did: member.memberDid,
+                                                                    },
+                                                                )}
                                                                 <select
                                                                     className='mh-input ml-2 px-2 py-1'
                                                                     value={
                                                                         member.role
                                                                     }
-                                                                    onChange={event =>
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) =>
                                                                         void updateMemberRole(
                                                                             member,
                                                                             event
@@ -5869,13 +6020,19 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
                                                                     }
                                                                 >
                                                                     <option value='admin'>
-                                                                        Admin
+                                                                        {t(
+                                                                            'organizations.admin',
+                                                                        )}
                                                                     </option>
                                                                     <option value='steward'>
-                                                                        Steward
+                                                                        {t(
+                                                                            'organizations.steward',
+                                                                        )}
                                                                     </option>
                                                                     <option value='member'>
-                                                                        Member
+                                                                        {t(
+                                                                            'organizations.member',
+                                                                        )}
                                                                     </option>
                                                                 </select>
                                                             </label>
@@ -5888,42 +6045,49 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
                                                                     )
                                                                 }
                                                             >
-                                                                Remove{' '}
-                                                                {member.memberDid}
+                                                                {t(
+                                                                    'organizations.remove',
+                                                                )}{' '}
+                                                                {
+                                                                    member.memberDid
+                                                                }
                                                             </Button>
                                                         </>
-                                                    :   null}
+                                                    ) : null}
                                                 </li>
                                             );
                                         })}
                                     </ul>
 
-                                    {canAdmin ?
+                                    {canAdmin ? (
                                         <div className='mt-5 grid gap-5 lg:grid-cols-2'>
                                             <form
                                                 className='space-y-3'
                                                 onSubmit={invite}
                                             >
                                                 <h3 className='font-bold'>
-                                                    Invite a member
+                                                    {t('organizations.invite')}
                                                 </h3>
                                                 <label className='block text-sm font-bold'>
-                                                    Invitee AT DID
+                                                    {t('organizations.invitee')}
                                                     <Input
                                                         value={inviteeDid}
-                                                        onChange={event =>
+                                                        onChange={(event) =>
                                                             setInviteeDid(
-                                                                event.target.value,
+                                                                event.target
+                                                                    .value,
                                                             )
                                                         }
                                                     />
                                                 </label>
                                                 <label className='block text-sm font-bold'>
-                                                    Organization role
+                                                    {t(
+                                                        'organizations.organizationRole',
+                                                    )}
                                                     <select
                                                         className='mh-input mt-1 w-full px-3 py-2'
                                                         value={inviteRole}
-                                                        onChange={event =>
+                                                        onChange={(event) =>
                                                             setInviteRole(
                                                                 event.target
                                                                     .value as typeof inviteRole,
@@ -5931,28 +6095,40 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
                                                         }
                                                     >
                                                         <option value='admin'>
-                                                            Admin
+                                                            {t(
+                                                                'organizations.admin',
+                                                            )}
                                                         </option>
                                                         <option value='steward'>
-                                                            Steward
+                                                            {t(
+                                                                'organizations.steward',
+                                                            )}
                                                         </option>
                                                         <option value='member'>
-                                                            Member
+                                                            {t(
+                                                                'organizations.member',
+                                                            )}
                                                         </option>
                                                     </select>
                                                 </label>
                                                 <Button type='submit'>
-                                                    Create invitation
+                                                    {t(
+                                                        'organizations.createInvitation',
+                                                    )}
                                                 </Button>
-                                                {invitationToken ?
+                                                {invitationToken ? (
                                                     <label className='block text-sm font-bold'>
-                                                        One-time invitation token
+                                                        {t(
+                                                            'organizations.oneTimeToken',
+                                                        )}
                                                         <Input
                                                             readOnly
-                                                            value={invitationToken}
+                                                            value={
+                                                                invitationToken
+                                                            }
                                                         />
                                                     </label>
-                                                :   null}
+                                                ) : null}
                                             </form>
 
                                             <form
@@ -5960,60 +6136,74 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
                                                 onSubmit={assignStewardship}
                                             >
                                                 <h3 className='font-bold'>
-                                                    Assign resource stewardship
+                                                    {t('organizations.assign')}
                                                 </h3>
                                                 <label className='block text-sm font-bold'>
-                                                    Public resource AT URI
+                                                    {t(
+                                                        'organizations.resourceUri',
+                                                    )}
                                                     <Input
                                                         value={resourceUri}
-                                                        onChange={event =>
+                                                        onChange={(event) =>
                                                             setResourceUri(
-                                                                event.target.value,
+                                                                event.target
+                                                                    .value,
                                                             )
                                                         }
                                                     />
                                                 </label>
                                                 <label className='block text-sm font-bold'>
-                                                    Steward AT DID
+                                                    {t(
+                                                        'organizations.stewardDid',
+                                                    )}
                                                     <Input
                                                         value={stewardDid}
-                                                        onChange={event =>
+                                                        onChange={(event) =>
                                                             setStewardDid(
-                                                                event.target.value,
+                                                                event.target
+                                                                    .value,
                                                             )
                                                         }
                                                     />
                                                 </label>
                                                 <Button type='submit'>
-                                                    Assign stewardship
+                                                    {t(
+                                                        'organizations.assignAction',
+                                                    )}
                                                 </Button>
                                             </form>
                                         </div>
-                                    :   null}
+                                    ) : null}
 
                                     <div className='mt-5 space-y-2'>
                                         <h3 className='font-bold'>
-                                            Stewarded resources
+                                            {t('organizations.stewarded')}
                                         </h3>
-                                        {stewardships.length ?
-                                            stewardships.map(item => {
+                                        {stewardships.length ? (
+                                            stewardships.map((item) => {
                                                 const mayReconfirm =
                                                     canAdmin ||
-                                                    (selected.membership.role ===
-                                                        'steward' &&
-                                                        item.stewardDid === did);
+                                                    (selected.membership
+                                                        .role === 'steward' &&
+                                                        item.stewardDid ===
+                                                            did);
                                                 return (
                                                     <Card
                                                         key={item.id}
                                                         title={item.resourceUri}
                                                     >
                                                         <p className='text-xs'>
-                                                            {item.status} · due{' '}
-                                                            {new Date(
-                                                                item.reconfirmDueAt,
-                                                            ).toLocaleDateString()}
+                                                            {item.status} ·{' '}
+                                                            {t(
+                                                                'organizations.due',
+                                                                {
+                                                                    date: fmt.shortDate(
+                                                                        item.reconfirmDueAt,
+                                                                    ),
+                                                                },
+                                                            )}
                                                         </p>
-                                                        {mayReconfirm ?
+                                                        {mayReconfirm ? (
                                                             <p className='mt-2'>
                                                                 <Button
                                                                     type='button'
@@ -6024,40 +6214,43 @@ const OrganizationsRoute = ({ did }: { did: string }) => {
                                                                         )
                                                                     }
                                                                 >
-                                                                    Reconfirm resource
+                                                                    {t(
+                                                                        'organizations.reconfirm',
+                                                                    )}
                                                                 </Button>
                                                             </p>
-                                                        :   null}
+                                                        ) : null}
                                                     </Card>
                                                 );
                                             })
-                                        :   <p className='text-sm text-mh-textMuted'>
-                                                No resource stewardship is assigned.
-                                            </p>}
+                                        ) : (
+                                            <p className='text-sm text-mh-textMuted'>
+                                                {t('organizations.none')}
+                                            </p>
+                                        )}
                                     </div>
                                 </>
-                            :   null}
+                            ) : null}
                         </Panel>
-                    :   null}
-                    {actionStatus ?
+                    ) : null}
+                    {actionStatus ? (
                         <p
                             role={
-                                actionStatus.startsWith('Error:') ?
-                                    'alert'
-                                :   'status'
+                                actionStatus.startsWith('Error:')
+                                    ? 'alert'
+                                    : 'status'
                             }
                             className='text-sm'
                         >
                             {actionStatus}
                         </p>
-                    :   null}
+                    ) : null}
                 </>
-            :   <Panel title='Sign in to participate'>
-                    <p>
-                        Sign in with an AT identity to create an organization,
-                        accept an invitation, or manage stewardship.
-                    </p>
-                </Panel>}
+            ) : (
+                <Panel title={String(t('organizations.signIn'))}>
+                    <p>{t('organizations.signInHelp')}</p>
+                </Panel>
+            )}
         </section>
     );
 };
@@ -6084,7 +6277,7 @@ const outcomeOptions = [
 ] as const;
 
 const applicationServerKey = (value: string): ArrayBuffer => {
-    const padding = '='.repeat((4 - value.length % 4) % 4);
+    const padding = '='.repeat((4 - (value.length % 4)) % 4);
     const base64 = (value + padding).replaceAll('-', '+').replaceAll('_', '/');
     const decoded = window.atob(base64);
     const buffer = new ArrayBuffer(decoded.length);
@@ -6096,16 +6289,17 @@ const applicationServerKey = (value: string): ArrayBuffer => {
 };
 
 const NotificationCenterRoute = () => {
-    const [notifications, setNotifications] =
-        useState<DurableNotification[]>([]);
+    const { t, fmt } = useLocale();
+    const [notifications, setNotifications] = useState<DurableNotification[]>(
+        [],
+    );
     const [filter, setFilter] = useState<NotificationFilter>('all');
     const [total, setTotal] = useState(0);
     const [unread, setUnread] = useState(0);
     const [nextCursor, setNextCursor] = useState<string>();
-    const [channels, setChannels] =
-        useState<NotificationChannelState>();
+    const [channels, setChannels] = useState<NotificationChannelState>();
     const [email, setEmail] = useState('');
-    const [status, setStatus] = useState('Loading notifications…');
+    const [status, setStatus] = useState(t('notifications.loading'));
     const [isLoading, setIsLoading] = useState(true);
 
     const load = useCallback(async () => {
@@ -6116,11 +6310,7 @@ const NotificationCenterRoute = () => {
         ]);
         if (!items.ok || !channelState.ok) {
             setStatus(
-                `Error: ${
-                    !items.ok ? items.error
-                    : !channelState.ok ? channelState.error
-                    : 'Notifications are unavailable.'
-                }`,
+                `${t('common.error')}: ${t('notifications.unavailable')}`,
             );
             setIsLoading(false);
             return;
@@ -6131,13 +6321,9 @@ const NotificationCenterRoute = () => {
         setNextCursor(items.data.nextCursor);
         setChannels(channelState.data);
         setEmail(channelState.data.email?.address ?? '');
-        setStatus(
-            `${items.data.unread} unread notification${
-                items.data.unread === 1 ? '' : 's'
-            }.`,
-        );
+        setStatus(t('notifications.unreadCount', { count: items.data.unread }));
         setIsLoading(false);
-    }, [filter]);
+    }, [filter, t]);
 
     useEffect(() => {
         void load();
@@ -6148,11 +6334,11 @@ const NotificationCenterRoute = () => {
             'emailToken',
         );
         if (!token) return;
-        void confirmNotificationEmailViaApi(token).then(result => {
+        void confirmNotificationEmailViaApi(token).then((result) => {
             setStatus(
-                result.ok ?
-                    'Notification email confirmed.'
-                :   `Error: ${result.error}`,
+                result.ok
+                    ? t('notifications.emailConfirmed')
+                    : `${t('common.error')}: ${t('common.requestFailed')}`,
             );
             window.history.replaceState({}, '', '/notifications');
             if (result.ok) void load();
@@ -6165,7 +6351,7 @@ const NotificationCenterRoute = () => {
     ) => {
         const current = await fetchAccountPreferencesViaApi();
         if (!current.ok) {
-            setStatus(`Error: ${current.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return false;
         }
         const updated = await updateAccountPreferencesViaApi({
@@ -6176,7 +6362,7 @@ const NotificationCenterRoute = () => {
             },
         });
         if (!updated.ok) {
-            setStatus(`Error: ${updated.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return false;
         }
         return true;
@@ -6186,16 +6372,14 @@ const NotificationCenterRoute = () => {
         notification: DurableNotification,
         read: boolean,
     ) => {
-        const result = await markNotificationReadViaApi(
-            notification.id,
-            read,
-        );
+        const result = await markNotificationReadViaApi(notification.id, read);
         if (result.ok) await load();
         setStatus(
-            result.ok ?
-                read ? 'Notification marked read.'
-                :   'Notification marked unread.'
-            :   `Error: ${result.error}`,
+            result.ok
+                ? read
+                    ? t('notifications.markedRead')
+                    : t('notifications.markedUnread')
+                : `${t('common.error')}: ${t('common.requestFailed')}`,
         );
     };
 
@@ -6203,9 +6387,9 @@ const NotificationCenterRoute = () => {
         const result = await markAllNotificationsReadViaApi();
         if (result.ok) await load();
         setStatus(
-            result.ok ?
-                `${result.data.updated} notification(s) marked read.`
-            :   `Error: ${result.error}`,
+            result.ok
+                ? t('notifications.markedAll', { count: result.data.updated })
+                : `${t('common.error')}: ${t('common.requestFailed')}`,
         );
     };
 
@@ -6213,26 +6397,24 @@ const NotificationCenterRoute = () => {
         const result = await archiveNotificationViaApi(notification.id);
         if (result.ok) await load();
         setStatus(
-            result.ok ?
-                'Notification archived.'
-            :   `Error: ${result.error}`,
+            result.ok
+                ? t('notifications.archived')
+                : `${t('common.error')}: ${t('common.requestFailed')}`,
         );
     };
 
     const verifyEmail = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        const result =
-            await requestNotificationEmailVerificationViaApi(email);
-        const preferenceEnabled =
-            result.ok ?
-                await updateChannelPreference('email', true)
-            :   false;
+        const result = await requestNotificationEmailVerificationViaApi(email);
+        const preferenceEnabled = result.ok
+            ? await updateChannelPreference('email', true)
+            : false;
         setStatus(
-            result.ok && preferenceEnabled ?
-                'Confirmation email sent. The link expires in 30 minutes.'
-            : !result.ok ?
-                `Error: ${result.error}`
-            :   'Error: Email delivery preference could not be enabled.',
+            result.ok && preferenceEnabled
+                ? t('notifications.emailSent')
+                : !result.ok
+                  ? `${t('common.error')}: ${t('common.requestFailed')}`
+                  : `${t('common.error')}: ${t('notifications.emailPreferenceFailed')}`,
         );
     };
 
@@ -6243,9 +6425,9 @@ const NotificationCenterRoute = () => {
             await load();
         }
         setStatus(
-            result.ok ?
-                'Email notifications disabled.'
-            :   `Error: ${result.error}`,
+            result.ok
+                ? t('notifications.emailDisabled')
+                : `${t('common.error')}: ${t('common.requestFailed')}`,
         );
     };
 
@@ -6257,37 +6439,37 @@ const NotificationCenterRoute = () => {
                 !('serviceWorker' in navigator) ||
                 !('PushManager' in window)
             ) {
-                setStatus('Error: Browser push is unavailable here.');
+                setStatus(
+                    `${t('common.error')}: ${t('notifications.pushUnavailable')}`,
+                );
                 return;
             }
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
-                setStatus('Browser push permission was not granted.');
+                setStatus(t('notifications.pushDenied'));
                 return;
             }
-            if (!await updateChannelPreference('push', true)) return;
-            await navigator.serviceWorker.register(
-                '/push-service-worker.js',
-                { scope: '/' },
-            );
+            if (!(await updateChannelPreference('push', true))) return;
+            await navigator.serviceWorker.register('/push-service-worker.js', {
+                scope: '/',
+            });
             const registration = await navigator.serviceWorker.ready;
-            const existing =
-                await registration.pushManager.getSubscription();
+            const existing = await registration.pushManager.getSubscription();
             const subscription =
                 existing ??
-                await registration.pushManager.subscribe({
+                (await registration.pushManager.subscribe({
                     userVisibleOnly: true,
                     applicationServerKey: applicationServerKey(
                         channels.push.publicKey,
                     ),
-                });
+                }));
             const serialized = subscription.toJSON();
             if (
                 !serialized.endpoint ||
                 !serialized.keys?.p256dh ||
                 !serialized.keys.auth
             ) {
-                throw new Error('The browser returned an incomplete subscription.');
+                throw new Error(t('notifications.pushIncomplete'));
             }
             const result = await registerPushSubscriptionViaApi({
                 endpoint: serialized.endpoint,
@@ -6298,15 +6480,11 @@ const NotificationCenterRoute = () => {
             });
             if (!result.ok) throw new Error(result.error);
             await load();
-            setStatus('Browser push enabled by explicit opt-in.');
+            setStatus(t('notifications.pushEnabled'));
         } catch (error) {
             await updateChannelPreference('push', false);
             setStatus(
-                `Error: ${
-                    error instanceof Error ?
-                        error.message
-                    :   'Browser push could not be enabled.'
-                }`,
+                `${t('common.error')}: ${error instanceof Error && error.message === t('notifications.pushIncomplete') ? error.message : t('notifications.pushEnableFailed')}`,
             );
         }
     };
@@ -6314,9 +6492,9 @@ const NotificationCenterRoute = () => {
     const disablePush = async () => {
         try {
             const registration =
-                'serviceWorker' in navigator ?
-                    await navigator.serviceWorker.getRegistration('/')
-                :   undefined;
+                'serviceWorker' in navigator
+                    ? await navigator.serviceWorker.getRegistration('/')
+                    : undefined;
             const subscription =
                 await registration?.pushManager.getSubscription();
             const result = await revokePushSubscriptionViaApi(
@@ -6326,14 +6504,10 @@ const NotificationCenterRoute = () => {
             await subscription?.unsubscribe();
             await updateChannelPreference('push', false);
             await load();
-            setStatus('Browser push revoked.');
+            setStatus(t('notifications.pushRevoked'));
         } catch (error) {
             setStatus(
-                `Error: ${
-                    error instanceof Error ?
-                        error.message
-                    :   'Browser push could not be revoked.'
-                }`,
+                `${t('common.error')}: ${t('notifications.pushRevokeFailed')}`,
             );
         }
     };
@@ -6345,67 +6519,66 @@ const NotificationCenterRoute = () => {
             cursor: nextCursor,
         });
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
-        setNotifications(current => [...current, ...result.data.items]);
+        setNotifications((current) => [...current, ...result.data.items]);
         setNextCursor(result.data.nextCursor);
     };
 
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>Notification center</h1>
+                <h1 className='mh-route-title'>{t('notifications.heading')}</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Durable in-app updates with optional verified email and
-                    explicit browser-push delivery.
+                    {t('notifications.description')}
                 </p>
             </header>
-            <Panel title='Delivery preferences'>
-                <p className='text-sm'>
-                    In-app updates are always retained for your account.
-                    External channels never contain exact locations, private
-                    evidence, contact details, or moderation notes.
-                </p>
+            <Panel title={String(t('notifications.delivery'))}>
+                <p className='text-sm'>{t('notifications.privacy')}</p>
                 <div className='mt-4 grid gap-4 md:grid-cols-2'>
                     <form className='space-y-2' onSubmit={verifyEmail}>
                         <label
                             htmlFor='notification-email'
                             className='block text-sm font-bold'
                         >
-                            Verified notification email
+                            {t('notifications.email')}
                         </label>
                         <Input
                             id='notification-email'
                             type='email'
                             value={email}
-                            onChange={event => setEmail(event.target.value)}
+                            onChange={(event) => setEmail(event.target.value)}
                             required
                         />
                         <p className='text-xs text-mh-textMuted'>
-                            {channels?.email?.verified ?
-                                'Verified and eligible for delivery.'
-                            :   'Not verified. Email remains disabled until confirmation.'}
+                            {channels?.email?.verified
+                                ? t('notifications.verified')
+                                : t('notifications.unverified')}
                         </p>
                         <div className='flex flex-wrap gap-2'>
-                            <Button type='submit'>Send confirmation</Button>
-                            {channels?.email ?
+                            <Button type='submit'>
+                                {t('notifications.confirm')}
+                            </Button>
+                            {channels?.email ? (
                                 <Button
                                     type='button'
                                     variant='neutral'
                                     onClick={() => void disableEmail()}
                                 >
-                                    Disable email
+                                    {t('notifications.disableEmail')}
                                 </Button>
-                            :   null}
+                            ) : null}
                         </div>
                     </form>
                     <div className='space-y-2'>
-                        <h3 className='text-sm font-bold'>Browser push</h3>
+                        <h3 className='text-sm font-bold'>
+                            {t('notifications.push')}
+                        </h3>
                         <p className='text-xs text-mh-textMuted'>
-                            {channels?.push.activeSubscriptions ?? 0} active
-                            browser subscription(s). Permission is requested
-                            only when you choose Enable.
+                            {t('notifications.pushCount', {
+                                count: channels?.push.activeSubscriptions ?? 0,
+                            })}
                         </p>
                         <div className='flex flex-wrap gap-2'>
                             <Button
@@ -6413,41 +6586,49 @@ const NotificationCenterRoute = () => {
                                 onClick={() => void enablePush()}
                                 disabled={!channels?.push.supported}
                             >
-                                Enable browser push
+                                {t('notifications.enablePush')}
                             </Button>
                             <Button
                                 type='button'
                                 variant='neutral'
                                 onClick={() => void disablePush()}
                             >
-                                Revoke browser push
+                                {t('notifications.revokePush')}
                             </Button>
                         </div>
                     </div>
                 </div>
             </Panel>
-            <Panel title='Updates'>
+            <Panel title={String(t('notifications.updates'))}>
                 <div className='mb-4 flex flex-wrap items-end gap-3'>
                     <label className='text-sm font-bold'>
-                        Show
+                        {t('notifications.show')}
                         <select
                             className='mh-input ml-2 px-3 py-2'
-                            aria-label='Notification filter'
+                            aria-label={String(t('notifications.filter'))}
                             value={filter}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setFilter(
                                     event.target.value as NotificationFilter,
                                 )
                             }
                         >
-                            <option value='all'>Active</option>
-                            <option value='unread'>Unread</option>
-                            <option value='read'>Read</option>
-                            <option value='archived'>Archived</option>
+                            <option value='all'>
+                                {t('notifications.active')}
+                            </option>
+                            <option value='unread'>
+                                {t('notifications.unread')}
+                            </option>
+                            <option value='read'>
+                                {t('notifications.read')}
+                            </option>
+                            <option value='archived'>
+                                {t('notifications.archived')}
+                            </option>
                         </select>
                     </label>
                     <Badge tone={unread ? 'info' : 'neutral'}>
-                        {unread} unread · {total} active
+                        {t('notifications.counts', { unread, total })}
                     </Badge>
                     <Button
                         type='button'
@@ -6455,22 +6636,23 @@ const NotificationCenterRoute = () => {
                         onClick={() => void markAllRead()}
                         disabled={unread === 0}
                     >
-                        Mark all read
+                        {t('notifications.markAll')}
                     </Button>
                     <Button
                         type='button'
                         variant='neutral'
                         onClick={() => void load()}
                     >
-                        Refresh
+                        {t('notifications.refresh')}
                     </Button>
                 </div>
-                {isLoading ?
-                    <p role='status'>Loading durable notifications…</p>
-                : notifications.length === 0 ?
-                    <p>No notifications match this filter.</p>
-                :   <div className='space-y-3'>
-                        {notifications.map(notification => (
+                {isLoading ? (
+                    <p role='status'>{t('notifications.loading')}</p>
+                ) : notifications.length === 0 ? (
+                    <p>{t('notifications.empty')}</p>
+                ) : (
+                    <div className='space-y-3'>
+                        {notifications.map((notification) => (
                             <Card
                                 key={notification.id}
                                 title={notification.title}
@@ -6479,9 +6661,7 @@ const NotificationCenterRoute = () => {
                                 <p className='mt-2 text-xs text-mh-textMuted'>
                                     {notification.type.replaceAll('_', ' ')} ·{' '}
                                     {notification.priority} ·{' '}
-                                    {new Date(
-                                        notification.createdAt,
-                                    ).toLocaleString()}
+                                    {fmt.longDate(notification.createdAt)}
                                 </p>
                                 <div className='mt-3 flex flex-wrap gap-2'>
                                     <Button
@@ -6494,11 +6674,11 @@ const NotificationCenterRoute = () => {
                                             )
                                         }
                                     >
-                                        {notification.read ?
-                                            'Mark unread'
-                                        :   'Mark read'}
+                                        {notification.read
+                                            ? t('notifications.markUnread')
+                                            : t('notifications.markRead')}
                                     </Button>
-                                    {!notification.archived ?
+                                    {!notification.archived ? (
                                         <Button
                                             type='button'
                                             variant='neutral'
@@ -6506,32 +6686,33 @@ const NotificationCenterRoute = () => {
                                                 void archive(notification)
                                             }
                                         >
-                                            Archive
+                                            {t('notifications.archive')}
                                         </Button>
-                                    :   null}
-                                    {notification.actionUrl ?
+                                    ) : null}
+                                    {notification.actionUrl ? (
                                         <a
                                             className='font-bold underline'
                                             href={notification.actionUrl}
                                         >
-                                            Open related activity
+                                            {t('notifications.open')}
                                         </a>
-                                    :   null}
+                                    ) : null}
                                 </div>
                             </Card>
                         ))}
-                    </div>}
-                {nextCursor ?
+                    </div>
+                )}
+                {nextCursor ? (
                     <p className='mt-4'>
                         <Button
                             type='button'
                             variant='neutral'
                             onClick={() => void loadMore()}
                         >
-                            Load more
+                            {t('notifications.more')}
                         </Button>
                     </p>
-                :   null}
+                ) : null}
             </Panel>
             <p
                 role={status.startsWith('Error:') ? 'alert' : 'status'}
@@ -6554,7 +6735,9 @@ const localDateTimeWithOffset = (value: string): string => {
 
 const CoordinationSchedulingRoute = ({ did }: { did: string }) => {
     const { t, fmt } = useLocale();
-    const [connections, setConnections] = useState<CoordinationConnection[]>([]);
+    const [connections, setConnections] = useState<CoordinationConnection[]>(
+        [],
+    );
     const [windows, setWindows] = useState<CoordinationWindow[]>([]);
     const [connectionId, setConnectionId] = useState('');
     const [startAt, setStartAt] = useState('');
@@ -6569,27 +6752,45 @@ const CoordinationSchedulingRoute = ({ did }: { did: string }) => {
             fetchCoordinationWindowsViaApi(),
         ]);
         if (!coordination.ok || !scheduling.ok) {
-            setStatus(`${t('common.error')}: ${!coordination.ok ? coordination.error : !scheduling.ok ? scheduling.error : ''}`);
+            setStatus(
+                `${t('common.error')}: ${!coordination.ok ? coordination.error : !scheduling.ok ? scheduling.error : ''}`,
+            );
             return;
         }
-        const active = coordination.data.connections.filter(connection => connection.status === 'active');
+        const active = coordination.data.connections.filter(
+            (connection) => connection.status === 'active',
+        );
         setConnections(active);
         setWindows(scheduling.data.windows);
-        setConnectionId(current => current || active[0]?.id || '');
-        setStatus(active.length === 0 ? String(t('scheduling.empty')) : String(t('scheduling.ready')));
+        setConnectionId((current) => current || active[0]?.id || '');
+        setStatus(
+            active.length === 0
+                ? String(t('scheduling.empty'))
+                : String(t('scheduling.ready')),
+        );
     }, [t]);
 
-    useEffect(() => { void load(); }, [load]);
-    const current = windows.find(window => window.connectionId === connectionId);
-    const canPropose = !current || (current.status === 'proposed' && current.recipientDid === did);
+    useEffect(() => {
+        void load();
+    }, [load]);
+    const current = windows.find(
+        (window) => window.connectionId === connectionId,
+    );
+    const canPropose =
+        !current ||
+        (current.status === 'proposed' && current.recipientDid === did);
 
-    const finish = async (operation: Promise<{ ok: boolean; error?: string }>) => {
+    const finish = async (
+        operation: Promise<{ ok: boolean; error?: string }>,
+    ) => {
         setBusy(true);
         setStatus(String(t('scheduling.saving')));
         const result = await operation;
         setBusy(false);
         if (!result.ok) {
-            setStatus(`${t('common.error')}: ${result.error ?? t('scheduling.failed')}`);
+            setStatus(
+                `${t('common.error')}: ${result.error ?? t('scheduling.failed')}`,
+            );
             return;
         }
         setStartAt('');
@@ -6597,56 +6798,184 @@ const CoordinationSchedulingRoute = ({ did }: { did: string }) => {
         await load();
     };
 
-    return <section className='space-y-6'>
-        <header className='mh-route-header'>
-            <h1 className='mh-route-title'>{t('scheduling.heading')}</h1>
-            <p className='mt-2 text-sm text-mh-textMuted'>{t('scheduling.description')}</p>
-            <p role={status.startsWith(String(t('common.error'))) ? 'alert' : 'status'} className='mt-2 text-sm font-bold'>{status}</p>
-        </header>
-        <Panel title={String(t('scheduling.proposeHeading'))}>
-            {connections.length === 0 ? <p>{t('scheduling.empty')}</p> : <form className='space-y-4' onSubmit={event => {
-                event.preventDefault();
-                if (!connectionId || !startAt || !endAt) return;
-                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-                void finish(proposeCoordinationWindowViaApi({
-                    connectionId,
-                    startAt: localDateTimeWithOffset(startAt),
-                    endAt: localDateTimeWithOffset(endAt),
-                    timezone,
-                    ...(current ? { expectedVersion: current.version } : {}),
-                }));
-            }}>
-                <label className='block text-sm font-bold'>{t('scheduling.connection')}
-                    <select className='mh-input mt-1 w-full px-3 py-2' value={connectionId} onChange={event => setConnectionId(event.target.value)} disabled={busy}>
-                        {connections.map(connection => <option key={connection.id} value={connection.id}>{connection.counterpartDid}</option>)}
-                    </select>
-                </label>
-                <div className='grid gap-3 sm:grid-cols-2'>
-                    <label className='text-sm font-bold'>{t('scheduling.start')}<Input type='datetime-local' required value={startAt} onChange={event => setStartAt(event.target.value)} disabled={busy || !canPropose} /></label>
-                    <label className='text-sm font-bold'>{t('scheduling.end')}<Input type='datetime-local' required value={endAt} onChange={event => setEndAt(event.target.value)} disabled={busy || !canPropose} /></label>
-                </div>
-                <Button type='submit' disabled={busy || !canPropose}>{current ? t('scheduling.counter') : t('scheduling.propose')}</Button>
-            </form>}
-        </Panel>
-        <Panel title={String(t('scheduling.currentHeading'))}>
-            {!current ? <p>{t('scheduling.noProposal')}</p> : <Card title={String(t(`scheduling.status.${current.status}`))}>
-                <p>{fmt.longDate(current.startAt)} – {fmt.longDate(current.endAt)}</p>
-                <p className='mt-1 text-xs text-mh-textMuted'>{current.timezone}</p>
-                {current.status === 'proposed' && current.recipientDid === did ? <div className='mt-3 flex flex-wrap gap-2'>
-                    <Button disabled={busy} onClick={() => void finish(decideCoordinationWindowViaApi({ connectionId, action: 'accept', expectedVersion: current.version }))}>{t('scheduling.accept')}</Button>
-                    <Button variant='secondary' disabled={busy} onClick={() => void finish(decideCoordinationWindowViaApi({ connectionId, action: 'decline', expectedVersion: current.version }))}>{t('scheduling.decline')}</Button>
-                </div> : null}
-                {current.status === 'confirmed' ? <Button className='mt-3' variant='secondary' disabled={busy} onClick={() => void finish(decideCoordinationWindowViaApi({ connectionId, action: 'cancel', expectedVersion: current.version }))}>{t('scheduling.cancel')}</Button> : null}
-            </Card>}
-        </Panel>
-    </section>;
+    return (
+        <section className='space-y-6'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>{t('scheduling.heading')}</h1>
+                <p className='mt-2 text-sm text-mh-textMuted'>
+                    {t('scheduling.description')}
+                </p>
+                <p
+                    role={
+                        status.startsWith(String(t('common.error')))
+                            ? 'alert'
+                            : 'status'
+                    }
+                    className='mt-2 text-sm font-bold'
+                >
+                    {status}
+                </p>
+            </header>
+            <Panel title={String(t('scheduling.proposeHeading'))}>
+                {connections.length === 0 ? (
+                    <p>{t('scheduling.empty')}</p>
+                ) : (
+                    <form
+                        className='space-y-4'
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            if (!connectionId || !startAt || !endAt) return;
+                            const timezone =
+                                Intl.DateTimeFormat().resolvedOptions()
+                                    .timeZone || 'UTC';
+                            void finish(
+                                proposeCoordinationWindowViaApi({
+                                    connectionId,
+                                    startAt: localDateTimeWithOffset(startAt),
+                                    endAt: localDateTimeWithOffset(endAt),
+                                    timezone,
+                                    ...(current
+                                        ? { expectedVersion: current.version }
+                                        : {}),
+                                }),
+                            );
+                        }}
+                    >
+                        <label className='block text-sm font-bold'>
+                            {t('scheduling.connection')}
+                            <select
+                                className='mh-input mt-1 w-full px-3 py-2'
+                                value={connectionId}
+                                onChange={(event) =>
+                                    setConnectionId(event.target.value)
+                                }
+                                disabled={busy}
+                            >
+                                {connections.map((connection) => (
+                                    <option
+                                        key={connection.id}
+                                        value={connection.id}
+                                    >
+                                        {connection.counterpartDid}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <div className='grid gap-3 sm:grid-cols-2'>
+                            <label className='text-sm font-bold'>
+                                {t('scheduling.start')}
+                                <Input
+                                    type='datetime-local'
+                                    required
+                                    value={startAt}
+                                    onChange={(event) =>
+                                        setStartAt(event.target.value)
+                                    }
+                                    disabled={busy || !canPropose}
+                                />
+                            </label>
+                            <label className='text-sm font-bold'>
+                                {t('scheduling.end')}
+                                <Input
+                                    type='datetime-local'
+                                    required
+                                    value={endAt}
+                                    onChange={(event) =>
+                                        setEndAt(event.target.value)
+                                    }
+                                    disabled={busy || !canPropose}
+                                />
+                            </label>
+                        </div>
+                        <Button type='submit' disabled={busy || !canPropose}>
+                            {current
+                                ? t('scheduling.counter')
+                                : t('scheduling.propose')}
+                        </Button>
+                    </form>
+                )}
+            </Panel>
+            <Panel title={String(t('scheduling.currentHeading'))}>
+                {!current ? (
+                    <p>{t('scheduling.noProposal')}</p>
+                ) : (
+                    <Card
+                        title={String(t(`scheduling.status.${current.status}`))}
+                    >
+                        <p>
+                            {fmt.longDate(current.startAt)} –{' '}
+                            {fmt.longDate(current.endAt)}
+                        </p>
+                        <p className='mt-1 text-xs text-mh-textMuted'>
+                            {current.timezone}
+                        </p>
+                        {current.status === 'proposed' &&
+                        current.recipientDid === did ? (
+                            <div className='mt-3 flex flex-wrap gap-2'>
+                                <Button
+                                    disabled={busy}
+                                    onClick={() =>
+                                        void finish(
+                                            decideCoordinationWindowViaApi({
+                                                connectionId,
+                                                action: 'accept',
+                                                expectedVersion:
+                                                    current.version,
+                                            }),
+                                        )
+                                    }
+                                >
+                                    {t('scheduling.accept')}
+                                </Button>
+                                <Button
+                                    variant='secondary'
+                                    disabled={busy}
+                                    onClick={() =>
+                                        void finish(
+                                            decideCoordinationWindowViaApi({
+                                                connectionId,
+                                                action: 'decline',
+                                                expectedVersion:
+                                                    current.version,
+                                            }),
+                                        )
+                                    }
+                                >
+                                    {t('scheduling.decline')}
+                                </Button>
+                            </div>
+                        ) : null}
+                        {current.status === 'confirmed' ? (
+                            <Button
+                                className='mt-3'
+                                variant='secondary'
+                                disabled={busy}
+                                onClick={() =>
+                                    void finish(
+                                        decideCoordinationWindowViaApi({
+                                            connectionId,
+                                            action: 'cancel',
+                                            expectedVersion: current.version,
+                                        }),
+                                    )
+                                }
+                            >
+                                {t('scheduling.cancel')}
+                            </Button>
+                        ) : null}
+                    </Card>
+                )}
+            </Panel>
+        </section>
+    );
 };
 
 const CoordinationInboxRoute = ({ did }: { did: string }) => {
+    const { t, fmt } = useLocale();
     const [offers, setOffers] = useState<CoordinationOffer[]>([]);
-    const [connections, setConnections] = useState<
-        CoordinationConnection[]
-    >([]);
+    const [connections, setConnections] = useState<CoordinationConnection[]>(
+        [],
+    );
     const [items, setItems] = useState<ActivityInboxItem[]>([]);
     const [feedback, setFeedback] = useState<OutcomeFeedback[]>([]);
     const [requests, setRequests] = useState<FeedRecordEnvelope[]>([]);
@@ -6670,10 +6999,10 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
         >
     >({});
     const [unreadOnly, setUnreadOnly] = useState(false);
-    const [status, setStatus] = useState('Loading coordination activity…');
+    const [status, setStatus] = useState(t('inbox.loading'));
 
     const load = useCallback(async () => {
-        setStatus('Loading coordination activity…');
+        setStatus(t('inbox.loading'));
         const [coordination, inbox, outcomeHistory, discoverable] =
             await Promise.all([
                 fetchCoordinationViaApi(),
@@ -6686,9 +7015,9 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
             inbox,
             outcomeHistory,
             discoverable,
-        ].find(result => !result.ok);
+        ].find((result) => !result.ok);
         if (failure && !failure.ok) {
-            setStatus(`Error: ${failure.error}`);
+            setStatus(`${t('common.error')}: ${t('common.requestFailed')}`);
             return;
         }
         if (
@@ -6702,11 +7031,9 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
             setItems(inbox.data.items);
             setFeedback(outcomeHistory.data.feedback);
             setRequests(discoverable.data);
-            setStatus(
-                `${inbox.data.unread} unread item${inbox.data.unread === 1 ? '' : 's'}.`,
-            );
+            setStatus(t('inbox.unreadCount', { count: inbox.data.unread }));
         }
-    }, [unreadOnly]);
+    }, [unreadOnly, t]);
 
     useEffect(() => {
         void load();
@@ -6719,27 +7046,27 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
         setStatus(pendingMessage);
         const result = await operation;
         if (!result.ok) {
-            setStatus(`Error: ${result.error ?? 'The action failed.'}`);
+            setStatus(
+                `${t('common.error')}: ${result.error ? t('common.requestFailed') : t('inbox.actionFailed')}`,
+            );
             return;
         }
         await load();
     };
 
     const ownedRequests = requests.filter(
-        request => request.recipientDid === did,
+        (request) => request.recipientDid === did,
     );
     const availableRequests = requests.filter(
-        request => request.recipientDid !== did,
+        (request) => request.recipientDid !== did,
     );
 
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>Coordination inbox</h1>
+                <h1 className='mh-route-title'>{t('inbox.heading')}</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Review durable offers, assignments, safety updates, and
-                    outcomes. This is activity coordination, not chat; it has no
-                    messages or conversation history.
+                    {t('inbox.description')}
                 </p>
                 <p
                     className='mt-2 text-sm font-bold'
@@ -6747,18 +7074,22 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                 >
                     {status}
                 </p>
-                <a className='mt-3 inline-block font-bold underline' href='/scheduling'>
-                    Open connection scheduling
+                <a
+                    className='mt-3 inline-block font-bold underline'
+                    href='/scheduling'
+                >
+                    {t('inbox.openScheduling')}
                 </a>
             </header>
 
-            <Panel title='Discover requests and offer help'>
-                {availableRequests.length === 0 ?
+            <Panel title={String(t('inbox.discover'))}>
+                {availableRequests.length === 0 ? (
                     <p className='text-sm text-mh-textMuted'>
-                        No open requests from other accounts are discoverable.
+                        {t('inbox.noRequests')}
                     </p>
-                :   <div className='grid gap-3 sm:grid-cols-2'>
-                        {availableRequests.map(request => (
+                ) : (
+                    <div className='grid gap-3 sm:grid-cols-2'>
+                        {availableRequests.map((request) => (
                             <Card
                                 key={request.aidPostUri}
                                 title={request.card.title}
@@ -6767,19 +7098,24 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                     {request.card.description}
                                 </p>
                                 <p className='mt-2 text-xs text-mh-textMuted'>
-                                    {formatCategoryLabel(
+                                    {formatLocalizedLabel(
+                                        t,
                                         request.card.category,
                                     )}{' '}
-                                    · {request.card.status}
+                                    ·{' '}
+                                    {formatLocalizedLabel(
+                                        t,
+                                        request.card.status,
+                                    )}
                                 </p>
                                 <label className='mt-3 block text-sm font-bold'>
-                                    Optional coordination note
+                                    {t('inbox.note')}
                                     <textarea
                                         className='mh-input mt-1 min-h-20 w-full px-3 py-2'
                                         maxLength={1000}
                                         value={notes[request.aidPostUri] ?? ''}
-                                        onChange={event =>
-                                            setNotes(current => ({
+                                        onChange={(event) =>
+                                            setNotes((current) => ({
                                                 ...current,
                                                 [request.aidPostUri]:
                                                     event.target.value,
@@ -6791,10 +7127,9 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                     className='mt-3'
                                     onClick={() =>
                                         void finish(
-                                            'Sending offer…',
+                                            t('inbox.sendingOffer'),
                                             createCoordinationOfferViaApi({
-                                                requestUri:
-                                                    request.aidPostUri,
+                                                requestUri: request.aidPostUri,
                                                 note:
                                                     notes[
                                                         request.aidPostUri
@@ -6803,64 +7138,77 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                         )
                                     }
                                 >
-                                    Offer help
+                                    {t('inbox.offerHelp')}
                                 </Button>
                             </Card>
                         ))}
-                    </div>}
+                    </div>
+                )}
             </Panel>
 
-            <Panel title='Offers'>
-                {offers.length === 0 ?
+            <Panel title={String(t('inbox.offers'))}>
+                {offers.length === 0 ? (
                     <p className='text-sm text-mh-textMuted'>
-                        No offers yet.
+                        {t('inbox.noOffers')}
                     </p>
-                :   <div className='space-y-3'>
-                        {offers.map(offer => (
+                ) : (
+                    <div className='space-y-3'>
+                        {offers.map((offer) => (
                             <Card
                                 key={offer.id}
-                                title={`${formatCategoryLabel(offer.direction)} offer`}
+                                title={t('inbox.offerTitle', {
+                                    direction: formatLocalizedLabel(
+                                        t,
+                                        offer.direction,
+                                    ),
+                                })}
                             >
                                 <div className='flex flex-wrap gap-2'>
                                     <Badge
                                         tone={
-                                            offer.status === 'accepted' ?
-                                                'success'
-                                            : offer.status === 'pending' ?
-                                                'info'
-                                            :   'neutral'
+                                            offer.status === 'accepted'
+                                                ? 'success'
+                                                : offer.status === 'pending'
+                                                  ? 'info'
+                                                  : 'neutral'
                                         }
                                     >
-                                        {formatCategoryLabel(offer.status)}
+                                        {formatLocalizedLabel(t, offer.status)}
                                     </Badge>
                                     <span className='text-xs text-mh-textMuted'>
-                                        Expires{' '}
-                                        {new Date(
-                                            offer.expiresAt,
-                                        ).toLocaleString()}
+                                        {t('inbox.expires', {
+                                            date: fmt.longDate(offer.expiresAt),
+                                        })}
                                     </span>
                                 </div>
-                                {offer.note ?
+                                {offer.note ? (
                                     <p className='mt-2 text-sm'>{offer.note}</p>
-                                :   null}
-                                {offer.status === 'accepted' ?
+                                ) : null}
+                                {offer.status === 'accepted' ? (
                                     <p className='mt-2 break-all text-xs'>
-                                        Requester: {offer.requesterDid}
+                                        {t('inbox.requester', {
+                                            did: offer.requesterDid,
+                                        })}
                                         <br />
-                                        Helper: {offer.helperDid}
+                                        {t('inbox.helper', {
+                                            did: offer.helperDid,
+                                        })}
                                     </p>
-                                :   <p className='mt-2 text-xs text-mh-textMuted'>
-                                        Participant identity remains private
-                                        until acceptance.
-                                    </p>}
-                                {offer.status === 'pending' ?
+                                ) : (
+                                    <p className='mt-2 text-xs text-mh-textMuted'>
+                                        {t('inbox.privateIdentity')}
+                                    </p>
+                                )}
+                                {offer.status === 'pending' ? (
                                     <div className='mt-3 flex flex-wrap gap-2'>
-                                        {offer.direction === 'received' ?
+                                        {offer.direction === 'received' ? (
                                             <>
                                                 <Button
                                                     onClick={() =>
                                                         void finish(
-                                                            'Accepting offer…',
+                                                            t(
+                                                                'inbox.acceptingOffer',
+                                                            ),
                                                             decideCoordinationOfferViaApi(
                                                                 {
                                                                     offerId:
@@ -6872,13 +7220,15 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                         )
                                                     }
                                                 >
-                                                    Accept
+                                                    {t('inbox.accept')}
                                                 </Button>
                                                 <Button
                                                     variant='secondary'
                                                     onClick={() =>
                                                         void finish(
-                                                            'Declining offer…',
+                                                            t(
+                                                                'inbox.decliningOffer',
+                                                            ),
                                                             decideCoordinationOfferViaApi(
                                                                 {
                                                                     offerId:
@@ -6890,14 +7240,17 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                         )
                                                     }
                                                 >
-                                                    Decline
+                                                    {t('inbox.decline')}
                                                 </Button>
                                             </>
-                                        :   <Button
+                                        ) : (
+                                            <Button
                                                 variant='secondary'
                                                 onClick={() =>
                                                     void finish(
-                                                        'Cancelling offer…',
+                                                        t(
+                                                            'inbox.cancellingOffer',
+                                                        ),
                                                         decideCoordinationOfferViaApi(
                                                             {
                                                                 offerId:
@@ -6909,50 +7262,49 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                     )
                                                 }
                                             >
-                                                Cancel offer
-                                            </Button>}
+                                                {t('inbox.cancelOffer')}
+                                            </Button>
+                                        )}
                                     </div>
-                                :   null}
+                                ) : null}
                             </Card>
                         ))}
-                    </div>}
+                    </div>
+                )}
             </Panel>
 
-            <Panel title='Explainable matching'>
+            <Panel title={String(t('inbox.matching'))}>
                 <p className='mb-3 text-sm text-mh-textMuted'>
-                    Suggestions use category, approximate distance,
-                    availability, language, accessibility, and active
-                    verification. Results are deterministic and advisory;
-                    Patchwork never assigns anyone automatically or computes a
-                    reputation score.
+                    {t('inbox.matchingHelp')}
                 </p>
                 <div className='grid gap-3 sm:grid-cols-2'>
                     <label className='text-sm font-bold'>
-                        Required languages
+                        {t('inbox.languages')}
                         <Input
                             value={languages}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setLanguages(event.target.value)
                             }
-                            placeholder='en, es'
+                            placeholder={t('inbox.languagesPlaceholder')}
                         />
                     </label>
                     <label className='text-sm font-bold'>
-                        Accessibility needs
+                        {t('inbox.accessibility')}
                         <Input
                             value={accessibility}
-                            onChange={event =>
+                            onChange={(event) =>
                                 setAccessibility(event.target.value)
                             }
-                            placeholder='wheelchair-accessible'
+                            placeholder={t('inbox.accessibilityPlaceholder')}
                         />
                     </label>
                 </div>
-                {ownedRequests.length === 0 ?
+                {ownedRequests.length === 0 ? (
                     <p className='mt-3 text-sm text-mh-textMuted'>
-                        Publish an open request to review eligible candidates.
+                        {t('inbox.publishFirst')}
                     </p>
-                :   ownedRequests.map(request => (
+                ) : (
+                    ownedRequests.map((request) => (
                         <div
                             key={request.aidPostUri}
                             className='mt-4 border-t border-mh-borderSoft pt-4'
@@ -6964,7 +7316,7 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                 <Button
                                     onClick={() =>
                                         void (async () => {
-                                            setStatus('Ranking candidates…');
+                                            setStatus(t('inbox.ranking'));
                                             const result =
                                                 await matchRequestViaApi({
                                                     requestUri:
@@ -6980,27 +7332,30 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                 });
                                             if (!result.ok) {
                                                 setStatus(
-                                                    `Error: ${result.error}`,
+                                                    `${t('common.error')}: ${t('common.requestFailed')}`,
                                                 );
                                                 return;
                                             }
-                                            setMatches(current => ({
+                                            setMatches((current) => ({
                                                 ...current,
                                                 [request.aidPostUri]:
                                                     result.data.candidates,
                                             }));
                                             setStatus(
-                                                `${result.data.candidates.length} eligible candidate${result.data.candidates.length === 1 ? '' : 's'} ranked.`,
+                                                t('inbox.ranked', {
+                                                    count: result.data
+                                                        .candidates.length,
+                                                }),
                                             );
                                         })()
                                     }
                                 >
-                                    Find candidates
+                                    {t('inbox.find')}
                                 </Button>
                             </div>
                             <ol className='mt-3 space-y-2'>
                                 {(matches[request.aidPostUri] ?? []).map(
-                                    candidate => (
+                                    (candidate) => (
                                         <li
                                             key={candidate.candidateRef}
                                             className='rounded border border-mh-borderSoft p-3'
@@ -7011,13 +7366,14 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                             </p>
                                             <p className='text-xs text-mh-textMuted'>
                                                 {candidate.kind} ·{' '}
-                                                {candidate.availability} ·
-                                                verification{' '}
-                                                {candidate.verification}
+                                                {candidate.availability} ·{' '}
+                                                {t('inbox.verification', {
+                                                    status: candidate.verification,
+                                                })}
                                             </p>
                                             <ul className='mt-2 list-disc pl-5 text-sm'>
                                                 {candidate.explanations.map(
-                                                    explanation => (
+                                                    (explanation) => (
                                                         <li key={explanation}>
                                                             {explanation}
                                                         </li>
@@ -7025,26 +7381,27 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                 )}
                                             </ul>
                                             <p className='mt-2 text-xs font-bold'>
-                                                Manual selection only
+                                                {t('inbox.manual')}
                                             </p>
                                         </li>
                                     ),
                                 )}
                             </ol>
                         </div>
-                    ))}
+                    ))
+                )}
             </Panel>
 
-            <Panel title='Connections and outcomes'>
-                {connections.length === 0 ?
+            <Panel title={String(t('inbox.connections'))}>
+                {connections.length === 0 ? (
                     <p className='text-sm text-mh-textMuted'>
-                        Accepted offers will appear here.
+                        {t('inbox.noConnections')}
                     </p>
-                :   <div className='space-y-3'>
-                        {connections.map(connection => {
+                ) : (
+                    <div className='space-y-3'>
+                        {connections.map((connection) => {
                             const submittedFeedback = feedback.find(
-                                entry =>
-                                    entry.connectionId === connection.id,
+                                (entry) => entry.connectionId === connection.id,
                             );
                             const alreadySubmitted = Boolean(submittedFeedback);
                             const draft = outcomes[connection.id] ?? {
@@ -7056,13 +7413,19 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                             return (
                                 <Card
                                     key={connection.id}
-                                    title={`Connection · ${formatCategoryLabel(connection.status)}`}
+                                    title={t('inbox.connectionTitle', {
+                                        status: formatLocalizedLabel(
+                                            t,
+                                            connection.status,
+                                        ),
+                                    })}
                                 >
                                     <p className='break-all text-xs'>
-                                        Connected with{' '}
-                                        {connection.counterpartDid}
+                                        {t('inbox.connected', {
+                                            did: connection.counterpartDid,
+                                        })}
                                     </p>
-                                    {connection.status === 'active' ?
+                                    {connection.status === 'active' ? (
                                         <>
                                             <ExactLocationExchange
                                                 connectionId={connection.id}
@@ -7071,7 +7434,9 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                 <Button
                                                     onClick={() =>
                                                         void finish(
-                                                            'Completing handoff…',
+                                                            t(
+                                                                'inbox.completing',
+                                                            ),
                                                             transitionCoordinationConnectionViaApi(
                                                                 {
                                                                     connectionId:
@@ -7082,13 +7447,15 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                         )
                                                     }
                                                 >
-                                                    Complete handoff
+                                                    {t('inbox.complete')}
                                                 </Button>
                                                 <Button
                                                     variant='secondary'
                                                     onClick={() =>
                                                         void finish(
-                                                            'Cancelling connection…',
+                                                            t(
+                                                                'inbox.cancellingConnection',
+                                                            ),
                                                             transitionCoordinationConnectionViaApi(
                                                                 {
                                                                     connectionId:
@@ -7099,52 +7466,50 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                         )
                                                     }
                                                 >
-                                                    Cancel
+                                                    {t('inbox.cancel')}
                                                 </Button>
                                             </div>
                                         </>
-                                    : connection.status === 'completed' &&
-                                      !alreadySubmitted ?
+                                    ) : connection.status === 'completed' &&
+                                      !alreadySubmitted ? (
                                         <form
                                             className='mt-3 space-y-3 border-t border-mh-borderSoft pt-3'
-                                            onSubmit={event => {
+                                            onSubmit={(event) => {
                                                 event.preventDefault();
                                                 void finish(
-                                                    'Saving outcome…',
+                                                    t('inbox.savingOutcome'),
                                                     submitOutcomeFeedbackViaApi(
                                                         {
                                                             connectionId:
                                                                 connection.id,
                                                             outcome:
                                                                 draft.outcome,
-                                                            rating:
-                                                                draft.rating,
+                                                            rating: draft.rating,
                                                             comment:
                                                                 draft.comment.trim() ||
                                                                 null,
-                                                            tags:
-                                                                draft.safetyConcern ?
-                                                                    [
-                                                                        'safety-concern',
-                                                                    ]
-                                                                :   [],
+                                                            tags: draft.safetyConcern
+                                                                ? [
+                                                                      'safety-concern',
+                                                                  ]
+                                                                : [],
                                                         },
                                                     ),
                                                 );
                                             }}
                                         >
                                             <h3 className='font-bold'>
-                                                Record structured outcome
+                                                {t('inbox.recordOutcome')}
                                             </h3>
                                             <div className='grid gap-3 sm:grid-cols-2'>
                                                 <label className='text-sm font-bold'>
-                                                    Outcome
+                                                    {t('inbox.outcome')}
                                                     <select
                                                         className='mh-input mt-1 w-full px-3 py-2'
                                                         value={draft.outcome}
-                                                        onChange={event =>
+                                                        onChange={(event) =>
                                                             setOutcomes(
-                                                                current => ({
+                                                                (current) => ({
                                                                     ...current,
                                                                     [connection.id]:
                                                                         {
@@ -7159,14 +7524,15 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                         }
                                                     >
                                                         {outcomeOptions.map(
-                                                            value => (
+                                                            (value) => (
                                                                 <option
                                                                     key={value}
                                                                     value={
                                                                         value
                                                                     }
                                                                 >
-                                                                    {formatCategoryLabel(
+                                                                    {formatLocalizedLabel(
+                                                                        t,
                                                                         value,
                                                                     )}
                                                                 </option>
@@ -7175,25 +7541,24 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                     </select>
                                                 </label>
                                                 <label className='text-sm font-bold'>
-                                                    Rating
+                                                    {t('inbox.rating')}
                                                     <Input
                                                         type='number'
                                                         min={1}
                                                         max={5}
                                                         value={draft.rating}
-                                                        onChange={event =>
+                                                        onChange={(event) =>
                                                             setOutcomes(
-                                                                current => ({
+                                                                (current) => ({
                                                                     ...current,
                                                                     [connection.id]:
                                                                         {
                                                                             ...draft,
-                                                                            rating:
-                                                                                Number(
-                                                                                    event
-                                                                                        .target
-                                                                                        .value,
-                                                                                ),
+                                                                            rating: Number(
+                                                                                event
+                                                                                    .target
+                                                                                    .value,
+                                                                            ),
                                                                         },
                                                                 }),
                                                             )
@@ -7202,14 +7567,14 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                 </label>
                                             </div>
                                             <label className='block text-sm font-bold'>
-                                                Optional comment
+                                                {t('inbox.comment')}
                                                 <textarea
                                                     className='mh-input mt-1 min-h-20 w-full px-3 py-2'
                                                     maxLength={2000}
                                                     value={draft.comment}
-                                                    onChange={event =>
+                                                    onChange={(event) =>
                                                         setOutcomes(
-                                                            current => ({
+                                                            (current) => ({
                                                                 ...current,
                                                                 [connection.id]:
                                                                     {
@@ -7230,9 +7595,9 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                     checked={
                                                         draft.safetyConcern
                                                     }
-                                                    onChange={event =>
+                                                    onChange={(event) =>
                                                         setOutcomes(
-                                                            current => ({
+                                                            (current) => ({
                                                                 ...current,
                                                                 [connection.id]:
                                                                     {
@@ -7246,72 +7611,72 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                         )
                                                     }
                                                 />{' '}
-                                                Flag as a safety concern for
-                                                structured review
+                                                {t('inbox.safety')}
                                             </label>
                                             <Button type='submit'>
-                                                Submit outcome
+                                                {t('inbox.submitOutcome')}
                                             </Button>
                                         </form>
-                                    : alreadySubmitted ?
+                                    ) : alreadySubmitted ? (
                                         <p className='mt-3 text-sm text-mh-textMuted'>
                                             {submittedFeedback?.tags.includes(
                                                 'safety-concern',
-                                            ) ?
-                                                'Your outcome feedback is recorded and the safety concern was sent for moderator review.'
-                                            :   'Your outcome feedback is recorded.'}
+                                            )
+                                                ? t('inbox.recordedSafety')
+                                                : t('inbox.recorded')}
                                         </p>
-                                    :   null}
+                                    ) : null}
                                 </Card>
                             );
                         })}
-                    </div>}
+                    </div>
+                )}
             </Panel>
 
-            <Panel title='Activity'>
+            <Panel title={String(t('inbox.activity'))}>
                 <label className='mb-3 block text-sm'>
                     <input
                         type='checkbox'
                         checked={unreadOnly}
-                        onChange={event =>
+                        onChange={(event) =>
                             setUnreadOnly(event.target.checked)
                         }
                     />{' '}
-                    Show unread only
+                    {t('inbox.unreadOnly')}
                 </label>
-                {items.length === 0 ?
+                {items.length === 0 ? (
                     <p className='text-sm text-mh-textMuted'>
-                        No activity items.
+                        {t('inbox.noActivity')}
                     </p>
-                :   <div className='space-y-2'>
-                        {items.map(item => (
+                ) : (
+                    <div className='space-y-2'>
+                        {items.map((item) => (
                             <Card key={item.id} title={item.title}>
                                 <p className='text-sm'>{item.summary}</p>
                                 <p className='mt-1 text-xs text-mh-textMuted'>
-                                    {formatCategoryLabel(item.type)} ·{' '}
-                                    {new Date(
-                                        item.occurredAt,
-                                    ).toLocaleString()}
+                                    {formatLocalizedLabel(t, item.type)} ·{' '}
+                                    {fmt.longDate(item.occurredAt)}
                                 </p>
-                                {!item.readAt ?
+                                {!item.readAt ? (
                                     <Button
                                         className='mt-3'
                                         variant='neutral'
                                         onClick={() =>
                                             void finish(
-                                                'Marking item read…',
+                                                t('inbox.markingRead'),
                                                 markActivityInboxReadViaApi(
                                                     item.id,
                                                 ),
                                             )
                                         }
                                     >
-                                        Mark read
+                                        {t('inbox.markRead')}
                                     </Button>
-                                :   null}
+                                ) : null}
                             </Card>
                         ))}
-                    </div>}
+                    </div>
+                )}
             </Panel>
         </section>
     );
@@ -7332,17 +7697,18 @@ const ChatRoute = ({
     const notice = toChatStatusNotice(state);
 
     const noticeTone =
-        notice?.tone === 'danger' ? 'danger'
-        : notice?.tone === 'warning' ? 'info'
-        : notice?.tone === 'success' ? 'success'
-        : 'neutral';
+        notice?.tone === 'danger'
+            ? 'danger'
+            : notice?.tone === 'warning'
+              ? 'info'
+              : notice?.tone === 'success'
+                ? 'success'
+                : 'neutral';
 
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>
-                    Chat handoff
-                </h1>
+                <h1 className='mh-route-title'>Chat handoff</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
                     Post-linked 1:1 initiation with permission checks and
                     recipient-capability fallback handling.
@@ -7356,7 +7722,7 @@ const ChatRoute = ({
                             type='checkbox'
                             className='h-4 w-4'
                             checked={hasPermission}
-                            onChange={event =>
+                            onChange={(event) =>
                                 onTogglePermission(event.target.checked)
                             }
                         />
@@ -7367,7 +7733,7 @@ const ChatRoute = ({
                             type='checkbox'
                             className='h-4 w-4'
                             checked={forceFallback}
-                            onChange={event =>
+                            onChange={(event) =>
                                 onToggleFallback(event.target.checked)
                             }
                         />
@@ -7379,7 +7745,7 @@ const ChatRoute = ({
                     Initiator DID: {currentUserDid}
                 </p>
 
-                {intent ?
+                {intent ? (
                     <div className='mt-4 rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'>
                         <p className='text-sm font-bold text-mh-text'>
                             Pending intent · {intent.aidPostTitle}
@@ -7389,11 +7755,12 @@ const ChatRoute = ({
                             {intent.initiatedFrom}
                         </p>
                     </div>
-                :   <p className='mt-4 text-sm text-mh-textMuted'>
+                ) : (
+                    <p className='mt-4 text-sm text-mh-textMuted'>
                         No pending chat intent. Start from Map or Feed “Contact
                         helper”.
                     </p>
-                }
+                )}
 
                 <div className='mt-4 flex flex-wrap gap-2'>
                     <Button onClick={onLaunch} disabled={!intent}>
@@ -7410,17 +7777,17 @@ const ChatRoute = ({
                     State: {state.status}
                 </p>
 
-                {notice ?
+                {notice ? (
                     <div className='mt-3'>
                         <Badge tone={noticeTone}>{notice.message}</Badge>
                     </div>
-                :   null}
+                ) : null}
 
-                {requestPreview ?
+                {requestPreview ? (
                     <pre className='mt-3 max-w-full overflow-x-auto whitespace-pre-wrap wrap-break-word rounded-none border-2 border-mh-borderSoft bg-mh-surfaceElev p-3 text-xs text-mh-text'>
                         {requestPreview}
                     </pre>
-                :   null}
+                ) : null}
             </Card>
         </section>
     );
@@ -7434,9 +7801,8 @@ interface AccountPrivacyRouteProps {
     onDeactivated: () => Promise<void>;
 }
 
-const AccountPrivacyRoute = ({
-    onDeactivated,
-}: AccountPrivacyRouteProps) => {
+const AccountPrivacyRoute = ({ onDeactivated }: AccountPrivacyRouteProps) => {
+    const { changeLocale, t } = useLocale();
     const [accountActionResult, setAccountActionResult] = useState<string>();
     const [confirmDeactivation, setConfirmDeactivation] = useState(false);
     const [pendingAction, setPendingAction] = useState<
@@ -7449,23 +7815,27 @@ const AccountPrivacyRoute = ({
 
     useEffect(() => {
         const controller = new AbortController();
-        void fetchAccountPreferencesViaApi(controller.signal).then(result => {
+        void fetchAccountPreferencesViaApi(controller.signal).then((result) => {
             if (!controller.signal.aborted && result.ok) {
                 setPreferences(result.data);
+                changeLocale(result.data.language);
             }
         });
         return () => controller.abort();
-    }, []);
+    }, [changeLocale]);
 
     const savePreferences = async () => {
-        setPreferencesStatus('Saving preferences…');
+        setPreferencesStatus(String(t('account.saving')));
         const result = await updateAccountPreferencesViaApi(preferences);
         if (!result.ok) {
-            setPreferencesStatus(`Error: ${result.error}`);
+            setPreferencesStatus(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
         setPreferences(result.data);
-        setPreferencesStatus('Preferences saved.');
+        changeLocale(result.data.language);
+        setPreferencesStatus(String(t('account.saved')));
     };
 
     const handleExport = async () => {
@@ -7475,7 +7845,9 @@ const AccountPrivacyRoute = ({
         setPendingAction(undefined);
 
         if (!result.ok) {
-            setAccountActionResult(`Error: ${result.error}`);
+            setAccountActionResult(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
 
@@ -7488,7 +7860,7 @@ const AccountPrivacyRoute = ({
         anchor.download = 'patchwork-account-export.json';
         anchor.click();
         URL.revokeObjectURL(url);
-        setAccountActionResult('Your Patchwork data export is ready.');
+        setAccountActionResult(t('account.exportReady'));
     };
 
     const handleDeactivate = async () => {
@@ -7498,7 +7870,9 @@ const AccountPrivacyRoute = ({
         setPendingAction(undefined);
 
         if (!result.ok) {
-            setAccountActionResult(`Error: ${result.error}`);
+            setAccountActionResult(
+                `${t('common.error')}: ${t('common.requestFailed')}`,
+            );
             return;
         }
 
@@ -7509,79 +7883,92 @@ const AccountPrivacyRoute = ({
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>Account privacy</h1>
+                <h1 className='mh-route-title'>{t('account.heading')}</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Export the data Patchwork holds or deactivate this
-                    authenticated Patchwork account.
+                    {t('account.description')}
                 </p>
             </header>
 
-            <Panel title='Account controls'>
+            <Panel title={String(t('account.controls'))}>
                 <div className='space-y-4'>
-                    <Card title='Privacy and delivery preferences'>
+                    <Card title={String(t('account.preferences'))}>
                         <div className='grid gap-3 sm:grid-cols-2'>
                             <label className='text-sm font-bold'>
-                                Privacy
+                                {t('account.privacy')}
                                 <select
                                     className='mh-input mt-1 w-full px-3 py-2'
                                     value={preferences.privacy}
-                                    onChange={event =>
-                                        setPreferences(current => ({
+                                    onChange={(event) =>
+                                        setPreferences((current) => ({
                                             ...current,
                                             privacy: event.target
                                                 .value as AccountPreferences['privacy'],
                                         }))
                                     }
                                 >
-                                    <option value='public'>Public</option>
-                                    <option value='community'>Community</option>
-                                    <option value='private'>Private</option>
+                                    <option value='public'>
+                                        {t('account.public')}
+                                    </option>
+                                    <option value='community'>
+                                        {t('account.community')}
+                                    </option>
+                                    <option value='private'>
+                                        {t('account.private')}
+                                    </option>
                                 </select>
                             </label>
                             <label className='text-sm font-bold'>
-                                Profile visibility
+                                {t('account.visibility')}
                                 <select
                                     className='mh-input mt-1 w-full px-3 py-2'
                                     value={preferences.visibility}
-                                    onChange={event =>
-                                        setPreferences(current => ({
+                                    onChange={(event) =>
+                                        setPreferences((current) => ({
                                             ...current,
                                             visibility: event.target
                                                 .value as AccountPreferences['visibility'],
                                         }))
                                     }
                                 >
-                                    <option value='public'>Public</option>
-                                    <option value='authenticated'>
-                                        Signed-in people
+                                    <option value='public'>
+                                        {t('account.public')}
                                     </option>
-                                    <option value='hidden'>Hidden</option>
+                                    <option value='authenticated'>
+                                        {t('account.signedIn')}
+                                    </option>
+                                    <option value='hidden'>
+                                        {t('account.hidden')}
+                                    </option>
                                 </select>
                             </label>
                             <label className='text-sm font-bold'>
-                                Language
+                                {t('account.language')}
                                 <select
                                     className='mh-input mt-1 w-full px-3 py-2'
                                     value={preferences.language}
-                                    onChange={event =>
-                                        setPreferences(current => ({
+                                    onChange={(event) =>
+                                        setPreferences((current) => ({
                                             ...current,
                                             language: event.target
                                                 .value as AccountPreferences['language'],
                                         }))
                                     }
                                 >
-                                    <option value='en'>English</option>
-                                    <option value='es'>Español</option>
+                                    <option value='en'>
+                                        {t('account.english')}
+                                    </option>
+                                    <option value='es'>
+                                        {t('account.spanish')}
+                                    </option>
                                 </select>
                             </label>
                             <label className='text-sm font-bold'>
-                                Location visibility
+                                {t('account.location')}
                                 <select
                                     className='mh-input mt-1 w-full px-3 py-2'
                                     value={preferences.location.sharing}
-                                    onChange={event =>
-                                        setPreferences(current => ({
+                                    onChange={(event) =>
+                                        setPreferences((current) => ({
                                             ...current,
                                             location: {
                                                 ...current.location,
@@ -7592,9 +7979,11 @@ const AccountPrivacyRoute = ({
                                     }
                                 >
                                     <option value='approximate'>
-                                        Approximate only
+                                        {t('account.approximate')}
                                     </option>
-                                    <option value='hidden'>Hidden</option>
+                                    <option value='hidden'>
+                                        {t('account.hidden')}
+                                    </option>
                                 </select>
                             </label>
                         </div>
@@ -7615,8 +8004,8 @@ const AccountPrivacyRoute = ({
                                         checked={
                                             preferences.notifications[channel]
                                         }
-                                        onChange={event =>
-                                            setPreferences(current => ({
+                                        onChange={(event) =>
+                                            setPreferences((current) => ({
                                                 ...current,
                                                 notifications: {
                                                     ...current.notifications,
@@ -7633,11 +8022,10 @@ const AccountPrivacyRoute = ({
                                 <input
                                     type='checkbox'
                                     checked={
-                                        preferences.location
-                                            .noPermanentAddress
+                                        preferences.location.noPermanentAddress
                                     }
-                                    onChange={event =>
-                                        setPreferences(current => ({
+                                    onChange={(event) =>
+                                        setPreferences((current) => ({
                                             ...current,
                                             location: {
                                                 ...current.location,
@@ -7647,7 +8035,7 @@ const AccountPrivacyRoute = ({
                                         }))
                                     }
                                 />
-                                I do not have a permanent address
+                                {t('account.noAddress')}
                             </label>
                         </div>
                         <div className='mt-3 flex items-center gap-3'>
@@ -7655,28 +8043,25 @@ const AccountPrivacyRoute = ({
                                 className='px-3 py-1 text-xs'
                                 onClick={() => void savePreferences()}
                             >
-                                Save preferences
+                                {t('account.save')}
                             </Button>
-                            {preferencesStatus ?
+                            {preferencesStatus ? (
                                 <span
                                     role={
-                                        preferencesStatus.startsWith('Error:') ?
-                                            'alert'
-                                        :   'status'
+                                        preferencesStatus.startsWith('Error:')
+                                            ? 'alert'
+                                            : 'status'
                                     }
                                     className='text-xs'
                                 >
                                     {preferencesStatus}
                                 </span>
-                            :   null}
+                            ) : null}
                         </div>
                     </Card>
-                    <Card title='Data export'>
+                    <Card title={String(t('account.export'))}>
                         <p className='text-sm text-mh-textMuted'>
-                            Download a versioned snapshot of Patchwork-held
-                            account data. Credentials, third-party casework,
-                            and a complete copy of your independent AT
-                            repository are excluded.
+                            {t('account.exportHelp')}
                         </p>
                         <div className='mt-3'>
                             <Button
@@ -7685,19 +8070,16 @@ const AccountPrivacyRoute = ({
                                 disabled={pendingAction !== undefined}
                                 onClick={() => void handleExport()}
                             >
-                                {pendingAction === 'export' ?
-                                    'Preparing export…'
-                                :   'Download data export'}
+                                {pendingAction === 'export'
+                                    ? t('account.preparing')
+                                    : t('account.download')}
                             </Button>
                         </div>
                     </Card>
 
-                    <Card title='Account deactivation'>
+                    <Card title={String(t('account.deactivation'))}>
                         <p className='text-sm text-mh-textMuted'>
-                            Deactivation revokes Patchwork sessions and removes
-                            your records from Patchwork discovery. It does not
-                            delete records held independently by your AT
-                            Protocol repository.
+                            {t('account.deactivationHelp')}
                         </p>
                         <div className='mt-3'>
                             <Button
@@ -7706,22 +8088,22 @@ const AccountPrivacyRoute = ({
                                 disabled={pendingAction !== undefined}
                                 onClick={() => setConfirmDeactivation(true)}
                             >
-                                Deactivate account
+                                {t('account.deactivate')}
                             </Button>
                         </div>
-                        {confirmDeactivation ?
+                        {confirmDeactivation ? (
                             <div
                                 role='alertdialog'
-                                aria-label='Confirm account deactivation'
+                                aria-label={String(
+                                    t('account.confirmDeactivate'),
+                                )}
                                 className='mh-alert mt-3'
                             >
                                 <p className='text-sm font-bold'>
-                                    Deactivate this Patchwork account?
+                                    {t('account.confirm')}
                                 </p>
                                 <p className='mt-1 text-xs'>
-                                    You will be signed out immediately.
-                                    Reactivation requires a controlled support
-                                    review.
+                                    {t('account.confirmHelp')}
                                 </p>
                                 <div className='mt-2 flex flex-wrap gap-2'>
                                     <Button
@@ -7729,9 +8111,9 @@ const AccountPrivacyRoute = ({
                                         disabled={pendingAction !== undefined}
                                         onClick={() => void handleDeactivate()}
                                     >
-                                        {pendingAction === 'deactivate' ?
-                                            'Deactivating…'
-                                        :   'Confirm deactivation'}
+                                        {pendingAction === 'deactivate'
+                                            ? t('account.deactivating')
+                                            : t('account.confirmDeactivate')}
                                     </Button>
                                     <Button
                                         type='button'
@@ -7741,25 +8123,25 @@ const AccountPrivacyRoute = ({
                                             setConfirmDeactivation(false)
                                         }
                                     >
-                                        Keep account active
+                                        {t('account.keep')}
                                     </Button>
                                 </div>
                             </div>
-                        :   null}
+                        ) : null}
                     </Card>
 
-                    {accountActionResult ?
+                    {accountActionResult ? (
                         <p
                             role={
-                                accountActionResult.startsWith('Error:') ?
-                                    'alert'
-                                :   'status'
+                                accountActionResult.startsWith('Error:')
+                                    ? 'alert'
+                                    : 'status'
                             }
                             className='rounded-none border-2 border-mh-border bg-mh-surfaceElev px-3 py-2 text-xs font-bold'
                         >
                             {accountActionResult}
                         </p>
-                    :   null}
+                    ) : null}
                 </div>
             </Panel>
         </section>
@@ -7770,41 +8152,41 @@ interface PolicyConsentGateProps {
     onAccepted: () => void;
 }
 
-const policyLabels: Readonly<Record<string, string>> = {
-    'terms-of-use': 'Terms of Use',
-    'privacy-notice': 'Privacy Notice',
-    'community-guidelines': 'Community Guidelines',
-    'synthetic-data-disclosure': 'Synthetic-data disclosure',
-    'location-sharing-consent': 'Location-sharing consent',
+const policyLabelKeys: Readonly<Record<string, string>> = {
+    'terms-of-use': 'consent.terms',
+    'privacy-notice': 'consent.privacy',
+    'community-guidelines': 'consent.guidelines',
+    'synthetic-data-disclosure': 'consent.synthetic',
+    'location-sharing-consent': 'consent.location',
 };
 
 const PolicyConsentGate = ({ onAccepted }: PolicyConsentGateProps) => {
+    const { t } = useLocale();
     const [accepted, setAccepted] = useState<Set<string>>(new Set());
     const [eligible, setEligible] = useState(false);
     const [status, setStatus] = useState<string>();
-    const allAccepted = requiredPolicyDocuments.every(document =>
+    const allAccepted = requiredPolicyDocuments.every((document) =>
         accepted.has(document),
     );
 
     const submit = async () => {
-        setStatus('Recording consent…');
+        setStatus(t('consent.recording'));
         const result = await acceptCurrentPoliciesViaApi();
         if (!result.ok) {
-            setStatus(`Error: ${result.error}`);
+            setStatus(`${t('common.error')}: ${result.error}`);
             return;
         }
-        setStatus('Consent recorded.');
+        setStatus(t('consent.recorded'));
         onAccepted();
     };
 
     return (
-        <Panel title='Review current policies'>
+        <Panel title={t('consent.title')}>
             <p className='text-sm text-mh-textMuted'>
-                Version {CURRENT_POLICY_VERSION}. Material changes require a
-                new acceptance before protected actions are available.
+                {t('consent.version', { version: CURRENT_POLICY_VERSION })}
             </p>
             <div className='mt-4 space-y-2'>
-                {requiredPolicyDocuments.map(document => (
+                {requiredPolicyDocuments.map((document) => (
                     <label
                         key={document}
                         className='flex items-start gap-2 text-sm'
@@ -7812,25 +8194,28 @@ const PolicyConsentGate = ({ onAccepted }: PolicyConsentGateProps) => {
                         <input
                             type='checkbox'
                             checked={accepted.has(document)}
-                            onChange={event =>
-                                setAccepted(current => {
+                            onChange={(event) =>
+                                setAccepted((current) => {
                                     const next = new Set(current);
-                                    if (event.target.checked) next.add(document);
+                                    if (event.target.checked)
+                                        next.add(document);
                                     else next.delete(document);
                                     return next;
                                 })
                             }
                         />
-                        I accept the {policyLabels[document]}.
+                        {t('consent.accept', {
+                            policy: t(policyLabelKeys[document]),
+                        })}
                     </label>
                 ))}
                 <label className='flex items-start gap-2 text-sm font-bold'>
                     <input
                         type='checkbox'
                         checked={eligible}
-                        onChange={event => setEligible(event.target.checked)}
+                        onChange={(event) => setEligible(event.target.checked)}
                     />
-                    I confirm that I am at least 18 years old.
+                    {t('consent.age')}
                 </label>
             </div>
             <div className='mt-4 flex items-center gap-3'>
@@ -7838,16 +8223,16 @@ const PolicyConsentGate = ({ onAccepted }: PolicyConsentGateProps) => {
                     disabled={!allAccepted || !eligible}
                     onClick={() => void submit()}
                 >
-                    Accept and continue
+                    {t('consent.continue')}
                 </Button>
-                {status ?
+                {status ? (
                     <span
                         role={status.startsWith('Error:') ? 'alert' : 'status'}
                         className='text-xs'
                     >
                         {status}
                     </span>
-                :   null}
+                ) : null}
             </div>
         </Panel>
     );
@@ -7888,7 +8273,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
         setIsLoadingSettings(true);
 
         void fetchSettingsFromApi(currentUserDid, controller.signal)
-            .then(result => {
+            .then((result) => {
                 if (controller.signal.aborted) {
                     return;
                 }
@@ -7909,7 +8294,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
     }, [currentUserDid]);
 
     const handlePatch = (patch: SettingsPatch) => {
-        setSettings(current => applySettingsPatch(current, patch));
+        setSettings((current) => applySettingsPatch(current, patch));
         setSaveSuccess(undefined);
         setSaveError(undefined);
     };
@@ -7992,23 +8377,21 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
     return (
         <section className='space-y-6'>
             <header className='mh-route-header'>
-                <h1 className='mh-route-title'>
-                    Account settings
-                </h1>
+                <h1 className='mh-route-title'>Account settings</h1>
                 <p className='mt-2 text-sm text-mh-textMuted'>
                     Privacy controls, contact preferences, notifications, and
                     account management.
                 </p>
-                {dirty ?
+                {dirty ? (
                     <div className='mt-3'>
                         <Badge tone='info'>Unsaved changes</Badge>
                     </div>
-                :   null}
+                ) : null}
             </header>
 
             {/* Section tabs */}
             <div className='flex flex-wrap gap-2'>
-                {settingsSections.map(section => (
+                {settingsSections.map((section) => (
                     <Button
                         key={section}
                         variant={
@@ -8026,7 +8409,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                 {settingsSectionDescriptions[activeSection]}
             </p>
 
-            {isLoadingSettings ?
+            {isLoadingSettings ? (
                 <Panel title='Loading settings'>
                     <div className='space-y-3'>
                         <div className='mh-skeleton h-4 w-3/4' />
@@ -8034,10 +8417,10 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                         <div className='mh-skeleton h-4 w-2/3' />
                     </div>
                 </Panel>
-            :   null}
+            ) : null}
 
             {/* Privacy section */}
-            {!isLoadingSettings && activeSection === 'privacy' ?
+            {!isLoadingSettings && activeSection === 'privacy' ? (
                 <Panel title='Privacy controls'>
                     <div className='space-y-4'>
                         <div>
@@ -8045,13 +8428,13 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                 Privacy level
                             </p>
                             <div className='flex flex-wrap gap-2'>
-                                {privacyLevels.map(level => (
+                                {privacyLevels.map((level) => (
                                     <Button
                                         key={level}
                                         variant={
-                                            settings.privacyLevel === level ?
-                                                'secondary'
-                                            :   'neutral'
+                                            settings.privacyLevel === level
+                                                ? 'secondary'
+                                                : 'neutral'
                                         }
                                         className='px-3 py-1 text-xs'
                                         onClick={() =>
@@ -8074,7 +8457,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                     type='checkbox'
                                     className='h-4 w-4'
                                     checked={settings.geoSharingEnabled}
-                                    onChange={event =>
+                                    onChange={(event) =>
                                         handlePatch({
                                             section: 'privacy',
                                             field: 'geoSharingEnabled',
@@ -8091,16 +8474,14 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                 Geo-sharing precision
                             </p>
                             <div className='flex flex-wrap gap-2'>
-                                {geoSharingPrecisions.map(precision => (
+                                {geoSharingPrecisions.map((precision) => (
                                     <Button
                                         key={precision}
                                         variant={
-                                            (
-                                                settings.geoSharingPrecision ===
-                                                precision
-                                            ) ?
-                                                'secondary'
-                                            :   'neutral'
+                                            settings.geoSharingPrecision ===
+                                            precision
+                                                ? 'secondary'
+                                                : 'neutral'
                                         }
                                         className='px-3 py-1 text-xs'
                                         onClick={() =>
@@ -8118,10 +8499,10 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                         </div>
                     </div>
                 </Panel>
-            :   null}
+            ) : null}
 
             {/* Contact section */}
-            {!isLoadingSettings && activeSection === 'contact' ?
+            {!isLoadingSettings && activeSection === 'contact' ? (
                 <Panel title='Contact preferences'>
                     <div className='space-y-3'>
                         <label className='inline-flex items-center gap-2 text-sm text-mh-textMuted'>
@@ -8132,7 +8513,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                     settings.contactPreferences
                                         .allowDirectMessages
                                 }
-                                onChange={event =>
+                                onChange={(event) =>
                                     handlePatch({
                                         section: 'contact',
                                         field: 'allowDirectMessages',
@@ -8147,7 +8528,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                 type='checkbox'
                                 className='h-4 w-4'
                                 checked={settings.contactPreferences.showEmail}
-                                onChange={event =>
+                                onChange={(event) =>
                                     handlePatch({
                                         section: 'contact',
                                         field: 'showEmail',
@@ -8162,7 +8543,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                 type='checkbox'
                                 className='h-4 w-4'
                                 checked={settings.contactPreferences.showPhone}
-                                onChange={event =>
+                                onChange={(event) =>
                                     handlePatch({
                                         section: 'contact',
                                         field: 'showPhone',
@@ -8174,10 +8555,10 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                         </label>
                     </div>
                 </Panel>
-            :   null}
+            ) : null}
 
             {/* Notifications section */}
-            {!isLoadingSettings && activeSection === 'notifications' ?
+            {!isLoadingSettings && activeSection === 'notifications' ? (
                 <Panel title='Notification preferences'>
                     <div className='space-y-3'>
                         <label className='inline-flex items-center gap-2 text-sm text-mh-textMuted'>
@@ -8188,7 +8569,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                     settings.notificationPreferences
                                         .aidRequestUpdates
                                 }
-                                onChange={event =>
+                                onChange={(event) =>
                                     handlePatch({
                                         section: 'notifications',
                                         field: 'aidRequestUpdates',
@@ -8206,7 +8587,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                     settings.notificationPreferences
                                         .chatMessages
                                 }
-                                onChange={event =>
+                                onChange={(event) =>
                                     handlePatch({
                                         section: 'notifications',
                                         field: 'chatMessages',
@@ -8224,7 +8605,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                     settings.notificationPreferences
                                         .volunteerMatches
                                 }
-                                onChange={event =>
+                                onChange={(event) =>
                                     handlePatch({
                                         section: 'notifications',
                                         field: 'volunteerMatches',
@@ -8242,7 +8623,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                     settings.notificationPreferences
                                         .systemAnnouncements
                                 }
-                                onChange={event =>
+                                onChange={(event) =>
                                     handlePatch({
                                         section: 'notifications',
                                         field: 'systemAnnouncements',
@@ -8254,10 +8635,10 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                         </label>
                     </div>
                 </Panel>
-            :   null}
+            ) : null}
 
             {/* Account section */}
-            {!isLoadingSettings && activeSection === 'account' ?
+            {!isLoadingSettings && activeSection === 'account' ? (
                 <Panel title='Account management'>
                     <div className='space-y-4'>
                         <Card title='Data export'>
@@ -8298,11 +8679,11 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                             </div>
                         </Card>
 
-                        {accountActionResult ?
+                        {accountActionResult ? (
                             <p className='rounded-none border-2 border-mh-border bg-mh-surfaceElev px-3 py-2 text-xs font-bold text-mh-success'>
                                 {accountActionResult}
                             </p>
-                        :   null}
+                        ) : null}
 
                         <Card title='Audit trail'>
                             <p className='text-sm text-mh-textMuted'>
@@ -8316,13 +8697,13 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                     onClick={handleLoadAudit}
                                     disabled={isLoadingAudit}
                                 >
-                                    {isLoadingAudit ?
-                                        'Loading...'
-                                    :   'Load audit trail'}
+                                    {isLoadingAudit
+                                        ? 'Loading...'
+                                        : 'Load audit trail'}
                                 </Button>
                             </div>
 
-                            {auditEntries.length > 0 ?
+                            {auditEntries.length > 0 ? (
                                 <ul className='mt-3 space-y-2'>
                                     {auditEntries.map((entry, index) => (
                                         <li
@@ -8344,14 +8725,14 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                         </li>
                                     ))}
                                 </ul>
-                            :   null}
+                            ) : null}
                         </Card>
                     </div>
                 </Panel>
-            :   null}
+            ) : null}
 
             {/* Save / Cancel bar */}
-            {!isLoadingSettings && activeSection !== 'account' ?
+            {!isLoadingSettings && activeSection !== 'account' ? (
                 <div className='flex flex-wrap items-center gap-3'>
                     <Button onClick={handleSave} disabled={!dirty || isSaving}>
                         {isSaving ? 'Saving...' : 'Save settings'}
@@ -8363,33 +8744,33 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                     >
                         Cancel
                     </Button>
-                    {saveError ?
+                    {saveError ? (
                         <p className='mh-alert text-xs font-bold'>
                             {saveError}
                         </p>
-                    :   null}
-                    {saveSuccess ?
+                    ) : null}
+                    {saveSuccess ? (
                         <p className='text-xs font-bold text-mh-success'>
                             {saveSuccess}
                         </p>
-                    :   null}
+                    ) : null}
                 </div>
-            :   null}
+            ) : null}
         </section>
     );
 };
 
 const maintenanceReasonOptions: readonly {
     code: MaintenanceReasonCode;
-    label: string;
+    labelKey: string;
 }[] = [
-    { code: 'privacy', label: 'Privacy boundary failure' },
-    { code: 'authorization', label: 'Authorization failure' },
-    { code: 'abuse', label: 'Active abuse incident' },
-    { code: 'integrity', label: 'Data integrity uncertainty' },
-    { code: 'moderation-backlog', label: 'Unsafe moderation backlog' },
-    { code: 'monitoring', label: 'Monitoring coverage failure' },
-    { code: 'backup', label: 'Backup or restore failure' },
+    { code: 'privacy', labelKey: 'moderator.privacyReason' },
+    { code: 'authorization', labelKey: 'moderator.authorizationReason' },
+    { code: 'abuse', labelKey: 'moderator.abuseReason' },
+    { code: 'integrity', labelKey: 'moderator.integrityReason' },
+    { code: 'moderation-backlog', labelKey: 'moderator.backlogReason' },
+    { code: 'monitoring', labelKey: 'moderator.monitoringReason' },
+    { code: 'backup', labelKey: 'moderator.backupReason' },
 ];
 
 const ModeratorConsoleRoute = ({
@@ -8397,6 +8778,7 @@ const ModeratorConsoleRoute = ({
 }: {
     onMaintenanceChanged(state: MaintenanceState): void;
 }) => {
+    const { t, fmt } = useLocale();
     const [items, setItems] = useState<ModerationQueueItem[]>([]);
     const [audit, setAudit] = useState<ModerationAuditRecord[]>([]);
     const [maintenance, setMaintenance] = useState<MaintenanceState>();
@@ -8405,12 +8787,12 @@ const ModeratorConsoleRoute = ({
     const [priorityFilter, setPriorityFilter] = useState('');
     const [appealFilter, setAppealFilter] = useState('');
     const [typeFilter, setTypeFilter] = useState('');
-    const [reason, setReason] = useState('Moderator safety review');
+    const [reason, setReason] = useState(t('moderator.defaultReason'));
     const [maintenanceReasons, setMaintenanceReasons] = useState<
         MaintenanceReasonCode[]
     >(['integrity']);
     const [publicMessage, setPublicMessage] = useState(
-        'New submissions are temporarily paused while safety checks run.',
+        t('moderator.defaultPublicMessage'),
     );
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -8418,46 +8800,51 @@ const ModeratorConsoleRoute = ({
     const [accessDenied, setAccessDenied] = useState(false);
     const [notice, setNotice] = useState<string>();
 
-    const load = useCallback(async (signal?: AbortSignal) => {
-        setIsLoading(true);
-        setError(undefined);
-        const [queueResult, maintenanceResult] = await Promise.all([
-            fetchModerationQueueViaApi(signal),
-            fetchModeratorMaintenanceViaApi(signal),
-        ]);
-        if (signal?.aborted) return;
-        const denied =
-            (!queueResult.ok &&
-                (queueResult.code === 'AUTHORIZATION_DENIED' ||
-                    queueResult.code === 'AUTHENTICATION_REQUIRED')) ||
-            (!maintenanceResult.ok &&
-                (maintenanceResult.code === 'AUTHORIZATION_DENIED' ||
-                    maintenanceResult.code === 'AUTHENTICATION_REQUIRED'));
-        if (denied) {
-            setAccessDenied(true);
-            setIsLoading(false);
-            return;
-        }
-        if (!queueResult.ok || !maintenanceResult.ok) {
-            setError(
-                !queueResult.ok ? queueResult.error
-                : !maintenanceResult.ok ? maintenanceResult.error
-                : 'Moderator console is unavailable.',
+    const load = useCallback(
+        async (signal?: AbortSignal) => {
+            setIsLoading(true);
+            setError(undefined);
+            const [queueResult, maintenanceResult] = await Promise.all([
+                fetchModerationQueueViaApi(signal),
+                fetchModeratorMaintenanceViaApi(signal),
+            ]);
+            if (signal?.aborted) return;
+            const denied =
+                (!queueResult.ok &&
+                    (queueResult.code === 'AUTHORIZATION_DENIED' ||
+                        queueResult.code === 'AUTHENTICATION_REQUIRED')) ||
+                (!maintenanceResult.ok &&
+                    (maintenanceResult.code === 'AUTHORIZATION_DENIED' ||
+                        maintenanceResult.code === 'AUTHENTICATION_REQUIRED'));
+            if (denied) {
+                setAccessDenied(true);
+                setIsLoading(false);
+                return;
+            }
+            if (!queueResult.ok || !maintenanceResult.ok) {
+                setError(
+                    !queueResult.ok
+                        ? queueResult.error
+                        : !maintenanceResult.ok
+                          ? maintenanceResult.error
+                          : t('moderator.unavailable'),
+                );
+                setIsLoading(false);
+                return;
+            }
+            setAccessDenied(false);
+            setItems(queueResult.data);
+            setMaintenance(maintenanceResult.data);
+            onMaintenanceChanged(maintenanceResult.data);
+            setSelectedUri((current) =>
+                queueResult.data.some((item) => item.subjectUri === current)
+                    ? current
+                    : (queueResult.data[0]?.subjectUri ?? ''),
             );
             setIsLoading(false);
-            return;
-        }
-        setAccessDenied(false);
-        setItems(queueResult.data);
-        setMaintenance(maintenanceResult.data);
-        onMaintenanceChanged(maintenanceResult.data);
-        setSelectedUri(current =>
-            queueResult.data.some(item => item.subjectUri === current) ?
-                current
-            :   queueResult.data[0]?.subjectUri ?? '',
-        );
-        setIsLoading(false);
-    }, [onMaintenanceChanged]);
+        },
+        [onMaintenanceChanged, t],
+    );
 
     useEffect(() => {
         const controller = new AbortController();
@@ -8465,19 +8852,21 @@ const ModeratorConsoleRoute = ({
         return () => controller.abort();
     }, [load]);
 
-    const selected = items.find(item => item.subjectUri === selectedUri);
-    const filteredItems = items.filter(item =>
-        (!statusFilter || item.queueStatus === statusFilter) &&
-        (!priorityFilter || (item.priority ?? 'normal') === priorityFilter) &&
-        (!appealFilter || item.appealState === appealFilter) &&
-        (!typeFilter || item.subjectType === typeFilter),
+    const selected = items.find((item) => item.subjectUri === selectedUri);
+    const filteredItems = items.filter(
+        (item) =>
+            (!statusFilter || item.queueStatus === statusFilter) &&
+            (!priorityFilter ||
+                (item.priority ?? 'normal') === priorityFilter) &&
+            (!appealFilter || item.appealState === appealFilter) &&
+            (!typeFilter || item.subjectType === typeFilter),
     );
 
     const loadAudit = async (subjectUri: string) => {
         setSelectedUri(subjectUri);
         const result = await fetchModerationAuditViaApi(subjectUri);
         if (!result.ok) {
-            setError(result.error);
+            setError(t('common.requestFailed'));
             return;
         }
         setAudit(result.data);
@@ -8494,21 +8883,23 @@ const ModeratorConsoleRoute = ({
         });
         setIsSaving(false);
         if (!result.ok) {
-            setError(result.error);
+            setError(t('common.requestFailed'));
             return;
         }
-        setItems(current =>
-            current.map(item =>
+        setItems((current) =>
+            current.map((item) =>
                 item.subjectUri === result.data.subjectUri ? result.data : item,
             ),
         );
-        setNotice(`Action recorded: ${action}.`);
+        setNotice(t('moderator.actionRecorded', {
+            action: formatLocalizedLabel(t, action),
+        }));
         await loadAudit(result.data.subjectUri);
     };
 
     const declareMaintenance = async () => {
         if (maintenanceReasons.length === 0) {
-            setError('Select at least one declared shutdown reason.');
+            setError(t('moderator.chooseReason'));
             return;
         }
         setIsSaving(true);
@@ -8518,12 +8909,12 @@ const ModeratorConsoleRoute = ({
         });
         setIsSaving(false);
         if (!result.ok) {
-            setError(result.error);
+            setError(t('common.requestFailed'));
             return;
         }
         setMaintenance(result.data);
         onMaintenanceChanged(result.data);
-        setNotice('New submissions and exact-location exchange are shut down.');
+        setNotice(t('moderator.shutdownRecorded'));
     };
 
     const resume = async () => {
@@ -8531,96 +8922,109 @@ const ModeratorConsoleRoute = ({
         const result = await resumeMaintenanceViaApi();
         setIsSaving(false);
         if (!result.ok) {
-            setError(result.error);
+            setError(t('common.requestFailed'));
             return;
         }
         setMaintenance(result.data);
         onMaintenanceChanged(result.data);
-        setNotice('Audited moderator resume completed.');
+        setNotice(t('moderator.resumeRecorded'));
     };
 
     if (accessDenied) {
         return (
-            <Panel title='Moderator access required'>
-                <p role='alert'>
-                    This console requires the durable content-moderation capability.
-                </p>
+            <Panel title={t('moderator.accessRequired')}>
+                <p role='alert'>{t('moderator.accessHelp')}</p>
             </Panel>
         );
     }
 
     return (
         <div className='space-y-5'>
-            <Panel title='Moderator safety console'>
+            <Panel title={t('moderator.title')}>
                 <p className='text-sm text-mh-textMuted'>
-                    Review only evidence-safe previews. Exact addresses, private
-                    attachments, contact details, and raw sensitive submissions
-                    are intentionally excluded from this queue.
+                    {t('moderator.description')}
                 </p>
                 <p className='mt-2 text-sm font-bold'>
-                    We aim to review reports within two business days, but this is
-                    a best-effort target and not a guaranteed service level.
+                    {t('moderator.reviewTarget')}
                 </p>
                 <p className='mt-2 text-sm text-mh-textMuted'>
-                    Urgent safety flags notify configured moderator channels.
-                    Patchwork remains operationally NO-GO for emergency response,
-                    guaranteed fulfillment, or handling emergency dispatch.
+                    {t('moderator.noGo')}
                 </p>
                 <div className='mt-3 flex flex-wrap gap-3 text-sm'>
                     <a className='font-bold underline' href='/verification'>
-                        Verification and appeal controls
+                        {t('moderator.verificationControls')}
                     </a>
                     <a className='font-bold underline' href='/verification'>
-                        Exact-address and private-attachment controls
+                        {t('moderator.privateControls')}
                     </a>
                 </div>
             </Panel>
 
-            {error ?
-                <p role='alert' className='border-2 border-mh-danger p-3 font-bold'>
+            {error ? (
+                <p
+                    role='alert'
+                    className='border-2 border-mh-danger p-3 font-bold'
+                >
                     {error}
                 </p>
-            : null}
-            {notice ?
-                <p role='status' className='border-2 border-mh-border p-3 font-bold'>
+            ) : null}
+            {notice ? (
+                <p
+                    role='status'
+                    className='border-2 border-mh-border p-3 font-bold'
+                >
                     {notice}
                 </p>
-            : null}
+            ) : null}
 
-            <Panel title='New-submission shutdown'>
+            <Panel title={t('moderator.shutdown')}>
                 <p className='text-sm text-mh-textMuted'>
-                    An active declaration blocks all new submissions and exact
-                    location exchange while public reads and status stay available.
-                    Resume is capability-gated and written to the audit log.
+                    {t('moderator.shutdownHelp')}
                 </p>
                 <p className='mt-2 font-bold'>
-                    Current state: {maintenance?.active ? 'READ-ONLY' : 'Operating'}
-                    {maintenance?.environmentOverride ? ' (environment override)' : ''}
+                    {t('moderator.currentState', {
+                        state: maintenance?.active
+                            ? t('moderator.readOnly')
+                            : t('moderator.operating'),
+                    })}
+                    {maintenance?.environmentOverride
+                        ? ` (${t('moderator.environmentOverride')})`
+                        : ''}
                 </p>
                 <div className='mt-3 grid gap-2 sm:grid-cols-2'>
-                    {maintenanceReasonOptions.map(option => (
-                        <label key={option.code} className='flex items-center gap-2 text-sm'>
+                    {maintenanceReasonOptions.map((option) => (
+                        <label
+                            key={option.code}
+                            className='flex items-center gap-2 text-sm'
+                        >
                             <input
                                 type='checkbox'
-                                checked={maintenanceReasons.includes(option.code)}
-                                onChange={event =>
-                                    setMaintenanceReasons(current =>
-                                        event.target.checked ?
-                                            [...current, option.code]
-                                        :   current.filter(code => code !== option.code),
+                                checked={maintenanceReasons.includes(
+                                    option.code,
+                                )}
+                                onChange={(event) =>
+                                    setMaintenanceReasons((current) =>
+                                        event.target.checked
+                                            ? [...current, option.code]
+                                            : current.filter(
+                                                  (code) =>
+                                                      code !== option.code,
+                                              ),
                                     )
                                 }
                             />
-                            {option.label}
+                            {t(option.labelKey)}
                         </label>
                     ))}
                 </div>
                 <label className='mt-3 block text-sm font-bold'>
-                    Public status message
+                    {t('moderator.publicMessage')}
                     <Input
                         value={publicMessage}
                         maxLength={300}
-                        onChange={event => setPublicMessage(event.target.value)}
+                        onChange={(event) =>
+                            setPublicMessage(event.target.value)
+                        }
                     />
                 </label>
                 <div className='mt-3 flex flex-wrap gap-2'>
@@ -8629,7 +9033,7 @@ const ModeratorConsoleRoute = ({
                         disabled={isSaving || maintenance?.active}
                         onClick={() => void declareMaintenance()}
                     >
-                        Shut down new submissions
+                        {t('moderator.shutDown')}
                     </Button>
                     <Button
                         variant='secondary'
@@ -8640,63 +9044,86 @@ const ModeratorConsoleRoute = ({
                         }
                         onClick={() => void resume()}
                     >
-                        Resume after verification
+                        {t('moderator.resume')}
                     </Button>
                 </div>
             </Panel>
 
-            <Panel title='Safety review queue'>
+            <Panel title={t('moderator.queue')}>
                 <div className='grid gap-2 sm:grid-cols-4'>
                     <select
-                        aria-label='Filter by status'
+                        aria-label={t('moderator.filterStatus')}
                         value={statusFilter}
-                        onChange={event => setStatusFilter(event.target.value)}
+                        onChange={(event) =>
+                            setStatusFilter(event.target.value)
+                        }
                     >
-                        <option value=''>All statuses</option>
-                        <option value='queued'>Queued</option>
-                        <option value='processing'>Processing</option>
-                        <option value='resolved'>Resolved</option>
+                        <option value=''>{t('moderator.allStatuses')}</option>
+                        <option value='queued'>{t('moderator.queued')}</option>
+                        <option value='processing'>
+                            {t('moderator.processing')}
+                        </option>
+                        <option value='resolved'>
+                            {t('moderator.resolved')}
+                        </option>
                     </select>
                     <select
-                        aria-label='Filter by priority'
+                        aria-label={t('moderator.filterPriority')}
                         value={priorityFilter}
-                        onChange={event => setPriorityFilter(event.target.value)}
+                        onChange={(event) =>
+                            setPriorityFilter(event.target.value)
+                        }
                     >
-                        <option value=''>All priorities</option>
-                        <option value='urgent'>Urgent</option>
-                        <option value='high'>High</option>
-                        <option value='normal'>Normal</option>
-                        <option value='low'>Low</option>
+                        <option value=''>{t('moderator.allPriorities')}</option>
+                        <option value='urgent'>{t('moderator.urgent')}</option>
+                        <option value='high'>{t('moderator.high')}</option>
+                        <option value='normal'>{t('moderator.normal')}</option>
+                        <option value='low'>{t('moderator.low')}</option>
                     </select>
                     <select
-                        aria-label='Filter by appeal'
+                        aria-label={t('moderator.filterAppeal')}
                         value={appealFilter}
-                        onChange={event => setAppealFilter(event.target.value)}
+                        onChange={(event) =>
+                            setAppealFilter(event.target.value)
+                        }
                     >
-                        <option value=''>All appeal states</option>
-                        <option value='none'>No appeal</option>
-                        <option value='pending'>Pending</option>
-                        <option value='under-review'>Under review</option>
-                        <option value='upheld'>Upheld</option>
-                        <option value='rejected'>Rejected</option>
+                        <option value=''>{t('moderator.allAppeals')}</option>
+                        <option value='none'>{t('moderator.noAppeal')}</option>
+                        <option value='pending'>
+                            {t('moderator.pending')}
+                        </option>
+                        <option value='under-review'>
+                            {t('moderator.underReview')}
+                        </option>
+                        <option value='upheld'>{t('moderator.upheld')}</option>
+                        <option value='rejected'>
+                            {t('moderator.rejected')}
+                        </option>
                     </select>
                     <select
-                        aria-label='Filter by content type'
+                        aria-label={t('moderator.filterType')}
                         value={typeFilter}
-                        onChange={event => setTypeFilter(event.target.value)}
+                        onChange={(event) => setTypeFilter(event.target.value)}
                     >
-                        <option value=''>All content types</option>
-                        <option value='aid-post'>Aid post</option>
-                        <option value='directory-resource'>Directory resource</option>
-                        <option value='other'>Other</option>
+                        <option value=''>{t('moderator.allTypes')}</option>
+                        <option value='aid-post'>
+                            {t('moderator.aidPost')}
+                        </option>
+                        <option value='directory-resource'>
+                            {t('moderator.directoryResource')}
+                        </option>
+                        <option value='other'>{t('moderator.other')}</option>
                     </select>
                 </div>
-                {isLoading ?
-                    <p className='mt-4' role='status'>Loading moderator state…</p>
-                : filteredItems.length === 0 ?
-                    <p className='mt-4'>No queue items match these filters.</p>
-                :   <div className='mt-4 grid gap-3 lg:grid-cols-2'>
-                        {filteredItems.map(item => (
+                {isLoading ? (
+                    <p className='mt-4' role='status'>
+                        {t('moderator.loading')}
+                    </p>
+                ) : filteredItems.length === 0 ? (
+                    <p className='mt-4'>{t('moderator.empty')}</p>
+                ) : (
+                    <div className='mt-4 grid gap-3 lg:grid-cols-2'>
+                        {filteredItems.map((item) => (
                             <button
                                 type='button'
                                 key={item.subjectUri}
@@ -8705,15 +9132,19 @@ const ModeratorConsoleRoute = ({
                                 aria-pressed={selectedUri === item.subjectUri}
                             >
                                 <span className='font-bold'>
-                                    {item.safePreview?.['label'] ?? 'Submitted content'}
+                                    {item.safePreview?.['label'] ??
+                                        t('moderator.submitted')}
                                 </span>
                                 <span className='mt-1 block text-xs uppercase'>
-                                    {item.priority ?? 'normal'} · {item.subjectType} ·
-                                    {' '}{item.queueStatus} ·{' '}
-                                    {item.recordOrigin ?? 'visitor-created'}
+                                    {item.priority ?? 'normal'} ·{' '}
+                                    {item.subjectType} · {item.queueStatus} ·{' '}
+                                    {item.recordOrigin ??
+                                        t('moderator.visitorCreated')}
                                 </span>
                                 <span className='mt-2 block text-sm'>
-                                    {(item.reasonCodes ?? [item.latestReason]).join(', ')}
+                                    {(
+                                        item.reasonCodes ?? [item.latestReason]
+                                    ).join(', ')}
                                 </span>
                                 <span className='mt-2 block break-all text-xs text-mh-textMuted'>
                                     {item.subjectUri}
@@ -8721,114 +9152,147 @@ const ModeratorConsoleRoute = ({
                             </button>
                         ))}
                     </div>
-                }
+                )}
             </Panel>
 
-            {selected ?
-                <Panel title='Selected case actions'>
+            {selected ? (
+                <Panel title={t('moderator.caseActions')}>
                     <dl className='grid gap-2 text-sm sm:grid-cols-2'>
-                        {Object.entries(selected.safePreview ?? {}).map(([key, value]) => (
-                            <div key={key}>
-                                <dt className='font-bold'>{key}</dt>
-                                <dd>{value}</dd>
-                            </div>
-                        ))}
+                        {Object.entries(selected.safePreview ?? {}).map(
+                            ([key, value]) => (
+                                <div key={key}>
+                                    <dt className='font-bold'>{key}</dt>
+                                    <dd>{value}</dd>
+                                </div>
+                            ),
+                        )}
                     </dl>
                     <label className='mt-3 block text-sm font-bold'>
-                        Required audit reason
+                        {t('moderator.auditReason')}
                         <Input
                             value={reason}
-                            onChange={event => setReason(event.target.value)}
+                            onChange={(event) => setReason(event.target.value)}
                         />
                     </label>
                     <div className='mt-3 flex flex-wrap gap-2'>
-                        {selected.visibility !== 'suspended' ?
+                        {selected.visibility !== 'suspended' ? (
                             <Button
                                 variant='neutral'
                                 disabled={isSaving}
-                                onClick={() => void applyAction('suspend-visibility')}
+                                onClick={() =>
+                                    void applyAction('suspend-visibility')
+                                }
                             >
-                                Quarantine now
+                                {t('moderator.quarantine')}
                             </Button>
-                        : null}
-                        {selected.visibility !== 'delisted' ?
+                        ) : null}
+                        {selected.visibility !== 'delisted' ? (
                             <Button
                                 variant='neutral'
                                 disabled={isSaving}
                                 onClick={() => void applyAction('delist')}
                             >
-                                Delist
+                                {t('moderator.delist')}
                             </Button>
-                        : null}
-                        {selected.visibility !== 'visible' ?
+                        ) : null}
+                        {selected.visibility !== 'visible' ? (
                             <Button
                                 variant='secondary'
                                 disabled={isSaving}
-                                onClick={() => void applyAction('restore-visibility')}
+                                onClick={() =>
+                                    void applyAction('restore-visibility')
+                                }
                             >
-                                Restore visibility
+                                {t('moderator.restore')}
                             </Button>
-                        : null}
-                        {selected.appealState === 'none' ?
+                        ) : null}
+                        {selected.appealState === 'none' ? (
                             <Button
                                 variant='secondary'
                                 disabled={isSaving}
                                 onClick={() => void applyAction('open-appeal')}
                             >
-                                Open appeal
+                                {t('moderator.openAppeal')}
                             </Button>
-                        : selected.appealState === 'pending' ?
+                        ) : selected.appealState === 'pending' ? (
                             <Button
                                 variant='secondary'
                                 disabled={isSaving}
-                                onClick={() => void applyAction('start-appeal-review')}
+                                onClick={() =>
+                                    void applyAction('start-appeal-review')
+                                }
                             >
-                                Start appeal review
+                                {t('moderator.startAppeal')}
                             </Button>
-                        : selected.appealState === 'under-review' ?
+                        ) : selected.appealState === 'under-review' ? (
                             <>
                                 <Button
                                     variant='secondary'
                                     disabled={isSaving}
-                                    onClick={() => void applyAction('resolve-appeal-upheld')}
+                                    onClick={() =>
+                                        void applyAction(
+                                            'resolve-appeal-upheld',
+                                        )
+                                    }
                                 >
-                                    Uphold appeal
+                                    {t('moderator.upholdAppeal')}
                                 </Button>
                                 <Button
                                     variant='neutral'
                                     disabled={isSaving}
-                                    onClick={() => void applyAction('resolve-appeal-rejected')}
+                                    onClick={() =>
+                                        void applyAction(
+                                            'resolve-appeal-rejected',
+                                        )
+                                    }
                                 >
-                                    Reject appeal
+                                    {t('moderator.rejectAppeal')}
                                 </Button>
                             </>
-                        : null}
+                        ) : null}
                     </div>
-                    <h3 className='mt-5 font-bold'>Durable audit trail</h3>
-                    {audit.length === 0 ?
+                    <h3 className='mt-5 font-bold'>
+                        {t('moderator.auditTrail')}
+                    </h3>
+                    {audit.length === 0 ? (
                         <p className='text-sm text-mh-textMuted'>
-                            Select this case to load its audit trail.
+                            {t('moderator.selectAudit')}
                         </p>
-                    :   <ol className='mt-2 space-y-2'>
-                            {audit.map(entry => (
-                                <li key={entry.actionId} className='border-l-4 border-mh-border pl-3 text-sm'>
-                                    <strong>{entry.action}</strong> by {entry.actorDid}
-                                    <span className='block'>{entry.reason}</span>
+                    ) : (
+                        <ol className='mt-2 space-y-2'>
+                            {audit.map((entry) => (
+                                <li
+                                    key={entry.actionId}
+                                    className='border-l-4 border-mh-border pl-3 text-sm'
+                                >
+                                    <strong>
+                                        {t('moderator.auditBy', {
+                                            action: formatLocalizedLabel(
+                                                t,
+                                                entry.action,
+                                            ),
+                                            actor: entry.actorDid,
+                                        })}
+                                    </strong>
+                                    <span className='block'>
+                                        {entry.reason}
+                                    </span>
                                     <time dateTime={entry.occurredAt}>
-                                        {new Date(entry.occurredAt).toLocaleString()}
+                                        {fmt.longDate(entry.occurredAt)}
                                     </time>
                                 </li>
                             ))}
                         </ol>
-                    }
+                    )}
                 </Panel>
-            : null}
+            ) : null}
         </div>
     );
 };
 
 export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const auth = useAuth();
+    const { locale, changeLocale, t } = useLocale();
     const mainContentRef = useRef<HTMLDivElement>(null);
     const [currentRoute, setCurrentRoute] = useState<AppRoute>(() =>
         readCurrentRoute(),
@@ -8867,9 +9331,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const [hasChatPermission, setHasChatPermission] = useState(true);
     const [forceChatFallback, setForceChatFallback] = useState(false);
     const [chatRequestPreview, setChatRequestPreview] = useState<string>();
-    const [consentRequired, setConsentRequired] = useState<
-        boolean | undefined
-    >(webDataMode === 'fixture' ? false : undefined);
+    const [consentRequired, setConsentRequired] = useState<boolean | undefined>(
+        webDataMode === 'fixture' ? false : undefined,
+    );
     const [onboardingError, setOnboardingError] = useState<string>();
     const [maintenanceStatus, setMaintenanceStatus] =
         useState<MaintenanceState>();
@@ -8880,13 +9344,26 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const currentUserDid = auth.session?.did ?? '';
 
     useEffect(() => {
-        if (webDataMode === 'fixture') return;
+        if (!auth.session || webDataMode === 'fixture') return;
         const controller = new AbortController();
-        void fetchPublicMaintenanceStatusViaApi(controller.signal).then(result => {
+        void fetchAccountPreferencesViaApi(controller.signal).then((result) => {
             if (!controller.signal.aborted && result.ok) {
-                setMaintenanceStatus(result.data);
+                changeLocale(result.data.language);
             }
         });
+        return () => controller.abort();
+    }, [auth.session, changeLocale]);
+
+    useEffect(() => {
+        if (webDataMode === 'fixture') return;
+        const controller = new AbortController();
+        void fetchPublicMaintenanceStatusViaApi(controller.signal).then(
+            (result) => {
+                if (!controller.signal.aborted && result.ok) {
+                    setMaintenanceStatus(result.data);
+                }
+            },
+        );
         return () => controller.abort();
     }, []);
 
@@ -8910,7 +9387,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         const controller = new AbortController();
         setConsentRequired(undefined);
         setOnboardingError(undefined);
-        void fetchAccountOnboardingViaApi(controller.signal).then(result => {
+        void fetchAccountOnboardingViaApi(controller.signal).then((result) => {
             if (controller.signal.aborted) return;
             if (!result.ok) {
                 setOnboardingError(result.error);
@@ -8992,14 +9469,14 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             currentRoute === '/map' ? 'map' : 'feed',
             controller.signal,
         )
-            .then(async result => {
+            .then(async (result) => {
                 if (controller.signal.aborted) {
                     return;
                 }
 
                 if (result.ok) {
                     const records = await Promise.all(
-                        result.data.map(async record => {
+                        result.data.map(async (record) => {
                             if (
                                 !currentUserDid ||
                                 record.recipientDid !== currentUserDid
@@ -9010,43 +9487,41 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                 record.aidPostUri,
                                 controller.signal,
                             );
-                            const lifecycleStatus =
-                                lifecycle.ok ?
-                                    lifecycleStatusFromValue(
-                                        lifecycle.data.currentStatus,
-                                    )
-                                : lifecycle.code === 'NOT_FOUND' ?
-                                    lifecycleStatusFromValue(record.card.status)
-                                :   undefined;
-                            const validTransitions =
-                                lifecycle.ok ?
-                                    lifecycle.data.validTransitions.flatMap(
-                                        value => {
-                                            const status =
-                                                lifecycleStatusFromValue(value);
-                                            return status ? [status] : [];
-                                        },
-                                    )
-                                : lifecycle.code === 'NOT_FOUND' ?
-                                    ([
+                            const lifecycleStatus = lifecycle.ok
+                                ? lifecycleStatusFromValue(
+                                      lifecycle.data.currentStatus,
+                                  )
+                                : lifecycle.code === 'NOT_FOUND'
+                                  ? lifecycleStatusFromValue(record.card.status)
+                                  : undefined;
+                            const validTransitions = lifecycle.ok
+                                ? lifecycle.data.validTransitions.flatMap(
+                                      (value) => {
+                                          const status =
+                                              lifecycleStatusFromValue(value);
+                                          return status ? [status] : [];
+                                      },
+                                  )
+                                : lifecycle.code === 'NOT_FOUND'
+                                  ? ([
                                         'open',
                                         'resolved',
                                     ] satisfies LifecycleStatus[])
-                                :   undefined;
-                            return lifecycleStatus ?
-                                    {
-                                        ...record,
-                                        card: {
-                                            ...record.card,
-                                            lifecycleStatus,
-                                            ...(validTransitions ?
-                                                { validTransitions }
-                                            :   {}),
-                                            ...(lifecycle.ok ?
-                                                {
+                                  : undefined;
+                            return lifecycleStatus
+                                ? {
+                                      ...record,
+                                      card: {
+                                          ...record.card,
+                                          lifecycleStatus,
+                                          ...(validTransitions
+                                              ? { validTransitions }
+                                              : {}),
+                                          ...(lifecycle.ok
+                                              ? {
                                                     timeline:
                                                         lifecycle.data.timeline.flatMap(
-                                                            entry => {
+                                                            (entry) => {
                                                                 const from =
                                                                     lifecycleStatusFromValue(
                                                                         entry.from,
@@ -9055,25 +9530,23 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                                                     lifecycleStatusFromValue(
                                                                         entry.to,
                                                                     );
-                                                                return (
-                                                                        from &&
-                                                                            to
-                                                                    ) ?
-                                                                        [
-                                                                            {
-                                                                                ...entry,
-                                                                                from,
-                                                                                to,
-                                                                            } satisfies FeedStatusTransition,
-                                                                        ]
-                                                                    :   [];
+                                                                return from &&
+                                                                    to
+                                                                    ? [
+                                                                          {
+                                                                              ...entry,
+                                                                              from,
+                                                                              to,
+                                                                          } satisfies FeedStatusTransition,
+                                                                      ]
+                                                                    : [];
                                                             },
                                                         ),
                                                 }
-                                            :   {}),
-                                        },
-                                    }
-                                :   record;
+                                              : {}),
+                                      },
+                                  }
+                                : record;
                         }),
                     );
                     if (controller.signal.aborted) return;
@@ -9083,9 +9556,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 }
 
                 setAidDataOrigin('unavailable');
-                setAidErrorMessage(
-                    `${result.kind} ${result.code}: ${result.error}`,
-                );
+                setAidErrorMessage(t('common.requestFailed'));
             })
             .finally(() => {
                 if (!controller.signal.aborted) {
@@ -9096,7 +9567,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         return () => {
             controller.abort();
         };
-    }, [aidReload, currentRoute, currentUserDid, discoveryState]);
+    }, [aidReload, currentRoute, currentUserDid, discoveryState, t]);
 
     useEffect(() => {
         if (currentRoute !== '/resources' && currentRoute !== '/map') {
@@ -9109,7 +9580,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         setDirectoryErrorMessage(undefined);
 
         void fetchDirectoryCardsFromApi(discoveryState, controller.signal)
-            .then(result => {
+            .then((result) => {
                 if (controller.signal.aborted) {
                     return;
                 }
@@ -9121,9 +9592,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 }
 
                 setDirectoryDataOrigin('unavailable');
-                setDirectoryErrorMessage(
-                    `${result.kind} ${result.code}: ${result.error}`,
-                );
+                setDirectoryErrorMessage(t('common.requestFailed'));
             })
             .finally(() => {
                 if (!controller.signal.aborted) {
@@ -9134,7 +9603,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         return () => {
             controller.abort();
         };
-    }, [currentRoute, directoryReload, discoveryState]);
+    }, [currentRoute, directoryReload, discoveryState, t]);
 
     const navigate = (route: AppRoute) => {
         if (typeof window !== 'undefined') {
@@ -9147,7 +9616,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         }
 
         setCurrentRoute(route);
-        ariaLive.routeChange(routeLabels[route]);
+        ariaLive.routeChange(t(routeLabelKeys[route]));
     };
 
     const handleRouteClick = (
@@ -9159,11 +9628,13 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     };
 
     const patchDiscoveryState = (patch: Partial<DiscoveryFilterState>) => {
-        setDiscoveryState(current => applyDiscoveryFilterPatch(current, patch));
+        setDiscoveryState((current) =>
+            applyDiscoveryFilterPatch(current, patch),
+        );
     };
 
     const pushDiscoveryState = (patch: Partial<DiscoveryFilterState>) => {
-        setDiscoveryState(current => {
+        setDiscoveryState((current) => {
             const next = applyDiscoveryFilterPatch(current, patch);
             if (typeof window !== 'undefined') {
                 const nextUrl = `${currentRoute}${serializeDiscoveryFilterState(next)}`;
@@ -9177,14 +9648,14 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     };
 
     const applyLifecycleAction = (action: FeedLifecycleAction) => {
-        setFeedRecords(current => {
-            const currentCards = current.map(record => record.card);
+        setFeedRecords((current) => {
+            const currentCards = current.map((record) => record.card);
             const nextCards = applyFeedLifecycleAction(currentCards, action);
             const currentById = new Map(
-                current.map(record => [record.card.id, record]),
+                current.map((record) => [record.card.id, record]),
             );
 
-            return nextCards.map(card => {
+            return nextCards.map((card) => {
                 const existing = currentById.get(card.id);
                 if (existing) {
                     return {
@@ -9225,7 +9696,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         const request = buildChatInitiationRequest(chatIntent, currentUserDid);
         setChatRequestPreview(JSON.stringify(request, null, 2));
 
-        setChatState(current =>
+        setChatState((current) =>
             reduceChatLaunchState(current, {
                 type: 'submit',
                 intent: chatIntent,
@@ -9243,7 +9714,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         });
 
         if (!apiResult.ok) {
-            setChatState(current =>
+            setChatState((current) =>
                 reduceChatLaunchState(current, {
                     type: 'failure',
                     intent: chatIntent,
@@ -9256,7 +9727,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         const fallbackNotice = apiResult.data.fallbackNotice;
         const fallbackTransport = fallbackNotice?.transportPath;
 
-        setChatState(current =>
+        setChatState((current) =>
             reduceChatLaunchState(current, {
                 type: 'success',
                 intent: chatIntent,
@@ -9265,17 +9736,15 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                     created: apiResult.data.created,
                     transportPath: apiResult.data.transportPath,
                     fallbackNotice:
-                        (
-                            fallbackTransport &&
-                            fallbackTransport !== 'atproto-direct'
-                        ) ?
-                            {
-                                code: 'RECIPIENT_CAPABILITY_MISSING',
-                                message: fallbackNotice.message,
-                                safeForUser: true,
-                                transportPath: fallbackTransport,
-                            }
-                        :   undefined,
+                        fallbackTransport &&
+                        fallbackTransport !== 'atproto-direct'
+                            ? {
+                                  code: 'RECIPIENT_CAPABILITY_MISSING',
+                                  message: fallbackNotice.message,
+                                  safeForUser: true,
+                                  transportPath: fallbackTransport,
+                              }
+                            : undefined,
                 },
             }),
         );
@@ -9295,7 +9764,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             uri: failure.postUri,
             expectedCid: failure.expectedCid,
             updatedAt: failure.updatedAt,
-        }).then(result => {
+        }).then((result) => {
             setPublicSyncRetrying(false);
             if (!result.ok) {
                 setPublicSyncFailure({
@@ -9304,7 +9773,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 });
                 return;
             }
-            setFeedRecords(current =>
+            setFeedRecords((current) =>
                 replaceRecordFromAtResult(current, result.data),
             );
             setPublicSyncFailure(undefined);
@@ -9318,245 +9787,231 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         currentRoute === '/scheduling' ||
         currentRoute === '/notifications' ||
         currentRoute === '/moderation' ||
+        currentRoute === '/groups' ||
         currentRoute === '/settings';
     const isDeferredFixtureRoute =
         webDataMode !== 'fixture' && deferredFixtureRoutes.has(currentRoute);
     const visibleAccountRoutes =
         webDataMode === 'fixture' ? accountRoutes : productionAccountRoutes;
     const visibleSecondaryRoutes =
-        webDataMode === 'fixture' ?
-            secondaryRoutes
-        :   ([...productionSecondaryRoutes, '/volunteer', '/chat'] as const)
-                .filter(route => route !== '/scheduling' || Boolean(auth.session));
+        webDataMode === 'fixture'
+            ? secondaryRoutes
+            : (
+                  [...productionSecondaryRoutes, '/volunteer', '/chat'] as const
+              ).filter(
+                  (route) => route !== '/scheduling' || Boolean(auth.session),
+              );
 
-    const content =
-        isDeferredFixtureRoute ?
-            currentRoute === '/chat' ?
-                <Panel title='Chat is not available'>
-                    <p>{CHAT_PLACEHOLDER_CONTRACT.message}</p>
-                    <p className='mt-2 text-sm text-mh-textMuted'>
-                        This placeholder has no history, initiation, or message
-                        mutation runtime.
-                    </p>
-                </Panel>
-            :   <Panel title='Deferred from the alpha'>
-                    <p>
-                        This prototype surface is available only in the explicit
-                        local fixture demo and is not part of the production alpha.
-                    </p>
-                </Panel>
-        : requiresAuthentication && !auth.session ?
-            <Panel title='Sign in required'>
-                <p>This action uses your authenticated AT Protocol identity.</p>
-                <a
-                    className='mt-3 inline-block font-bold underline'
-                    href={`/login?returnTo=${encodeURIComponent(currentRoute)}`}
-                >
-                    Sign in to continue
-                </a>
-            </Panel>
-        : auth.session &&
-          webDataMode !== 'fixture' &&
-          onboardingError ?
-            <Panel title='Onboarding unavailable'>
-                <p role='alert'>
-                    Protected actions remain disabled because current policy
-                    consent could not be checked: {onboardingError}
-                </p>
-            </Panel>
-        : auth.session &&
-          webDataMode !== 'fixture' &&
-          consentRequired === undefined ?
-            <Panel title='Checking account policies'>
-                <p role='status'>Loading your current consent status…</p>
-            </Panel>
-        : auth.session &&
-          webDataMode !== 'fixture' &&
-          consentRequired ?
-            <PolicyConsentGate
-                onAccepted={() => {
-                    setConsentRequired(false);
-                    setOnboardingError(undefined);
-                }}
-            />
-        : maintenanceStatus?.active && currentRoute === '/posting' ?
-            <Panel title='New submissions are temporarily paused'>
-                <p role='alert'>{maintenanceStatus.publicMessage}</p>
-                <p className='mt-2 text-sm text-mh-textMuted'>
-                    Existing public information remains readable. Exact-location
-                    exchange and all other new-submission APIs are also disabled
-                    until an audited moderator resume.
-                </p>
-            </Panel>
-        : currentRoute === '/map' ?
-            <MapRoute
-                discoveryState={discoveryState}
-                onPatchDiscovery={patchDiscoveryState}
-                onPushDiscovery={pushDiscoveryState}
-                feedRecords={feedRecords}
-                resourceCards={resourceCards}
-                resourceErrorMessage={directoryErrorMessage}
-                isLoading={isAidLoading}
-                errorMessage={aidErrorMessage}
-                dataOrigin={aidDataOrigin}
-                onRetry={() => setAidReload(value => value + 1)}
-                onRetryResources={() =>
-                    setDirectoryReload(value => value + 1)
-                }
-                selectedPostId={selectedMapPostId}
-                onSelectPost={setSelectedMapPostId}
-                onOpenChat={openChatFromRecord}
-                onTriageAction={(postId, action) => {
-                    const nextStatus: AidStatus =
-                        action === 'mark_in_progress' ? 'in-progress'
-                        : action === 'mark_resolved' ? 'resolved'
-                        : 'open';
+    const content = isDeferredFixtureRoute ? (
+        <Panel title={t('runtime.deferred')}>
+            <p>{t('runtime.deferredHelp')}</p>
+        </Panel>
+    ) : requiresAuthentication && !auth.session ? (
+        <Panel title={t('runtime.signInRequired')}>
+            <p>{t('runtime.signInHelp')}</p>
+            <a
+                className='mt-3 inline-block font-bold underline'
+                href={`/login?returnTo=${encodeURIComponent(currentRoute)}`}
+            >
+                {t('runtime.signInContinue')}
+            </a>
+        </Panel>
+    ) : auth.session && webDataMode !== 'fixture' && onboardingError ? (
+        <Panel title={t('runtime.onboardingUnavailable')}>
+            <p role='alert'>
+                {t('runtime.onboardingError', { error: onboardingError })}
+            </p>
+        </Panel>
+    ) : auth.session &&
+      webDataMode !== 'fixture' &&
+      consentRequired === undefined ? (
+        <Panel title={t('runtime.checkingPolicies')}>
+            <p role='status'>{t('runtime.loadingConsent')}</p>
+        </Panel>
+    ) : auth.session && webDataMode !== 'fixture' && consentRequired ? (
+        <PolicyConsentGate
+            onAccepted={() => {
+                setConsentRequired(false);
+                setOnboardingError(undefined);
+            }}
+        />
+    ) : maintenanceStatus?.active && currentRoute === '/posting' ? (
+        <Panel title={t('runtime.paused')}>
+            <p role='alert'>{maintenanceStatus.publicMessage}</p>
+            <p className='mt-2 text-sm text-mh-textMuted'>
+                {t('runtime.pausedHelp')}
+            </p>
+        </Panel>
+    ) : currentRoute === '/map' ? (
+        <MapRoute
+            discoveryState={discoveryState}
+            onPatchDiscovery={patchDiscoveryState}
+            onPushDiscovery={pushDiscoveryState}
+            feedRecords={feedRecords}
+            resourceCards={resourceCards}
+            resourceErrorMessage={directoryErrorMessage}
+            isLoading={isAidLoading}
+            errorMessage={aidErrorMessage}
+            dataOrigin={aidDataOrigin}
+            onRetry={() => setAidReload((value) => value + 1)}
+            onRetryResources={() => setDirectoryReload((value) => value + 1)}
+            selectedPostId={selectedMapPostId}
+            onSelectPost={setSelectedMapPostId}
+            onOpenChat={openChatFromRecord}
+            onTriageAction={(postId, action) => {
+                const nextStatus: AidStatus =
+                    action === 'mark_in_progress'
+                        ? 'in-progress'
+                        : action === 'mark_resolved'
+                          ? 'resolved'
+                          : 'open';
 
-                    if (action !== 'contact_helper') {
-                        applyLifecycleAction({
-                            action: 'edit',
-                            id: postId,
-                            patch: {
-                                status: nextStatus,
-                                updatedAt: nowIso(),
-                            },
-                        });
-                    }
-                }}
-            />
-        : currentRoute === '/feed' ?
-            <FeedRoute
-                discoveryState={discoveryState}
-                onPatchDiscovery={patchDiscoveryState}
-                feedRecords={feedRecords}
-                isLoading={isAidLoading}
-                errorMessage={aidErrorMessage}
-                dataOrigin={aidDataOrigin}
-                onRetry={() => setAidReload(value => value + 1)}
-                publicSyncFailure={publicSyncFailure}
-                publicSyncRetrying={publicSyncRetrying}
-                onRetryPublicSync={retryPublicSync}
-                onNavigate={navigate}
-                onOpenChat={openChatFromRecord}
-                onUpdateCard={(id, patch) => {
+                if (action !== 'contact_helper') {
                     applyLifecycleAction({
                         action: 'edit',
-                        id,
-                        patch,
+                        id: postId,
+                        patch: {
+                            status: nextStatus,
+                            updatedAt: nowIso(),
+                        },
                     });
-                }}
-                onReplaceRecord={replacement =>
-                    setFeedRecords(current =>
-                        current.map(record =>
-                            record.aidPostUri === replacement.aidPostUri ?
-                                replacement
-                            :   record,
-                        ),
-                    )
                 }
-                onDeleteRecord={aidPostUri =>
-                    setFeedRecords(current =>
-                        current.filter(
-                            record => record.aidPostUri !== aidPostUri,
-                        ),
-                    )
-                }
-                onTransition={(id, postUri, targetStatus) => {
-                    const record = feedRecords.find(
-                        candidate => candidate.aidPostUri === postUri,
-                    );
-                    const updatedAt = nowIso();
-                    setPublicSyncFailure(undefined);
-                    void transitionAidPostViaApi({
-                        postUri,
-                        targetStatus,
-                        now: updatedAt,
-                    }).then(result => {
-                        if (result.ok) {
-                            applyLifecycleAction({
-                                action: 'transition',
-                                id,
-                                targetStatus,
-                                actorDid: result.data.transition.actorDid,
-                                actorRole: result.data.transition.actorRole,
-                            });
-                            if (!record?.cid) {
-                                setAidErrorMessage(
-                                    'Private workflow saved, but the indexed record revision is unavailable. Retry discovery before synchronizing public status.',
-                                );
+            }}
+        />
+    ) : currentRoute === '/feed' ? (
+        <FeedRoute
+            discoveryState={discoveryState}
+            onPatchDiscovery={patchDiscoveryState}
+            feedRecords={feedRecords}
+            isLoading={isAidLoading}
+            errorMessage={aidErrorMessage}
+            dataOrigin={aidDataOrigin}
+            onRetry={() => setAidReload((value) => value + 1)}
+            publicSyncFailure={publicSyncFailure}
+            publicSyncRetrying={publicSyncRetrying}
+            onRetryPublicSync={retryPublicSync}
+            onNavigate={navigate}
+            onOpenChat={openChatFromRecord}
+            onUpdateCard={(id, patch) => {
+                applyLifecycleAction({
+                    action: 'edit',
+                    id,
+                    patch,
+                });
+            }}
+            onReplaceRecord={(replacement) =>
+                setFeedRecords((current) =>
+                    current.map((record) =>
+                        record.aidPostUri === replacement.aidPostUri
+                            ? replacement
+                            : record,
+                    ),
+                )
+            }
+            onDeleteRecord={(aidPostUri) =>
+                setFeedRecords((current) =>
+                    current.filter(
+                        (record) => record.aidPostUri !== aidPostUri,
+                    ),
+                )
+            }
+            onTransition={(id, postUri, targetStatus) => {
+                const record = feedRecords.find(
+                    (candidate) => candidate.aidPostUri === postUri,
+                );
+                const updatedAt = nowIso();
+                setPublicSyncFailure(undefined);
+                void transitionAidPostViaApi({
+                    postUri,
+                    targetStatus,
+                    now: updatedAt,
+                }).then((result) => {
+                    if (result.ok) {
+                        applyLifecycleAction({
+                            action: 'transition',
+                            id,
+                            targetStatus,
+                            actorDid: result.data.transition.actorDid,
+                            actorRole: result.data.transition.actorRole,
+                        });
+                        if (!record?.cid) {
+                            setAidErrorMessage(t('feed.indexedUnavailable'));
+                            return;
+                        }
+                        void reconcileAidPostStatusViaApi({
+                            uri: postUri,
+                            expectedCid: record.cid,
+                            updatedAt,
+                        }).then((syncResult) => {
+                            if (!syncResult.ok) {
+                                setPublicSyncFailure({
+                                    postUri,
+                                    expectedCid: record.cid!,
+                                    updatedAt,
+                                    message: `${syncResult.code}: ${syncResult.error}`,
+                                });
                                 return;
                             }
-                            void reconcileAidPostStatusViaApi({
-                                uri: postUri,
-                                expectedCid: record.cid,
-                                updatedAt,
-                            }).then(syncResult => {
-                                if (!syncResult.ok) {
-                                    setPublicSyncFailure({
-                                        postUri,
-                                        expectedCid: record.cid!,
-                                        updatedAt,
-                                        message: `${syncResult.code}: ${syncResult.error}`,
-                                    });
-                                    return;
-                                }
-                                setFeedRecords(current =>
-                                    replaceRecordFromAtResult(
-                                        current,
-                                        syncResult.data,
-                                    ),
-                                );
-                                setPublicSyncFailure(undefined);
-                            });
-                        }
-                    });
-                }}
-                currentUserDid={currentUserDid}
-            />
-        : currentRoute === '/posting' ?
-            <PostingRoute
-                center={discoveryState.center ?? defaultDiscoveryCenter}
-                onCreateRecord={record => {
-                    setFeedRecords(current => [record, ...current]);
-                    patchDiscoveryState({
-                        text: record.card.title,
-                        feedTab: 'latest',
-                    });
-                }}
-                onNavigate={navigate}
-                onCreateViaApi={createAidPostViaApi}
-            />
-        : currentRoute === '/resources' ?
-            <ResourceRoute
-                discoveryState={discoveryState}
-                onPatchDiscovery={patchDiscoveryState}
-                onNavigate={navigate}
-                isLoading={isDirectoryLoading}
-                errorMessage={directoryErrorMessage}
-                dataOrigin={directoryDataOrigin}
-                onRetry={() => setDirectoryReload(value => value + 1)}
-                resourceCards={resourceCards}
-                currentUserDid={currentUserDid}
-            />
-        : currentRoute === '/volunteer' ?
-            webDataMode === 'fixture' ?
-                <LegacyFixtureVolunteerRoute did={currentUserDid} />
-            :   <VolunteerRoute did={currentUserDid} />
-        : currentRoute === '/organizations' ?
-            <OrganizationsRoute did={currentUserDid} />
-        : currentRoute === '/verification' ?
-            <VerificationRoute did={currentUserDid} />
-        : currentRoute === '/inbox' ?
-            <CoordinationInboxRoute did={currentUserDid} />
-        : currentRoute === '/scheduling' ?
-            <CoordinationSchedulingRoute did={currentUserDid} />
-        : currentRoute === '/notifications' ?
-            <NotificationCenterRoute />
-        : currentRoute === '/moderation' ?
-            <ModeratorConsoleRoute
-                onMaintenanceChanged={setMaintenanceStatus}
-            />
-        : currentRoute === '/chat' ?
+                            setFeedRecords((current) =>
+                                replaceRecordFromAtResult(
+                                    current,
+                                    syncResult.data,
+                                ),
+                            );
+                            setPublicSyncFailure(undefined);
+                        });
+                    }
+                });
+            }}
+            currentUserDid={currentUserDid}
+        />
+    ) : currentRoute === '/posting' ? (
+        <PostingRoute
+            center={discoveryState.center ?? defaultDiscoveryCenter}
+            onCreateRecord={(record) => {
+                setFeedRecords((current) => [record, ...current]);
+                patchDiscoveryState({
+                    text: record.card.title,
+                    feedTab: 'latest',
+                });
+            }}
+            onNavigate={navigate}
+            onCreateViaApi={createAidPostViaApi}
+        />
+    ) : currentRoute === '/resources' ? (
+        <ResourceRoute
+            discoveryState={discoveryState}
+            onPatchDiscovery={patchDiscoveryState}
+            onNavigate={navigate}
+            isLoading={isDirectoryLoading}
+            errorMessage={directoryErrorMessage}
+            dataOrigin={directoryDataOrigin}
+            onRetry={() => setDirectoryReload((value) => value + 1)}
+            resourceCards={resourceCards}
+            currentUserDid={currentUserDid}
+        />
+    ) : currentRoute === '/volunteer' ? (
+        webDataMode === 'fixture' ? (
+            <LegacyFixtureVolunteerRoute did={currentUserDid} />
+        ) : (
+            <VolunteerRoute did={currentUserDid} />
+        )
+    ) : currentRoute === '/organizations' ? (
+        <OrganizationsRoute did={currentUserDid} />
+    ) : currentRoute === '/verification' ? (
+        <VerificationRoute did={currentUserDid} />
+    ) : currentRoute === '/inbox' ? (
+        <CoordinationInboxRoute did={currentUserDid} />
+    ) : currentRoute === '/scheduling' ? (
+        <CoordinationSchedulingRoute did={currentUserDid} />
+    ) : currentRoute === '/notifications' ? (
+        <NotificationCenterRoute />
+    ) : currentRoute === '/moderation' ? (
+        <ModeratorConsoleRoute onMaintenanceChanged={setMaintenanceStatus} />
+    ) : currentRoute === '/groups' ? (
+        <ProductionGroups />
+    ) : currentRoute === '/chat' ? (
+        webDataMode === 'fixture' ? (
             <ChatRoute
                 currentUserDid={currentUserDid}
                 hasPermission={hasChatPermission}
@@ -9569,20 +10024,27 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 onLaunch={launchChat}
                 onReset={resetChat}
             />
-        : currentRoute === '/settings' ?
-            webDataMode === 'fixture' ?
-                <SettingsRoute currentUserDid={currentUserDid} />
-            :   <AccountPrivacyRoute onDeactivated={auth.restore} />
-        : currentRoute === '/legal/terms' ||
-          currentRoute === '/legal/privacy' ||
-          currentRoute === '/legal/community-guidelines' ?
-            <LegalPolicyRoute route={currentRoute} />
-        :   <DashboardRoute
-                appTitle={appTitle}
-                onNavigate={navigate}
-                discoveryState={discoveryState}
-                onPatchDiscovery={patchDiscoveryState}
-            />;
+        ) : (
+            <ProductionChat currentUserDid={currentUserDid} />
+        )
+    ) : currentRoute === '/settings' ? (
+        webDataMode === 'fixture' ? (
+            <SettingsRoute currentUserDid={currentUserDid} />
+        ) : (
+            <AccountPrivacyRoute onDeactivated={auth.restore} />
+        )
+    ) : currentRoute === '/legal/terms' ||
+      currentRoute === '/legal/privacy' ||
+      currentRoute === '/legal/community-guidelines' ? (
+        <LegalPolicyRoute route={currentRoute} />
+    ) : (
+        <DashboardRoute
+            appTitle={appTitle}
+            onNavigate={navigate}
+            discoveryState={discoveryState}
+            onPatchDiscovery={patchDiscoveryState}
+        />
+    );
 
     return (
         <main className='mh-grain min-h-screen overflow-x-clip bg-mh-bg text-mh-text'>
@@ -9590,31 +10052,45 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 href='#main-content'
                 className='mh-skip-link sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-mh-accent focus:px-4 focus:py-2 focus:text-white focus:outline-2 focus:outline-offset-2'
             >
-                Skip to main content
+                {t('app.skipToContent')}
             </a>
             <div className='mh-grid-pattern mx-auto min-h-screen max-w-7xl px-3 pb-16 sm:px-6 lg:px-10'>
                 <header className='mh-masthead'>
                     <a
                         href='/'
                         className='mh-brand'
-                        onClick={event => handleRouteClick(event, '/')}
+                        onClick={(event) => handleRouteClick(event, '/')}
                     >
                         <span className='mh-brand-mark' aria-hidden='true'>
                             P
                         </span>
                         <span>
                             <strong>{appTitle}</strong>
-                            <small>Mutual aid, block by block</small>
+                            <small>{t('runtime.tagline')}</small>
                         </span>
                     </a>
                     <div className='mh-network-status' role='status'>
-                        <span aria-hidden='true' /> Pre-alpha environment
+                        <span aria-hidden='true' /> {t('runtime.environment')}
                     </div>
+                    <label className='text-xs font-bold'>
+                        {t('a11y.languageSwitcher')}
+                        <select
+                            className='mh-input ml-2 px-2 py-1'
+                            aria-label={String(t('a11y.languageSwitcher'))}
+                            value={locale}
+                            onChange={(event) =>
+                                changeLocale(event.target.value as 'en' | 'es')
+                            }
+                        >
+                            <option value='en'>{t('account.english')}</option>
+                            <option value='es'>{t('account.spanish')}</option>
+                        </select>
+                    </label>
                 </header>
 
-                <nav aria-label='Primary flows' className='mh-primary-nav'>
+                <nav aria-label={t('nav.ariaLabel')} className='mh-primary-nav'>
                     <div className='mh-nav-main'>
-                        {primaryRoutes.map(route => (
+                        {primaryRoutes.map((route) => (
                             <a
                                 key={route}
                                 href={route}
@@ -9622,16 +10098,16 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                 aria-current={
                                     currentRoute === route ? 'page' : undefined
                                 }
-                                onClick={event =>
+                                onClick={(event) =>
                                     handleRouteClick(event, route)
                                 }
                             >
-                                {routeLabels[route]}
+                                {t(routeLabelKeys[route])}
                             </a>
                         ))}
                     </div>
                     <div className='mh-nav-tools'>
-                        {visibleAccountRoutes.map(route => (
+                        {visibleAccountRoutes.map((route) => (
                             <a
                                 key={route}
                                 href={route}
@@ -9639,40 +10115,41 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                 aria-current={
                                     currentRoute === route ? 'page' : undefined
                                 }
-                                onClick={event =>
+                                onClick={(event) =>
                                     handleRouteClick(event, route)
                                 }
                             >
-                                {routeLabels[route]}
+                                {t(routeLabelKeys[route])}
                             </a>
                         ))}
                         <details className='mh-more-menu'>
                             <summary className='mh-nav-chip'>
-                                More <span aria-hidden='true'>+</span>
+                                {t('runtime.more')}{' '}
+                                <span aria-hidden='true'>+</span>
                             </summary>
                             <div className='mh-more-menu-panel'>
-                                {visibleSecondaryRoutes.map(route => (
+                                {visibleSecondaryRoutes.map((route) => (
                                     <a
                                         key={route}
                                         href={route}
                                         aria-current={
-                                            currentRoute === route ? 'page' : (
-                                                undefined
-                                            )
+                                            currentRoute === route
+                                                ? 'page'
+                                                : undefined
                                         }
-                                        onClick={event =>
+                                        onClick={(event) =>
                                             handleRouteClick(event, route)
                                         }
                                     >
-                                        {routeLabels[route]}
+                                        {t(routeLabelKeys[route])}
                                     </a>
                                 ))}
                             </div>
                         </details>
                         <div className='mh-auth-control' aria-live='polite'>
-                            {auth.status === 'booting' ?
-                                <span>Checking session…</span>
-                            : auth.session ?
+                            {auth.status === 'booting' ? (
+                                <span>{t('runtime.checkingSession')}</span>
+                            ) : auth.session ? (
                                 <>
                                     <span className='max-w-48 truncate text-xs font-bold'>
                                         {auth.session.did}
@@ -9682,43 +10159,41 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                         className='px-3 py-1 text-xs'
                                         onClick={() => void auth.logout()}
                                     >
-                                        Sign out
+                                        {t('runtime.signOut')}
                                     </Button>
                                 </>
-                            :   <a
+                            ) : (
+                                <a
                                     className='mh-nav-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mh-accent'
                                     href={`/login?returnTo=${encodeURIComponent(currentRoute)}`}
                                 >
-                                    Sign in
+                                    {t('runtime.signIn')}
                                 </a>
-                            }
+                            )}
                         </div>
                     </div>
                 </nav>
 
-                {maintenanceStatus?.active ?
+                {maintenanceStatus?.active ? (
                     <div
                         role='alert'
                         className='mb-4 border-4 border-mh-danger bg-mh-surfaceElev p-4'
                     >
-                        <strong>Patchwork is temporarily read-only.</strong>{' '}
-                        {maintenanceStatus.publicMessage} New submissions and
-                        exact-location exchange are disabled; public reads and
-                        service status remain available.
+                        <strong>{t('runtime.readOnly')}</strong>{' '}
+                        {maintenanceStatus.publicMessage}{' '}
+                        {t('runtime.readOnlyHelp')}
                     </div>
-                : null}
+                ) : null}
 
-                {!isOnline ?
+                {!isOnline ? (
                     <div
                         role='alert'
                         className='mb-4 border-4 border-mh-danger bg-mh-surfaceElev p-4'
                     >
-                        <strong>You are offline.</strong> Previously rendered
-                        public data may be stale. Patchwork does not queue
-                        mutations offline; reconnect before posting, offering,
-                        or changing account state.
+                        <strong>{t('runtime.offline')}</strong>{' '}
+                        {t('runtime.offlineHelp')}
                     </div>
-                : null}
+                ) : null}
 
                 <div
                     id='main-content'
@@ -9730,37 +10205,34 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 </div>
 
                 <footer className='mh-footer'>
-                    <p>
-                        <strong>Patchwork</strong> is community infrastructure,
-                        not an emergency service.
-                    </p>
-                    <div role='navigation' aria-label='Legal'>
+                    <p>{t('runtime.footer')}</p>
+                    <div role='navigation' aria-label={t('runtime.legalLabel')}>
                         <a
                             href='/legal/terms'
-                            onClick={event =>
+                            onClick={(event) =>
                                 handleRouteClick(event, '/legal/terms')
                             }
                         >
-                            Terms
+                            {t('legal.termsNav')}
                         </a>
                         <a
                             href='/legal/privacy'
-                            onClick={event =>
+                            onClick={(event) =>
                                 handleRouteClick(event, '/legal/privacy')
                             }
                         >
-                            Privacy
+                            {t('legal.privacyNav')}
                         </a>
                         <a
                             href='/legal/community-guidelines'
-                            onClick={event =>
+                            onClick={(event) =>
                                 handleRouteClick(
                                     event,
                                     '/legal/community-guidelines',
                                 )
                             }
                         >
-                            Community guidelines
+                            {t('legal.guidelinesNav')}
                         </a>
                     </div>
                 </footer>

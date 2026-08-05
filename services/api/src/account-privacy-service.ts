@@ -273,6 +273,22 @@ export class AccountPrivacyService {
                  WHERE recipient_did = $1`,
                 [did],
             );
+            const chatAuthoredMessages = await client.query(
+                `UPDATE chat_messages SET body=NULL,status='redacted',author_did=NULL,
+                    redacted_at=COALESCE(redacted_at,$2)
+                 WHERE author_did=$1 AND status='active'`, [did, now]);
+            const chatParticipantState = await client.query(
+                `DELETE FROM chat_participant_state WHERE participant_did=$1`, [did]);
+            const chatReceipts = await client.query(
+                `DELETE FROM chat_message_receipts WHERE recipient_did=$1`, [did]);
+            const chatAudit = await client.query(
+                `UPDATE chat_audit_events SET actor_did=NULL,
+                    retention_until=LEAST(retention_until,$2::timestamptz)
+                 WHERE actor_did=$1`, [did, auditRetentionUntil]);
+            await client.query(
+                `UPDATE chat_abuse_report_evidence SET message_author_did=NULL,
+                    retention_until=LEAST(retention_until,$2::timestamptz)
+                 WHERE message_author_did=$1`, [did, safetyRetentionUntil]);
             const coordinationFeedback = await client.query(
                 `DELETE FROM coordination_outcome_feedback
                  WHERE submitter_did = $1`,
@@ -283,6 +299,54 @@ export class AccountPrivacyService {
                  WHERE offerer_did = $1`,
                 [did],
             );
+            const ownedGroups = await client.query<{ group_id: string }>(
+                `SELECT group_id FROM groups
+                 WHERE owner_did=$1 AND status='active' FOR UPDATE`, [did]);
+            let transferredGroups = 0;
+            let closedGroups = 0;
+            for (const owned of ownedGroups.rows) {
+                const successor = await client.query<{ member_did: string }>(
+                    `SELECT member_did FROM group_memberships
+                     WHERE group_id=$1 AND member_did<>$2 AND status='active'
+                     ORDER BY CASE role WHEN 'moderator' THEN 0 ELSE 1 END,
+                              joined_at,member_did LIMIT 1 FOR UPDATE`,
+                    [owned.group_id, did]);
+                await client.query(
+                    `UPDATE group_memberships SET role='member',status='removed',updated_at=$3
+                     WHERE group_id=$1 AND member_did=$2`, [owned.group_id, did, now]);
+                if (successor.rows[0]) {
+                    await client.query(
+                        `UPDATE group_memberships SET role='owner',updated_at=$3
+                         WHERE group_id=$1 AND member_did=$2`,
+                        [owned.group_id, successor.rows[0].member_did, now]);
+                    await client.query(
+                        `UPDATE groups SET owner_did=$2,version=version+1,updated_at=$3
+                         WHERE group_id=$1`, [owned.group_id, successor.rows[0].member_did, now]);
+                    transferredGroups += 1;
+                } else {
+                    await client.query(
+                        `UPDATE groups SET status='closed',version=version+1,
+                            closed_at=$2,updated_at=$2 WHERE group_id=$1`,
+                        [owned.group_id, now]);
+                    await client.query(
+                        `UPDATE group_rooms SET status='closed',version=version+1,
+                            closed_at=$2,updated_at=$2
+                         WHERE group_id=$1 AND status='active'`, [owned.group_id, now]);
+                    closedGroups += 1;
+                }
+            }
+            const groupMemberships = await client.query(
+                `UPDATE group_memberships SET role='member',status='removed',updated_at=$2
+                 WHERE member_did=$1 AND status='active'`, [did, now]);
+            const groupInvitations = await client.query(
+                `DELETE FROM group_invitations
+                 WHERE invitee_did=$1 OR invited_by_did=$1`, [did]);
+            const groupAudit = await client.query(
+                `UPDATE group_audit_events
+                 SET actor_did=CASE WHEN actor_did=$1 THEN NULL ELSE actor_did END,
+                     subject_did=CASE WHEN subject_did=$1 THEN NULL ELSE subject_did END,
+                     retention_until=LEAST(retention_until,$2::timestamptz)
+                 WHERE actor_did=$1 OR subject_did=$1`, [did, auditRetentionUntil]);
             await client.query(
                 `UPDATE coordination_offer_events
                  SET actor_did = NULL,
@@ -447,6 +511,11 @@ export class AccountPrivacyService {
                         coordinationFeedback.rowCount ?? 0,
                     coordinationOffers:
                         coordinationOffers.rowCount ?? 0,
+                    chatAuthoredMessages: chatAuthoredMessages.rowCount ?? 0,
+                    chatParticipantState: chatParticipantState.rowCount ?? 0,
+                    chatReceipts: chatReceipts.rowCount ?? 0,
+                    groupMemberships: groupMemberships.rowCount ?? 0,
+                    groupInvitations: groupInvitations.rowCount ?? 0,
                     legacyDiscoveryEvents: legacyDiscoveryEvents.rowCount ?? 0,
                     workflows: workflows.rowCount ?? 0,
                     platformRoles: platformRoles.rowCount ?? 0,
@@ -483,6 +552,10 @@ export class AccountPrivacyService {
                     maintenanceAudit:
                         maintenanceAudit.rowCount ?? 0,
                     transferredOrganizations,
+                    transferredGroups,
+                    closedGroups,
+                    groupAudit: groupAudit.rowCount ?? 0,
+                    chatAudit: chatAudit.rowCount ?? 0,
                     organizationAudit:
                         organizationAudit.rowCount ?? 0,
                     verificationModeratorDecisions:
@@ -859,6 +932,69 @@ export class AccountPrivacyService {
              ORDER BY occurred_at, item_id`,
             [did],
         );
+        const groupMemberships = await client.query<{
+            group_id: string; owner_did: string; name: string;
+            description: string; purpose: string; visibility: string;
+            group_status: string; version: number; role: string;
+            membership_status: string; joined_at: Date | string;
+            updated_at: Date | string; closed_at: Date | string | null;
+        }>(
+            `SELECT g.group_id,g.owner_did,g.name,g.description,g.purpose,
+                    g.visibility,g.status AS group_status,g.version,m.role,
+                    m.status AS membership_status,m.joined_at,g.updated_at,g.closed_at
+             FROM group_memberships m JOIN groups g USING (group_id)
+             WHERE m.member_did=$1 ORDER BY g.created_at,g.group_id`, [did]);
+        const groupIds = groupMemberships.rows.map((row) => row.group_id);
+        const groupRooms = groupIds.length === 0 ? { rows: [] as Array<{
+            room_id: string; group_id: string; name: string;
+            linked_request_uri: string | null; status: string; version: number;
+            created_at: Date | string; updated_at: Date | string;
+            closed_at: Date | string | null;
+        }> } : await client.query<{
+            room_id: string; group_id: string; name: string;
+            linked_request_uri: string | null; status: string; version: number;
+            created_at: Date | string; updated_at: Date | string;
+            closed_at: Date | string | null;
+        }>(
+            `SELECT room_id,group_id,name,linked_request_uri,status,version,
+                    created_at,updated_at,closed_at FROM group_rooms
+             WHERE group_id=ANY($1::uuid[]) ORDER BY created_at,room_id`, [groupIds]);
+        const groupInvitations = await client.query<{
+            invitation_id: string; group_id: string; invitee_did: string;
+            invited_by_did: string; requested_role: string; status: string;
+            expires_at: Date | string; consumed_at: Date | string | null;
+            created_at: Date | string; updated_at: Date | string;
+        }>(
+            `SELECT invitation_id,group_id,invitee_did,invited_by_did,
+                    requested_role,status,expires_at,consumed_at,created_at,updated_at
+             FROM group_invitations WHERE invitee_did=$1 OR invited_by_did=$1
+             ORDER BY created_at,invitation_id`, [did]);
+        const chatConversations = await client.query<{
+            conversation_id: string; kind: string; connection_id: string | null;
+            room_id: string | null; status: string; version: number;
+            last_read_sequence: string | number; created_at: Date | string;
+            updated_at: Date | string; closed_at: Date | string | null;
+        }>(
+            `SELECT c.conversation_id,c.kind,c.connection_id,c.room_id,c.status,
+                    c.version,s.last_read_sequence,c.created_at,c.updated_at,c.closed_at
+             FROM chat_participant_state s JOIN chat_conversations c USING (conversation_id)
+             WHERE s.participant_did=$1 ORDER BY c.created_at,c.conversation_id`, [did]);
+        const chatSentMessages = await client.query<{
+            message_id: string; conversation_id: string; sequence: string | number;
+            body: string | null; status: string; created_at: Date | string;
+            redacted_at: Date | string | null;
+        }>(
+            `SELECT message_id,conversation_id,sequence,body,status,created_at,redacted_at
+             FROM chat_messages WHERE author_did=$1 ORDER BY sequence`, [did]);
+        const chatReceivedState = await client.query<{
+            message_id: string; conversation_id: string; sequence: string | number;
+            message_status: string; receipt_state: string;
+            delivered_at: Date | string; read_at: Date | string | null;
+        }>(
+            `SELECT m.message_id,m.conversation_id,m.sequence,m.status AS message_status,
+                    r.state AS receipt_state,r.delivered_at,r.read_at
+             FROM chat_message_receipts r JOIN chat_messages m USING (message_id)
+             WHERE r.recipient_did=$1 ORDER BY m.sequence`, [did]);
         const coordinationFeedback = await client.query<{
             feedback_id: string;
             connection_id: string;
@@ -1346,6 +1482,81 @@ export class AccountPrivacyService {
                         comment: row.comment,
                         tags: row.tags,
                         submittedAt: iso(row.submitted_at),
+                    })),
+                },
+                groups: {
+                    memberships: groupMemberships.rows.map(row => ({
+                        groupId: row.group_id,
+                        ownerDid: row.owner_did,
+                        name: row.name,
+                        description: row.description,
+                        purpose: row.purpose,
+                        visibility: row.visibility,
+                        groupStatus: row.group_status,
+                        version: row.version,
+                        role: row.role,
+                        membershipStatus: row.membership_status,
+                        joinedAt: iso(row.joined_at),
+                        updatedAt: iso(row.updated_at),
+                        closedAt: iso(row.closed_at),
+                        rooms: groupRooms.rows
+                            .filter(room => room.group_id === row.group_id)
+                            .map(room => ({
+                                id: room.room_id,
+                                name: room.name,
+                                linkedRequestUri: room.linked_request_uri,
+                                status: room.status,
+                                version: room.version,
+                                createdAt: iso(room.created_at),
+                                updatedAt: iso(room.updated_at),
+                                closedAt: iso(room.closed_at),
+                            })),
+                    })),
+                    invitations: groupInvitations.rows.map(row => ({
+                        id: row.invitation_id,
+                        groupId: row.group_id,
+                        direction: row.invitee_did === did ? 'received' : 'sent',
+                        counterpartDid: row.invitee_did === did ? row.invited_by_did : row.invitee_did,
+                        role: row.requested_role,
+                        status: row.status,
+                        expiresAt: iso(row.expires_at),
+                        consumedAt: iso(row.consumed_at),
+                        createdAt: iso(row.created_at),
+                        updatedAt: iso(row.updated_at),
+                    })),
+                },
+                chat: {
+                    trustModel: 'server-readable',
+                    retentionDays: 365,
+                    conversations: chatConversations.rows.map(row => ({
+                        id: row.conversation_id,
+                        kind: row.kind,
+                        connectionId: row.connection_id,
+                        roomId: row.room_id,
+                        status: row.status,
+                        version: row.version,
+                        lastReadSequence: Number(row.last_read_sequence),
+                        createdAt: iso(row.created_at),
+                        updatedAt: iso(row.updated_at),
+                        closedAt: iso(row.closed_at),
+                    })),
+                    sentMessages: chatSentMessages.rows.map(row => ({
+                        id: row.message_id,
+                        conversationId: row.conversation_id,
+                        sequence: Number(row.sequence),
+                        body: row.body,
+                        status: row.status,
+                        createdAt: iso(row.created_at),
+                        redactedAt: iso(row.redacted_at),
+                    })),
+                    receivedMessageState: chatReceivedState.rows.map(row => ({
+                        id: row.message_id,
+                        conversationId: row.conversation_id,
+                        sequence: Number(row.sequence),
+                        messageStatus: row.message_status,
+                        deliveryState: row.receipt_state,
+                        deliveredAt: iso(row.delivered_at),
+                        readAt: iso(row.read_at),
                     })),
                 },
                 notifications: {

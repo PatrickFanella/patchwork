@@ -66,6 +66,51 @@ const iso = (value: Date | string | null): string | null =>
 const plusDays = (now: Date, days: number): Date =>
     new Date(now.getTime() + days * 24 * 60 * 60 * 1_000);
 
+export const localizedInboxCopy = (
+    locale: string,
+    title: string,
+    summary: string,
+): { title: string; summary: string } => {
+    if (locale !== 'es') return { title, summary };
+    const titles: Record<string, string> = {
+        'New offer on your request': 'Nueva oferta para tu solicitud',
+        'Offer closed': 'Oferta cerrada',
+        'Offer accepted': 'Oferta aceptada',
+        'Offer declined': 'Oferta rechazada',
+        'Offer cancelled': 'Oferta cancelada',
+        'Offer expired': 'Oferta vencida',
+        'Connection completed': 'Conexión completada',
+        'Connection cancelled': 'Conexión cancelada',
+        'Connection expired': 'Conexión vencida',
+        'Coordination reminder': 'Recordatorio de coordinación',
+        'Coordination window expired': 'Ventana de coordinación vencida',
+        'Coordination schedule updated': 'Agenda de coordinación actualizada',
+    };
+    const summaries: Record<string, string> = {
+        'A volunteer offered to help. Their identity stays private until you accept.':
+            'Una persona voluntaria se ofreció a ayudar. Su identidad permanece privada hasta que aceptes.',
+        'Another offer was accepted for this request.':
+            'Se aceptó otra oferta para esta solicitud.',
+        'The offer was accepted. Participant identities are now available in the connection.':
+            'La oferta fue aceptada. Las identidades de las personas participantes ya están disponibles en la conexión.',
+        'The offer was declined.': 'La oferta fue rechazada.',
+        'The offer was cancelled.': 'La oferta fue cancelada.',
+        'The handoff is complete. You can now record structured outcome feedback.':
+            'La entrega está completada. Ahora puedes registrar comentarios estructurados sobre el resultado.',
+        'The connection was cancelled.': 'La conexión fue cancelada.',
+        'An offer expired without being accepted.':
+            'Una oferta venció sin ser aceptada.',
+        'A confirmed coordination window begins soon.':
+            'Una ventana de coordinación confirmada comienza pronto.',
+        'Open your connection to review the schedule status.':
+            'Abre tu conexión para revisar el estado de la agenda.',
+    };
+    return {
+        title: titles[title] ?? title,
+        summary: summaries[summary] ?? summary,
+    };
+};
+
 interface WorkflowRow {
     post_uri: string;
     requester_did: string;
@@ -128,12 +173,10 @@ export class CoordinationService {
                     'A requester cannot offer on their own request.',
                 );
             }
-            await this.assertSafety(
-                client,
-                workflow,
-                actorDid,
-                ['open', 'triaged'],
-            );
+            await this.assertSafety(client, workflow, actorDid, [
+                'open',
+                'triaged',
+            ]);
             const eligible = await client.query(
                 `SELECT 1
                  FROM indexer_volunteer_profile_projections
@@ -183,24 +226,22 @@ export class CoordinationService {
                 }
                 throw error;
             }
-            await this.recordEvent(
-                client,
-                {
-                    offerId,
-                    actorDid,
-                    action: 'offered',
-                    previousStatus: null,
-                    nextStatus: 'pending',
-                    summary: 'Help offered on a request.',
-                    details: { requestUri: workflow.post_uri },
-                    now,
-                },
-            );
+            await this.recordEvent(client, {
+                offerId,
+                actorDid,
+                action: 'offered',
+                previousStatus: null,
+                nextStatus: 'pending',
+                summary: 'Help offered on a request.',
+                details: { requestUri: workflow.post_uri },
+                now,
+            });
             await this.addInboxItem(client, {
                 recipientDid: workflow.requester_did,
                 type: 'offer',
                 title: 'New offer on your request',
-                summary: 'A volunteer offered to help. Their identity stays private until you accept.',
+                summary:
+                    'A volunteer offered to help. Their identity stays private until you accept.',
                 actionUrl: '/inbox',
                 sourceKey: `offer:${offerId}:created`,
                 metadata: { offerId, requestUri: workflow.post_uri },
@@ -273,12 +314,10 @@ export class CoordinationService {
                     'The offer has expired.',
                 );
             }
-            await this.assertSafety(
-                client,
-                workflow,
-                offer.offerer_did,
-                ['open', 'triaged'],
-            );
+            await this.assertSafety(client, workflow, offer.offerer_did, [
+                'open',
+                'triaged',
+            ]);
             if (
                 parsed.data.decision === 'cancel' &&
                 actorDid !== offer.offerer_did
@@ -300,9 +339,11 @@ export class CoordinationService {
                 );
             }
             const nextStatus =
-                parsed.data.decision === 'accept' ? 'accepted'
-                : parsed.data.decision === 'decline' ? 'declined'
-                : 'cancelled';
+                parsed.data.decision === 'accept'
+                    ? 'accepted'
+                    : parsed.data.decision === 'decline'
+                      ? 'declined'
+                      : 'cancelled';
             await client.query(
                 `UPDATE coordination_offers
                  SET status = $2, decided_at = $3, updated_at = $3
@@ -393,8 +434,7 @@ export class CoordinationService {
                         recipientDid: other.offerer_did,
                         type: 'offer',
                         title: 'Offer closed',
-                        summary:
-                            'Another offer was accepted for this request.',
+                        summary: 'Another offer was accepted for this request.',
                         actionUrl: '/inbox',
                         sourceKey: `offer:${other.offer_id}:cancelled`,
                         metadata: { offerId: other.offer_id },
@@ -407,9 +447,11 @@ export class CoordinationService {
                 connectionId: connection?.connection_id,
                 actorDid,
                 action:
-                    nextStatus === 'accepted' ? 'accepted'
-                    : nextStatus === 'declined' ? 'declined'
-                    : 'cancelled',
+                    nextStatus === 'accepted'
+                        ? 'accepted'
+                        : nextStatus === 'declined'
+                          ? 'declined'
+                          : 'cancelled',
                 previousStatus: 'pending',
                 nextStatus,
                 summary: `Offer ${nextStatus}.`,
@@ -418,34 +460,39 @@ export class CoordinationService {
             });
             await this.addInboxItem(client, {
                 recipientDid:
-                    actorDid === offer.requester_did ?
-                        offer.offerer_did
-                    :   offer.requester_did,
-                type:
-                    nextStatus === 'accepted' ? 'assignment' : 'offer',
+                    actorDid === offer.requester_did
+                        ? offer.offerer_did
+                        : offer.requester_did,
+                type: nextStatus === 'accepted' ? 'assignment' : 'offer',
                 title: `Offer ${nextStatus}`,
                 summary:
-                    nextStatus === 'accepted' ?
-                        'The offer was accepted. Participant identities are now available in the connection.'
-                    :   `The offer was ${nextStatus}.`,
+                    nextStatus === 'accepted'
+                        ? 'The offer was accepted. Participant identities are now available in the connection.'
+                        : `The offer was ${nextStatus}.`,
                 actionUrl: '/inbox',
                 sourceKey: `offer:${offer.offer_id}:${nextStatus}`,
                 metadata: {
                     offerId: offer.offer_id,
-                    ...(connection ?
-                        { connectionId: connection.connection_id }
-                    :   {}),
+                    ...(connection
+                        ? { connectionId: connection.connection_id }
+                        : {}),
                 },
                 now,
             });
             await client.query('COMMIT');
             return {
                 offer: this.renderOffer(
-                    { ...offer, status: nextStatus, decided_at: now, updated_at: now },
+                    {
+                        ...offer,
+                        status: nextStatus,
+                        decided_at: now,
+                        updated_at: now,
+                    },
                     actorDid,
                 ),
-                connection:
-                    connection ? this.renderConnection(connection, actorDid) : null,
+                connection: connection
+                    ? this.renderConnection(connection, actorDid)
+                    : null,
             };
         } catch (error) {
             if (
@@ -503,12 +550,10 @@ export class CoordinationService {
                 connection.request_uri,
                 true,
             );
-            await this.assertSafety(
-                client,
-                workflow,
-                connection.helper_did,
-                ['assigned', 'in_progress'],
-            );
+            await this.assertSafety(client, workflow, connection.helper_did, [
+                'assigned',
+                'in_progress',
+            ]);
             const nextStatus =
                 parsed.data.action === 'complete' ? 'completed' : 'cancelled';
             await client.query(
@@ -566,9 +611,9 @@ export class CoordinationService {
                 connectionId: connection.connection_id,
                 actorDid,
                 action:
-                    nextStatus === 'completed' ?
-                        'connection-completed'
-                    :   'connection-cancelled',
+                    nextStatus === 'completed'
+                        ? 'connection-completed'
+                        : 'connection-cancelled',
                 previousStatus: 'active',
                 nextStatus,
                 summary: `Connection ${nextStatus}.`,
@@ -581,13 +626,12 @@ export class CoordinationService {
             ]) {
                 await this.addInboxItem(client, {
                     recipientDid,
-                    type:
-                        nextStatus === 'completed' ? 'outcome' : 'assignment',
+                    type: nextStatus === 'completed' ? 'outcome' : 'assignment',
                     title: `Connection ${nextStatus}`,
                     summary:
-                        nextStatus === 'completed' ?
-                            'The handoff is complete. You can now record structured outcome feedback.'
-                        :   'The connection was cancelled.',
+                        nextStatus === 'completed'
+                            ? 'The handoff is complete. You can now record structured outcome feedback.'
+                            : 'The connection was cancelled.',
                     actionUrl: '/inbox',
                     sourceKey: `connection:${connection.connection_id}:${nextStatus}`,
                     metadata: {
@@ -603,8 +647,7 @@ export class CoordinationService {
                     {
                         ...connection,
                         status: nextStatus,
-                        completed_at:
-                            nextStatus === 'completed' ? now : null,
+                        completed_at: nextStatus === 'completed' ? now : null,
                         updated_at: now,
                     },
                     actorDid,
@@ -641,8 +684,8 @@ export class CoordinationService {
             [actorDid],
         );
         return {
-            offers: offers.rows.map(row => this.renderOffer(row, actorDid)),
-            connections: connections.rows.map(row =>
+            offers: offers.rows.map((row) => this.renderOffer(row, actorDid)),
+            connections: connections.rows.map((row) =>
                 this.renderConnection(row, actorDid),
             ),
         };
@@ -662,9 +705,12 @@ export class CoordinationService {
             metadata: Record<string, unknown>;
             occurred_at: Date | string;
             read_at: Date | string | null;
+            language: string;
         }>(
             `SELECT item_id, item_type, title, summary, action_url,
-                    metadata, occurred_at, read_at
+                    metadata, occurred_at, read_at,
+                    COALESCE((SELECT language FROM account_preferences
+                              WHERE did = $1), 'en') AS language
              FROM activity_inbox_items
              WHERE recipient_did = $1
                AND retention_until > NOW()
@@ -674,17 +720,24 @@ export class CoordinationService {
             [actorDid, unreadOnly],
         );
         return {
-            items: result.rows.map(row => ({
-                id: row.item_id,
-                type: row.item_type,
-                title: row.title,
-                summary: row.summary,
-                actionUrl: row.action_url,
-                metadata: row.metadata,
-                occurredAt: iso(row.occurred_at),
-                readAt: iso(row.read_at),
-            })),
-            unread: result.rows.filter(row => row.read_at === null).length,
+            items: result.rows.map((row) => {
+                const copy = localizedInboxCopy(
+                    row.language ?? 'en',
+                    row.title,
+                    row.summary,
+                );
+                return {
+                    id: row.item_id,
+                    type: row.item_type,
+                    title: copy.title,
+                    summary: copy.summary,
+                    actionUrl: row.action_url,
+                    metadata: row.metadata,
+                    occurredAt: iso(row.occurred_at),
+                    readAt: iso(row.read_at),
+                };
+            }),
+            unread: result.rows.filter((row) => row.read_at === null).length,
         };
     }
 
@@ -777,8 +830,7 @@ export class CoordinationService {
                 ],
             );
             if (safetyEscalated) {
-                const subjectUri =
-                    `urn:patchwork:outcome-feedback:${feedbackId}`;
+                const subjectUri = `urn:patchwork:outcome-feedback:${feedbackId}`;
                 const queueId = randomUUID();
                 const reasonCodes = ['outcome-safety-concern'];
                 await client.query(
@@ -880,7 +932,7 @@ export class CoordinationService {
             [actorDid],
         );
         return {
-            feedback: result.rows.map(row => ({
+            feedback: result.rows.map((row) => ({
                 id: row.feedback_id,
                 connectionId: row.connection_id,
                 outcome: row.outcome,
@@ -967,7 +1019,7 @@ export class CoordinationService {
              WHERE availability <> 'unavailable'`,
         );
         const profileByHash = new Map(
-            allProfiles.rows.map(row => [hash(row.did), row]),
+            allProfiles.rows.map((row) => [hash(row.did), row]),
         );
         const candidates: Array<{
             did: string;
@@ -1007,7 +1059,7 @@ export class CoordinationService {
             );
             if (moderation.rowCount) continue;
             const categoryMatch =
-                projection.capabilities.some(capability =>
+                projection.capabilities.some((capability) =>
                     capabilitySupportsAidCategory(
                         capability as Parameters<
                             typeof capabilitySupportsAidCategory
@@ -1018,37 +1070,38 @@ export class CoordinationService {
                     ),
                 ) ||
                 (
-                    privateProfile.matching_preferences
-                        .preferredCategories ?? []
+                    privateProfile.matching_preferences.preferredCategories ??
+                    []
                 ).includes(request.rows[0].category);
             if (!categoryMatch) continue;
-            const requiredLanguages = parsed.data.requiredLanguages.map(value =>
-                value.toLowerCase(),
+            const requiredLanguages = parsed.data.requiredLanguages.map(
+                (value) => value.toLowerCase(),
             );
-            const languages = projection.languages.map(value =>
+            const languages = projection.languages.map((value) =>
                 value.toLowerCase(),
             );
             const languageMatch =
                 requiredLanguages.length === 0 ||
-                requiredLanguages.every(value => languages.includes(value));
+                requiredLanguages.every((value) => languages.includes(value));
             if (!languageMatch) continue;
-            const skills = projection.skills.map(value => value.toLowerCase());
+            const skills = projection.skills.map((value) =>
+                value.toLowerCase(),
+            );
             const accessibilityMatch =
                 parsed.data.accessibilityNeeds.length === 0 ||
-                parsed.data.accessibilityNeeds.every(value =>
+                parsed.data.accessibilityNeeds.every((value) =>
                     skills.includes(value.toLowerCase()),
                 );
             if (!accessibilityMatch) continue;
             const distanceKm =
-                projection.latitude !== null &&
-                projection.longitude !== null ?
-                    this.distanceKm(
-                        request.rows[0].latitude,
-                        request.rows[0].longitude,
-                        projection.latitude,
-                        projection.longitude,
-                    )
-                :   null;
+                projection.latitude !== null && projection.longitude !== null
+                    ? this.distanceKm(
+                          request.rows[0].latitude,
+                          request.rows[0].longitude,
+                          projection.latitude,
+                          projection.longitude,
+                      )
+                    : null;
             const maxDistance =
                 privateProfile.matching_preferences.maxDistanceKm ?? 100;
             if (distanceKm !== null && distanceKm > maxDistance) continue;
@@ -1064,9 +1117,11 @@ export class CoordinationService {
                 ).rowCount,
             );
             const availabilityScore =
-                projection.availability === 'immediate' ? 1
-                : projection.availability === 'within-24h' ? 0.75
-                : 0.5;
+                projection.availability === 'immediate'
+                    ? 1
+                    : projection.availability === 'within-24h'
+                      ? 0.75
+                      : 0.5;
             const distanceScore =
                 distanceKm === null ? 0.4 : Math.max(0, 1 - distanceKm / 100);
             const score =
@@ -1089,27 +1144,26 @@ export class CoordinationService {
                 explanations: [
                     `Supports ${request.rows[0].category}.`,
                     `Availability is ${projection.availability}.`,
-                    distanceKm === null ?
-                        'Approximate distance is unavailable.'
-                    :   `Approximate distance is ${distanceKm.toFixed(1)} km.`,
-                    requiredLanguages.length ?
-                        `Matches requested languages: ${requiredLanguages.join(', ')}.`
-                    :   'No language requirement was specified.',
-                    parsed.data.accessibilityNeeds.length ?
-                        `Matches accessibility needs: ${parsed.data.accessibilityNeeds.join(', ')}.`
-                    :   'No accessibility requirement was specified.',
-                    verified ?
-                        'Volunteer verification is active.'
-                    :   'Volunteer verification is not active.',
+                    distanceKm === null
+                        ? 'Approximate distance is unavailable.'
+                        : `Approximate distance is ${distanceKm.toFixed(1)} km.`,
+                    requiredLanguages.length
+                        ? `Matches requested languages: ${requiredLanguages.join(', ')}.`
+                        : 'No language requirement was specified.',
+                    parsed.data.accessibilityNeeds.length
+                        ? `Matches accessibility needs: ${parsed.data.accessibilityNeeds.join(', ')}.`
+                        : 'No accessibility requirement was specified.',
+                    verified
+                        ? 'Volunteer verification is active.'
+                        : 'Volunteer verification is not active.',
                 ],
             });
         }
         candidates.sort(
             (left, right) =>
-                right.score - left.score ||
-                left.did.localeCompare(right.did),
+                right.score - left.score || left.did.localeCompare(right.did),
         );
-        const volunteerResults = candidates.slice(0, 20).map(candidate => ({
+        const volunteerResults = candidates.slice(0, 20).map((candidate) => ({
             candidateRef: `volunteer-${hash(
                 `${workflow.post_uri}:${candidate.did}`,
             ).slice(0, 20)}`,
@@ -1161,32 +1215,29 @@ export class CoordinationService {
                         OR q.appeal_state IN ('pending', 'under-review')
                      )
                )`,
-            [
-                resourceCategoryMap[request.rows[0].category] ?? ['other'],
-                now,
-            ],
+            [resourceCategoryMap[request.rows[0].category] ?? ['other'], now],
         );
         const resourceResults = resources.rows
-            .map(resource => {
+            .map((resource) => {
                 const distance =
-                    resource.latitude !== null &&
-                    resource.longitude !== null ?
-                        this.distanceKm(
-                            request.rows[0].latitude,
-                            request.rows[0].longitude,
-                            resource.latitude,
-                            resource.longitude,
-                        )
-                    :   null;
+                    resource.latitude !== null && resource.longitude !== null
+                        ? this.distanceKm(
+                              request.rows[0].latitude,
+                              request.rows[0].longitude,
+                              resource.latitude,
+                              resource.longitude,
+                          )
+                        : null;
                 return {
                     candidateRef: resource.uri,
                     kind: 'resource' as const,
                     label: resource.name,
                     score: Number(
-                        (0.8 +
-                            (distance === null ?
-                                0
-                            :   Math.max(0, 1 - distance / 100) * 0.2)
+                        (
+                            0.8 +
+                            (distance === null
+                                ? 0
+                                : Math.max(0, 1 - distance / 100) * 0.2)
                         ).toFixed(6),
                     ),
                     approximateDistanceKm: distance,
@@ -1194,9 +1245,9 @@ export class CoordinationService {
                     verification: 'active',
                     explanations: [
                         `Resource category matches ${request.rows[0].category}.`,
-                        distance === null ?
-                            'Approximate distance is unavailable.'
-                        :   `Approximate distance is ${distance.toFixed(1)} km.`,
+                        distance === null
+                            ? 'Approximate distance is unavailable.'
+                            : `Approximate distance is ${distance.toFixed(1)} km.`,
                         'Resource verification and stewardship are active.',
                     ],
                     assignment: 'manual-only' as const,
@@ -1218,9 +1269,9 @@ export class CoordinationService {
             .map((candidate, index) => ({
                 ...candidate,
                 label:
-                    candidate.kind === 'volunteer' ?
-                        `Volunteer candidate ${index + 1}`
-                    :   candidate.label,
+                    candidate.kind === 'volunteer'
+                        ? `Volunteer candidate ${index + 1}`
+                        : candidate.label,
                 rank: index + 1,
             }));
         return {
@@ -1476,10 +1527,7 @@ export class CoordinationService {
             details: { requestUri: offer.request_uri },
             now,
         });
-        for (const recipientDid of [
-            offer.requester_did,
-            offer.offerer_did,
-        ]) {
+        for (const recipientDid of [offer.requester_did, offer.offerer_did]) {
             await this.addInboxItem(client, {
                 recipientDid,
                 type: 'expiry',
@@ -1649,19 +1697,18 @@ export class CoordinationService {
         return {
             id: row.offer_id,
             requestUri: row.request_uri,
-            direction:
-                actorDid === row.requester_did ? 'received' : 'sent',
+            direction: actorDid === row.requester_did ? 'received' : 'sent',
             note: row.note,
             status: row.status,
             offeredAt: iso(row.offered_at),
             expiresAt: iso(row.expires_at),
             decidedAt: iso(row.decided_at),
-            ...(identityAuthorized ?
-                {
-                    requesterDid: row.requester_did,
-                    helperDid: row.offerer_did,
-                }
-            :   {}),
+            ...(identityAuthorized
+                ? {
+                      requesterDid: row.requester_did,
+                      helperDid: row.offerer_did,
+                  }
+                : {}),
         };
     }
 
@@ -1674,9 +1721,9 @@ export class CoordinationService {
             requesterDid: row.requester_did,
             helperDid: row.helper_did,
             counterpartDid:
-                actorDid === row.requester_did ?
-                    row.helper_did
-                :   row.requester_did,
+                actorDid === row.requester_did
+                    ? row.helper_did
+                    : row.requester_did,
             acceptedAt: iso(row.accepted_at),
             completedAt: iso(row.completed_at),
             updatedAt: iso(row.updated_at),

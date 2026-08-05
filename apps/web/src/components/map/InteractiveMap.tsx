@@ -14,6 +14,7 @@ import {
     type ResourceDirectoryCard,
 } from '../../resource-directory-ux.js';
 import { resolveMapTileUrl } from '../../config.js';
+import { useLocale } from '../../i18n';
 
 export interface InteractiveMapProps {
     cards: readonly MapAidCard[];
@@ -39,9 +40,11 @@ const readCircleStyle = (): CircleStyle => {
     if (typeof window === 'undefined') return 'filled';
     try {
         const stored = window.localStorage.getItem(circleStyleStorageKey);
-        return stored === 'outline' || stored === 'contrast' || stored === 'filled' ?
-                stored
-            :   'filled';
+        return stored === 'outline' ||
+            stored === 'contrast' ||
+            stored === 'filled'
+            ? stored
+            : 'filled';
     } catch {
         return 'filled';
     }
@@ -64,13 +67,15 @@ export const InteractiveMap = ({
     focusedArea,
     onTilesFailed,
 }: InteractiveMapProps) => {
+    const { t } = useLocale();
     const mapRef = useRef<HTMLDivElement | null>(null);
     const mapInstance = useRef<L.Map | null>(null);
     const onTilesFailedRef = useRef(onTilesFailed);
     const onSelectPostIdRef = useRef(onSelectPostId);
     const onFocusAreaRef = useRef(onFocusArea);
     const [zoom, setZoom] = useState(9);
-    const [circleStyle, setCircleStyle] = useState<CircleStyle>(readCircleStyle);
+    const [circleStyle, setCircleStyle] =
+        useState<CircleStyle>(readCircleStyle);
     const mapId = useId();
     const instructionsId = `map-instructions-${mapId.replace(/:/g, '')}`;
 
@@ -93,7 +98,12 @@ export const InteractiveMap = ({
     }, [onFocusArea]);
 
     const markers = useMemo(
-        () => cards.map(toApproximateMapMarker).filter((value): value is NonNullable<typeof value> => Boolean(value)),
+        () =>
+            cards
+                .map(toApproximateMapMarker)
+                .filter((value): value is NonNullable<typeof value> =>
+                    Boolean(value),
+                ),
         [cards],
     );
     const clusters = useMemo(
@@ -105,12 +115,17 @@ export const InteractiveMap = ({
         [cards, center.lat, zoom],
     );
     const clusteredPostIds = useMemo(
-        () => new Set(clusters.filter(cluster => cluster.count > 1).flatMap(cluster => cluster.postIds)),
+        () =>
+            new Set(
+                clusters
+                    .filter((cluster) => cluster.count > 1)
+                    .flatMap((cluster) => cluster.postIds),
+            ),
         [clusters],
     );
     const exactPlaces = useMemo(
         () =>
-            resources.flatMap(resource => {
+            resources.flatMap((resource) => {
                 const exact = currentExactPublicAddress(resource);
                 if (!exact) {
                     return [];
@@ -137,7 +152,9 @@ export const InteractiveMap = ({
             maxDataZoom: 10,
         });
         layer.on('tileerror', (event: unknown) => {
-            onTilesFailedRef.current(`Tile layer failed to load${event ? '.' : ''}`);
+            onTilesFailedRef.current(
+                `Tile layer failed to load${event ? '.' : ''}`,
+            );
         });
         layer.addTo(map);
         L.control.attribution({ prefix: false }).addTo(map);
@@ -152,7 +169,10 @@ export const InteractiveMap = ({
 
     useEffect(() => {
         if (!mapInstance.current) return;
-        mapInstance.current.setView([center.lat, center.lng], mapInstance.current.getZoom());
+        mapInstance.current.setView(
+            [center.lat, center.lng],
+            mapInstance.current.getZoom(),
+        );
     }, [center.lat, center.lng]);
 
     useEffect(() => {
@@ -164,23 +184,21 @@ export const InteractiveMap = ({
             const circle = L.circle([cluster.lat, cluster.lng], {
                 radius: cluster.radiusMeters,
                 className:
-                    (selectedPostId && cluster.postIds.includes(selectedPostId)) ||
+                    (selectedPostId &&
+                        cluster.postIds.includes(selectedPostId)) ||
                     (focusedArea &&
                         sameCenter(focusedArea.center, {
                             lat: cluster.lat,
                             lng: cluster.lng,
-                        })) ?
-                        'mh-map-cluster is-selected'
-                    :   'mh-map-cluster',
+                        }))
+                        ? 'mh-map-cluster is-selected'
+                        : 'mh-map-cluster',
             }).addTo(map);
-            circle.bindTooltip(
-                `${cluster.count} · U${cluster.urgencyMax}`,
-                {
-                    permanent: true,
-                    direction: 'center',
-                    className: 'mh-map-circle-label mh-map-cluster-label',
-                },
-            );
+            circle.bindTooltip(`${cluster.count} · U${cluster.urgencyMax}`, {
+                permanent: true,
+                direction: 'center',
+                className: 'mh-map-circle-label mh-map-cluster-label',
+            });
             circle.on('click', () => {
                 const nextZoom = clusterExpansionZoom(
                     cards,
@@ -188,10 +206,7 @@ export const InteractiveMap = ({
                     map.getZoom(),
                     cluster.lat,
                 );
-                map.setView(
-                    [cluster.lat, cluster.lng],
-                    nextZoom,
-                );
+                map.setView([cluster.lat, cluster.lng], nextZoom);
                 onFocusAreaRef.current?.({
                     center: { lat: cluster.lat, lng: cluster.lng },
                     radiusMeters: Math.ceil(cluster.radiusMeters),
@@ -204,7 +219,10 @@ export const InteractiveMap = ({
             if (!marker || clusteredPostIds.has(marker.id)) continue;
             const circle = L.circle([marker.lat, marker.lng], {
                 radius: marker.radiusMeters,
-                className: marker.id === selectedPostId ? 'mh-map-circle is-selected' : 'mh-map-circle',
+                className:
+                    marker.id === selectedPostId
+                        ? 'mh-map-circle is-selected'
+                        : 'mh-map-circle',
             }).addTo(map);
             circle.bindTooltip(`${marker.label} · U${marker.urgency}`, {
                 permanent: true,
@@ -230,9 +248,9 @@ export const InteractiveMap = ({
                     sameCenter(focusedArea.center, {
                         lat: exact.latitude,
                         lng: exact.longitude,
-                    }) ?
-                        'mh-map-place is-selected'
-                    :   'mh-map-place',
+                    })
+                        ? 'mh-map-place is-selected'
+                        : 'mh-map-place',
             }).addTo(map);
             marker.bindTooltip(
                 `${resource.name} · ${resource.openHours ?? 'hours unavailable'}`,
@@ -252,24 +270,34 @@ export const InteractiveMap = ({
             });
             layers.push(marker);
         }
-        return () => layers.forEach(layer => layer.remove());
-    }, [cards, clusteredPostIds, clusters, exactPlaces, focusedArea, markers, selectedPostId]);
+        return () => layers.forEach((layer) => layer.remove());
+    }, [
+        cards,
+        clusteredPostIds,
+        clusters,
+        exactPlaces,
+        focusedArea,
+        markers,
+        selectedPostId,
+    ]);
 
     const hasItems =
         markers.length > 0 || clusters.length > 0 || exactPlaces.length > 0;
 
     return (
         <div className={`mh-map-container mh-map-style-${circleStyle}`}>
-            <fieldset className="mh-map-style-control">
-                <legend>Circle style</legend>
-                {([
-                    ['filled', 'Filled'],
-                    ['outline', 'Outline'],
-                    ['contrast', 'High contrast'],
-                ] as const).map(([value, label]) => (
+            <fieldset className='mh-map-style-control'>
+                <legend>{t('map.circleStyle')}</legend>
+                {(
+                    [
+                        ['filled', t('map.filled')],
+                        ['outline', t('map.outline')],
+                        ['contrast', t('map.highContrast')],
+                    ] as const
+                ).map(([value, label]) => (
                     <label key={value}>
                         <input
-                            type="radio"
+                            type='radio'
                             name={`circle-style-${mapId}`}
                             value={value}
                             checked={circleStyle === value}
@@ -291,58 +319,48 @@ export const InteractiveMap = ({
                 ))}
             </fieldset>
             {!hasItems && (
-                <p id={instructionsId} className="mh-map-empty-message">
-                    No aid requests or approved public places in the current
-                    area. Try widening the search radius or clearing filters.
+                <p id={instructionsId} className='mh-map-empty-message'>
+                    {t('map.emptyInteractive')}
                 </p>
             )}
             {hasItems && (
-                <p id={instructionsId} className="mh-map-instructions">
-                    Click a circle to center and filter to its area. Use arrow
-                    keys to pan and plus/minus to zoom. Use the request list
-                    below for keyboard-accessible selection.
+                <p id={instructionsId} className='mh-map-instructions'>
+                    {t('map.instructions')}
                 </p>
             )}
             <div
                 ref={mapRef}
-                className="mh-interactive-map"
-                role="region"
-                aria-label="Interactive aid map showing approximate request locations"
+                className='mh-interactive-map'
+                role='region'
+                aria-label={t('map.interactiveLabel')}
                 aria-describedby={instructionsId}
                 tabIndex={0}
-                onKeyDown={event => {
+                onKeyDown={(event) => {
                     if (event.key === 'Escape') {
                         onSelectPostIdRef.current(undefined);
                     }
                 }}
             />
-            <div className="mh-map-legend">
-                <div className="mh-map-legend-item">
+            <div className='mh-map-legend'>
+                <div className='mh-map-legend-item'>
                     <span
-                        className="mh-map-legend-circle mh-map-legend-aid"
-                        aria-hidden="true"
+                        className='mh-map-legend-circle mh-map-legend-aid'
+                        aria-hidden='true'
                     />
-                    <span>Single request (approximate area)</span>
+                    <span>{t('map.singleRequest')}</span>
                 </div>
-                <div className="mh-map-legend-item">
+                <div className='mh-map-legend-item'>
                     <span
-                        className="mh-map-legend-circle mh-map-legend-cluster"
-                        aria-hidden="true"
+                        className='mh-map-legend-circle mh-map-legend-cluster'
+                        aria-hidden='true'
                     />
-                    <span>Multiple requests cluster</span>
+                    <span>{t('map.cluster')}</span>
                 </div>
-                <div className="mh-map-legend-item">
-                    <span
-                        className="mh-map-legend-place"
-                        aria-hidden="true"
-                    />
-                    <span>Approved public place (exact)</span>
+                <div className='mh-map-legend-item'>
+                    <span className='mh-map-legend-place' aria-hidden='true' />
+                    <span>{t('map.publicPlace')}</span>
                 </div>
-                <div className="mh-map-legend-note">
-                    Request centers are displaced within approximate areas
-                    (≥1km). Exact points are approved public resource addresses
-                    only. Cluster labels show count · maximum urgency.
-                </div>
+                <div className='mh-map-legend-note'>{t('map.legendNote')}</div>
             </div>
         </div>
     );

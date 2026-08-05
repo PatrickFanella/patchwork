@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from 'react';
 import type { VerificationTier } from '@patchwork/shared';
+import { useLocale } from '../i18n';
 
 // ---------------------------------------------------------------------------
 // Base Badge
@@ -44,13 +45,21 @@ export const Badge = ({
 
 const TIER_BADGE_CONFIG: Record<
     VerificationTier,
-    { label: string; tone: NonNullable<BadgeProps['tone']>; icon: string }
+    { labelKey: string; tone: NonNullable<BadgeProps['tone']>; icon: string }
 > = {
-    unverified: { label: 'Unverified', tone: 'neutral', icon: '\u25CB' }, // circle outline
-    basic: { label: 'Basic', tone: 'default', icon: '\u25CF' }, // filled circle
-    verified: { label: 'Verified', tone: 'info', icon: '\u2713' }, // check mark
-    trusted: { label: 'Trusted', tone: 'success', icon: '\u2605' }, // star
-    org_verified: { label: 'Org Verified', tone: 'success', icon: '\u2606\u2713' }, // star + check
+    unverified: {
+        labelKey: 'shared.unverified',
+        tone: 'neutral',
+        icon: '\u25CB',
+    },
+    basic: { labelKey: 'shared.basic', tone: 'default', icon: '\u25CF' },
+    verified: { labelKey: 'shared.verified', tone: 'info', icon: '\u2713' },
+    trusted: { labelKey: 'shared.trusted', tone: 'success', icon: '\u2605' },
+    org_verified: {
+        labelKey: 'shared.orgVerified',
+        tone: 'success',
+        icon: '\u2606\u2713',
+    },
 };
 
 interface VerificationBadgeProps {
@@ -66,40 +75,45 @@ export const VerificationBadge = ({
     expiryWarning = false,
     expired = false,
 }: VerificationBadgeProps) => {
+    const { t } = useLocale();
     const config = TIER_BADGE_CONFIG[tier];
+    const label = t(config.labelKey);
 
     if (expired) {
         return (
             <span
-                role="status"
-                aria-label={`Verification expired (was ${config.label})`}
+                role='status'
+                aria-label={t('shared.verificationExpired', { tier: label })}
                 className={[
                     'inline-flex min-w-0 max-w-full items-center gap-1 break-all whitespace-normal rounded-full border border-mh-border px-2.5 py-1 text-xs font-semibold tracking-[0.01em]',
                     toneMap.danger,
                 ].join(' ')}
             >
-                <span aria-hidden="true">{'\u26A0'}</span>
-                {config.label} (expired)
+                <span aria-hidden='true'>{'\u26A0'}</span>
+                {label} ({t('shared.expired')})
             </span>
         );
     }
 
     return (
         <span
-            role="status"
-            aria-label={`Verification tier: ${config.label}${expiryWarning ? ' (renewal needed soon)' : ''}`}
+            role='status'
+            aria-label={t('shared.verificationTier', {
+                tier: label,
+                warning: expiryWarning ? t('shared.renewWarning') : '',
+            })}
             className={[
                 'inline-flex min-w-0 max-w-full items-center gap-1 break-all whitespace-normal rounded-full border border-mh-border px-2.5 py-1 text-xs font-semibold tracking-[0.01em]',
                 toneMap[config.tone],
             ].join(' ')}
         >
-            <span aria-hidden="true">{config.icon}</span>
-            {config.label}
+            <span aria-hidden='true'>{config.icon}</span>
+            {label}
             {expiryWarning && (
                 <span
-                    aria-hidden="true"
-                    className="ml-1 text-yellow-500"
-                    title="Renewal needed soon"
+                    aria-hidden='true'
+                    className='ml-1 text-yellow-500'
+                    title={t('shared.renewSoon')}
                 >
                     {'\u23F0'}
                 </span>

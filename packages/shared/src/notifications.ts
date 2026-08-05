@@ -38,6 +38,18 @@ export const NOTIFICATION_TYPES = [
     'shift_conflict',
     'shift_no_show',
     'system_announcement',
+    'schedule_proposed',
+    'schedule_changed',
+    'schedule_confirmed',
+    'schedule_declined',
+    'schedule_cancelled',
+    'schedule_reminder',
+    'schedule_expired',
+    'group_invited',
+    'group_joined',
+    'group_removed',
+    'group_role_changed',
+    'group_closed',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -156,7 +168,7 @@ export const createDefaultPreferences = (
     now?: string,
 ): UserNotificationPreferences => ({
     userDid,
-    channels: DEFAULT_CHANNEL_PREFERENCES.map(c => ({ ...c })),
+    channels: DEFAULT_CHANNEL_PREFERENCES.map((c) => ({ ...c })),
     globalMute: false,
     updatedAt: now ?? new Date().toISOString(),
 });
@@ -205,7 +217,9 @@ export const computeRetryDelay = (
     policy: RetryPolicy = DEFAULT_RETRY_POLICY,
 ): number => {
     if (attemptNumber <= 0) return 0;
-    return policy.backoffMs * Math.pow(policy.backoffMultiplier, attemptNumber - 1);
+    return (
+        policy.backoffMs * Math.pow(policy.backoffMultiplier, attemptNumber - 1)
+    );
 };
 
 /**
@@ -256,15 +270,20 @@ export interface DeliveryReliabilityMetrics {
     totalSkipped: number;
     totalRetried: number;
     deliveryRate: number;
-    byChannel: Record<DeliveryChannel, {
-        sent: number;
-        delivered: number;
-        failed: number;
-    }>;
+    byChannel: Record<
+        DeliveryChannel,
+        {
+            sent: number;
+            delivered: number;
+            failed: number;
+        }
+    >;
     computedAt: string;
 }
 
-export const createEmptyMetrics = (now?: string): DeliveryReliabilityMetrics => ({
+export const createEmptyMetrics = (
+    now?: string,
+): DeliveryReliabilityMetrics => ({
     totalSent: 0,
     totalDelivered: 0,
     totalFailed: 0,

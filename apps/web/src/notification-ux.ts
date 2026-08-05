@@ -54,6 +54,18 @@ const TYPE_ICON_MAP: Record<NotificationType, string> = {
     shift_conflict: 'alert-triangle',
     shift_no_show: 'user-x',
     system_announcement: 'megaphone',
+    schedule_proposed: 'calendar-plus',
+    schedule_changed: 'calendar-clock',
+    schedule_confirmed: 'calendar-check',
+    schedule_declined: 'calendar-x',
+    schedule_cancelled: 'calendar-x',
+    schedule_reminder: 'clock',
+    schedule_expired: 'calendar-x',
+    group_invited: 'users',
+    group_joined: 'user-plus',
+    group_removed: 'user-x',
+    group_role_changed: 'shield',
+    group_closed: 'archive',
 };
 
 const TYPE_LABEL_MAP: Record<NotificationType, string> = {
@@ -84,9 +96,24 @@ const TYPE_LABEL_MAP: Record<NotificationType, string> = {
     shift_conflict: 'Schedule Conflict',
     shift_no_show: 'No-Show Alert',
     system_announcement: 'Announcement',
+    schedule_proposed: 'Schedule proposed',
+    schedule_changed: 'Schedule changed',
+    schedule_confirmed: 'Schedule confirmed',
+    schedule_declined: 'Schedule declined',
+    schedule_cancelled: 'Schedule cancelled',
+    schedule_reminder: 'Schedule reminder',
+    schedule_expired: 'Schedule expired',
+    group_invited: 'Group invitation',
+    group_joined: 'Group member joined',
+    group_removed: 'Group membership ended',
+    group_role_changed: 'Group role changed',
+    group_closed: 'Group closed',
 };
 
-const PRIORITY_BADGE_MAP: Record<NotificationPriority, { label: string; tone: 'neutral' | 'info' | 'danger' }> = {
+const PRIORITY_BADGE_MAP: Record<
+    NotificationPriority,
+    { label: string; tone: 'neutral' | 'info' | 'danger' }
+> = {
     low: { label: 'Low', tone: 'neutral' },
     normal: { label: 'Normal', tone: 'neutral' },
     high: { label: 'High', tone: 'info' },
@@ -111,7 +138,9 @@ export const formatNotificationTimeAgo = (timestamp: string): string => {
     return `${Math.floor(diffDays / 7)}w ago`;
 };
 
-export const toNotificationCard = (notification: Notification): NotificationCardViewModel => ({
+export const toNotificationCard = (
+    notification: Notification,
+): NotificationCardViewModel => ({
     id: notification.id,
     type: notification.type,
     typeIcon: TYPE_ICON_MAP[notification.type],
@@ -205,7 +234,7 @@ const CHANNEL_ICONS: Record<DeliveryChannel, string> = {
 export const toChannelPreferenceViewModels = (
     preferences: UserNotificationPreferences,
 ): ChannelPreferenceViewModel[] =>
-    preferences.channels.map(pref => ({
+    preferences.channels.map((pref) => ({
         channel: pref.channel,
         channelLabel: CHANNEL_LABELS[pref.channel],
         channelIcon: CHANNEL_ICONS[pref.channel],
@@ -236,9 +265,20 @@ export const toPreferencesPanel = (
 // ---------------------------------------------------------------------------
 
 export type NotificationCenterEvent =
-    | { type: 'load'; notifications: Notification[]; total: number; unread: number; filter: NotificationFilter; hasMore: boolean }
+    | {
+          type: 'load';
+          notifications: Notification[];
+          total: number;
+          unread: number;
+          filter: NotificationFilter;
+          hasMore: boolean;
+      }
     | { type: 'load-more-start' }
-    | { type: 'load-more-complete'; notifications: Notification[]; hasMore: boolean }
+    | {
+          type: 'load-more-complete';
+          notifications: Notification[];
+          hasMore: boolean;
+      }
     | { type: 'mark-read'; notificationId: string }
     | { type: 'mark-unread'; notificationId: string }
     | { type: 'mark-all-read' }
@@ -246,14 +286,15 @@ export type NotificationCenterEvent =
     | { type: 'filter-change'; filter: NotificationFilter }
     | { type: 'new-notification'; notification: Notification };
 
-export const defaultNotificationCenterState: Readonly<NotificationCenterViewModel> = Object.freeze({
-    cards: [],
-    countsBadge: { total: 0, unread: 0, label: '0', visible: false },
-    activeFilter: 'all' as NotificationFilter,
-    hasMore: false,
-    isEmpty: true,
-    loading: false,
-});
+export const defaultNotificationCenterState: Readonly<NotificationCenterViewModel> =
+    Object.freeze({
+        cards: [],
+        countsBadge: { total: 0, unread: 0, label: '0', visible: false },
+        activeFilter: 'all' as NotificationFilter,
+        hasMore: false,
+        isEmpty: true,
+        loading: false,
+    });
 
 export const reduceNotificationCenterState = (
     current: NotificationCenterViewModel,
@@ -287,14 +328,17 @@ export const reduceNotificationCenterState = (
         case 'mark-read':
             return {
                 ...current,
-                cards: current.cards.map(c =>
+                cards: current.cards.map((c) =>
                     c.id === event.notificationId ? { ...c, read: true } : c,
                 ),
                 countsBadge: {
                     ...current.countsBadge,
                     unread: Math.max(0, current.countsBadge.unread - 1),
                     label: (() => {
-                        const newUnread = Math.max(0, current.countsBadge.unread - 1);
+                        const newUnread = Math.max(
+                            0,
+                            current.countsBadge.unread - 1,
+                        );
                         return newUnread > 99 ? '99+' : String(newUnread);
                     })(),
                     visible: current.countsBadge.unread - 1 > 0,
@@ -304,7 +348,7 @@ export const reduceNotificationCenterState = (
         case 'mark-unread':
             return {
                 ...current,
-                cards: current.cards.map(c =>
+                cards: current.cards.map((c) =>
                     c.id === event.notificationId ? { ...c, read: false } : c,
                 ),
                 countsBadge: {
@@ -321,7 +365,7 @@ export const reduceNotificationCenterState = (
         case 'mark-all-read':
             return {
                 ...current,
-                cards: current.cards.map(c => ({ ...c, read: true })),
+                cards: current.cards.map((c) => ({ ...c, read: true })),
                 countsBadge: {
                     ...current.countsBadge,
                     unread: 0,
@@ -333,7 +377,9 @@ export const reduceNotificationCenterState = (
         case 'archive':
             return {
                 ...current,
-                cards: current.cards.filter(c => c.id !== event.notificationId),
+                cards: current.cards.filter(
+                    (c) => c.id !== event.notificationId,
+                ),
                 isEmpty: current.cards.length - 1 === 0,
             };
 

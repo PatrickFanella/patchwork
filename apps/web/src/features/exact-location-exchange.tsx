@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../components/Button';
+import { useLocale } from '../i18n';
 import {
     consentToExactLocationViaApi,
     fetchExactLocationSessionViaApi,
@@ -44,10 +45,9 @@ export const ExactLocationExchange = ({
 }: {
     connectionId: string;
 }) => {
+    const { t } = useLocale();
     const [phase, setPhase] = useState<ExchangePhase>('idle');
-    const [notice, setNotice] = useState(
-        'Both participants must start within two minutes.',
-    );
+    const [notice, setNotice] = useState(t('exactLocation.initial'));
     const [received, setReceived] = useState<TransientLocation | null>(null);
     const peerRef = useRef<RTCPeerConnection | null>(null);
     const channelRef = useRef<RTCDataChannel | null>(null);
@@ -139,12 +139,12 @@ export const ExactLocationExchange = ({
             channel.onopen = () => {
                 const proof = sessionRef.current?.participantProof;
                 if (!proof) {
-                    fail('Peer authentication could not start.');
+                    fail(t('exactLocation.peerAuthStart'));
                     return;
                 }
                 channel.send(JSON.stringify({ kind: 'auth', proof }));
             };
-            channel.onmessage = event => {
+            channel.onmessage = (event) => {
                 try {
                     if (
                         typeof event.data !== 'string' ||
@@ -166,9 +166,7 @@ export const ExactLocationExchange = ({
                         }
                         authenticatedRef.current = true;
                         setPhase('active');
-                        setNotice(
-                            'Encrypted peer channel active. Location is kept only in these two browser tabs.',
-                        );
+                        setNotice(t('exactLocation.active'));
                         return;
                     }
                     if (
@@ -183,24 +181,21 @@ export const ExactLocationExchange = ({
                         capturedAt: message.capturedAt,
                     });
                 } catch {
-                    fail(
-                        'The encrypted location channel received invalid data.',
-                    );
+                    fail(t('exactLocation.invalidData'));
                 }
             };
-            channel.onerror = () =>
-                fail('The encrypted location channel failed.');
+            channel.onerror = () => fail(t('exactLocation.channelFailed'));
             channel.onclose = () => {
                 if (authenticatedRef.current) {
                     clearBrowserState();
                     if (mountedRef.current) {
                         setPhase('stopped');
-                        setNotice('Location sharing stopped and was cleared.');
+                        setNotice(t('exactLocation.stopped'));
                     }
                 }
             };
         },
-        [clearBrowserState, fail],
+        [clearBrowserState, fail, t],
     );
 
     const flushCandidates = useCallback(async () => {
@@ -269,33 +264,32 @@ export const ExactLocationExchange = ({
                 const remaining =
                     new Date(session.expiresAt).getTime() - Date.now();
                 expiryRef.current = window.setTimeout(
-                    () => fail('Location session expired and was cleared.'),
+                    () => fail(t('exactLocation.expired')),
                     Math.max(0, remaining),
                 );
             }
             setPhase('connecting');
-            setNotice('Establishing an encrypted peer channel…');
+            setNotice(t('exactLocation.establishing'));
             const peer = new RTCPeerConnection({ iceServers: [] });
             peerRef.current = peer;
-            peer.onicecandidate = event => {
-                const operation =
-                    event.candidate ?
-                        postSignal({
-                            kind: 'candidate',
-                            payload: {
-                                candidate: event.candidate.candidate,
-                                sdpMid: event.candidate.sdpMid,
-                                sdpMLineIndex: event.candidate.sdpMLineIndex,
-                                usernameFragment:
-                                    event.candidate.usernameFragment,
-                            },
-                        })
-                    :   postSignal({
-                            kind: 'end-of-candidates',
-                            payload: {},
-                        });
+            peer.onicecandidate = (event) => {
+                const operation = event.candidate
+                    ? postSignal({
+                          kind: 'candidate',
+                          payload: {
+                              candidate: event.candidate.candidate,
+                              sdpMid: event.candidate.sdpMid,
+                              sdpMLineIndex: event.candidate.sdpMLineIndex,
+                              usernameFragment:
+                                  event.candidate.usernameFragment,
+                          },
+                      })
+                    : postSignal({
+                          kind: 'end-of-candidates',
+                          payload: {},
+                      });
                 void operation.catch(() =>
-                    fail('Connection signaling failed.'),
+                    fail(t('exactLocation.signalingFailed')),
                 );
             };
             peer.onconnectionstatechange = () => {
@@ -303,7 +297,7 @@ export const ExactLocationExchange = ({
                     peer.connectionState === 'failed' ||
                     peer.connectionState === 'disconnected'
                 ) {
-                    fail('The peer connection was interrupted.');
+                    fail(t('exactLocation.interrupted'));
                 }
             };
             if (session.role === 'offerer') {
@@ -319,11 +313,11 @@ export const ExactLocationExchange = ({
                     payload: { type: 'offer', sdp: offer.sdp ?? '' },
                 });
             } else {
-                peer.ondatachannel = event => wireChannel(event.channel);
+                peer.ondatachannel = (event) => wireChannel(event.channel);
             }
             configuringRef.current = false;
         },
-        [fail, postSignal, wireChannel],
+        [fail, postSignal, t, wireChannel],
     );
 
     const poll = useCallback(async () => {
@@ -332,18 +326,18 @@ export const ExactLocationExchange = ({
             lastSequenceRef.current,
         );
         if (!result.ok) {
-            fail(`Location sharing stopped: ${result.error}`);
+            fail(t('exactLocation.sharingStopped'));
             return;
         }
         const session = result.data.session;
         if (!session) {
             setPhase('waiting');
-            setNotice('Waiting for the other participant’s fresh consent…');
+            setNotice(t('exactLocation.waiting'));
         } else if (
             session.status === 'revoked' ||
             session.status === 'expired'
         ) {
-            fail(`Location session ${session.status}.`);
+            fail(t('exactLocation.sessionEnded'));
             return;
         } else {
             if (!sessionRef.current) {
@@ -362,46 +356,42 @@ export const ExactLocationExchange = ({
             pollingRef.current = window.setTimeout(
                 () =>
                     void poll().catch(() =>
-                        fail(
-                            'The encrypted peer channel could not be established.',
-                        ),
+                        fail(t('exactLocation.establishFailed')),
                     ),
                 500,
             );
         }
-    }, [configurePeer, connectionId, fail, processSignal]);
+    }, [configurePeer, connectionId, fail, processSignal, t]);
 
     const start = async () => {
         clearBrowserState();
         setPhase('consenting');
-        setNotice('Recording fresh location-sharing consent…');
+        setNotice(t('exactLocation.recording'));
         const result = await consentToExactLocationViaApi(connectionId);
         if (!result.ok) {
-            fail(`Location sharing could not start: ${result.error}`);
+            fail(t('exactLocation.startFailed'));
             return;
         }
         setPhase(result.data.session ? 'connecting' : 'waiting');
         setNotice(
-            result.data.session ?
-                'Establishing an encrypted peer channel…'
-            :   'Waiting for the other participant’s fresh consent…',
+            result.data.session
+                ? t('exactLocation.establishing')
+                : t('exactLocation.waiting'),
         );
         if (result.data.session) {
             await configurePeer(result.data.session).catch(() =>
-                fail('The encrypted peer channel could not be established.'),
+                fail(t('exactLocation.establishFailed')),
             );
         }
-        void poll().catch(() =>
-            fail('The encrypted peer channel could not be established.'),
-        );
+        void poll().catch(() => fail(t('exactLocation.establishFailed')));
     };
 
     const stop = useCallback(async () => {
         clearBrowserState();
         setPhase('stopped');
-        setNotice('Location sharing stopped and was cleared.');
+        setNotice(t('exactLocation.stopped'));
         await revokeExactLocationSessionViaApi(connectionId);
-    }, [clearBrowserState, connectionId]);
+    }, [clearBrowserState, connectionId, t]);
 
     const share = () => {
         const channel = channelRef.current;
@@ -410,11 +400,11 @@ export const ExactLocationExchange = ({
             !authenticatedRef.current ||
             channel?.readyState !== 'open'
         ) {
-            fail('The encrypted peer channel is not active.');
+            fail(t('exactLocation.inactive'));
             return;
         }
         navigator.geolocation.getCurrentPosition(
-            position => {
+            (position) => {
                 if (
                     !authenticatedRef.current ||
                     channel.readyState !== 'open'
@@ -429,11 +419,9 @@ export const ExactLocationExchange = ({
                         capturedAt: new Date().toISOString(),
                     }),
                 );
-                setNotice(
-                    'Current location sent directly to the connected browser.',
-                );
+                setNotice(t('exactLocation.sent'));
             },
-            () => fail('Location permission or acquisition failed.'),
+            () => fail(t('exactLocation.permissionFailed')),
             { enableHighAccuracy: true, maximumAge: 0, timeout: 10_000 },
         );
     };
@@ -459,11 +447,9 @@ export const ExactLocationExchange = ({
 
     return (
         <div className='mt-3 border-t border-mh-borderSoft pt-3'>
-            <h3 className='font-bold'>Private exact-location exchange</h3>
+            <h3 className='font-bold'>{t('exactLocation.heading')}</h3>
             <p className='mt-1 text-xs text-mh-textMuted'>
-                Exact coordinates travel only through an authenticated,
-                encrypted browser-to-browser channel. Patchwork does not save
-                them or provide a server fallback.
+                {t('exactLocation.description')}
             </p>
             <p
                 className='mt-2 text-sm'
@@ -472,32 +458,34 @@ export const ExactLocationExchange = ({
                 {notice}
             </p>
             <div className='mt-2 flex flex-wrap gap-2'>
-                {phase === 'idle' || phase === 'stopped' || phase === 'failed' ?
+                {phase === 'idle' ||
+                phase === 'stopped' ||
+                phase === 'failed' ? (
                     <Button onClick={() => void start()}>
-                        Start private location sharing
+                        {t('exactLocation.start')}
                     </Button>
-                :   null}
-                {phase === 'active' ?
-                    <Button onClick={share}>Share my current location</Button>
-                :   null}
-                {!['idle', 'stopped'].includes(phase) ?
+                ) : null}
+                {phase === 'active' ? (
+                    <Button onClick={share}>{t('exactLocation.share')}</Button>
+                ) : null}
+                {!['idle', 'stopped'].includes(phase) ? (
                     <Button variant='secondary' onClick={() => void stop()}>
-                        Stop and clear
+                        {t('exactLocation.stop')}
                     </Button>
-                :   null}
+                ) : null}
             </div>
-            {received ?
+            {received ? (
                 <div className='mt-3 rounded border border-mh-borderSoft p-3'>
-                    <p className='font-bold'>Location received in this tab</p>
+                    <p className='font-bold'>{t('exactLocation.received')}</p>
                     <p className='font-mono text-sm'>
                         {received.latitude.toFixed(6)},{' '}
                         {received.longitude.toFixed(6)}
                     </p>
                     <p className='text-xs text-mh-textMuted'>
-                        Cleared on stop, timeout, error, logout, or navigation.
+                        {t('exactLocation.cleared')}
                     </p>
                 </div>
-            :   null}
+            ) : null}
         </div>
     );
 };
