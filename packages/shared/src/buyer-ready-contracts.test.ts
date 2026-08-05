@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-    CHAT_PLACEHOLDER_CONTRACT,
-    chatPlaceholderContractSchema,
     exactLocationSignalSessionSchema,
     policyConsentSchema,
     publicLocationSchema,
@@ -189,11 +187,5 @@ describe('buyer-ready safety contracts', () => {
                 assignedAt: '2026-07-28T17:00:00.000Z',
             }).success,
         ).toBe(false);
-    });
-
-    it('defines chat as a truthful immutable placeholder', () => {
-        expect(
-            chatPlaceholderContractSchema.parse(CHAT_PLACEHOLDER_CONTRACT),
-        ).toEqual(CHAT_PLACEHOLDER_CONTRACT);
     });
 });

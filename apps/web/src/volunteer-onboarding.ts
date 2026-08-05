@@ -237,10 +237,10 @@ export const buildVolunteerProfileEditPayload = (
 
 export const toVolunteerOnboardingDraftFromRecord = (
     record: VolunteerProfileRecord,
-    options: { did?: string } = {},
+    options: { did: string },
 ): VolunteerOnboardingDraft => {
     return {
-        did: options.did ?? 'did:example:placeholder',
+        did: options.did,
         displayName: record.displayName,
         capabilities: [...record.capabilities],
         availability: record.availability,

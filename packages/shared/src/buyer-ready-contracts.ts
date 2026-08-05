@@ -179,23 +179,3 @@ export const policyConsentSchema = z
             .strict(),
     })
     .strict();
-
-export const chatPlaceholderContractSchema = z
-    .object({
-        route: z.literal('/chat'),
-        status: z.literal('not-available'),
-        canReadHistory: z.literal(false),
-        canMutate: z.literal(false),
-        message: z.literal(
-            'Chat is not available. Patchwork does not provide messaging.',
-        ),
-    })
-    .strict();
-
-export const CHAT_PLACEHOLDER_CONTRACT = Object.freeze({
-    route: '/chat',
-    status: 'not-available',
-    canReadHistory: false,
-    canMutate: false,
-    message: 'Chat is not available. Patchwork does not provide messaging.',
-} as const);

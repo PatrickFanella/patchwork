@@ -92,7 +92,9 @@ describe('phase 6 volunteer onboarding web ux', () => {
 
     it('summarizes checkpoint states and restores draft from record', () => {
         const payload = buildVolunteerProfileCreatePayload(baseDraft);
-        const draft = toVolunteerOnboardingDraftFromRecord(payload.record);
+        const draft = toVolunteerOnboardingDraftFromRecord(payload.record, {
+            did: baseDraft.did,
+        });
         const summary = summarizeCheckpoints(baseDraft.checkpoints);
 
         expect(draft.skills).toEqual(baseDraft.skills);
