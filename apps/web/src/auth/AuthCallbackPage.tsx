@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from './AuthProvider.js';
+import { sanitizeReturnTo } from './auth-api.js';
 
 const callbackErrorCode = (): string | null => {
     if (typeof window === 'undefined') return null;
@@ -22,15 +23,36 @@ const callbackMessage = (code: string): string => {
     return 'The AT Protocol login could not be completed.';
 };
 
-export const AuthCallbackPage = () => {
+const callbackReturnTo = (): string => {
+    if (typeof window === 'undefined') return '/';
+    const candidate = sanitizeReturnTo(
+        new URLSearchParams(window.location.search).get('returnTo') ?? '/',
+    );
+    return candidate.startsWith('/auth/callback') ? '/' : candidate;
+};
+
+export interface AuthCallbackPageProps {
+    navigate?: (returnTo: string) => void;
+}
+
+export const AuthCallbackPage = ({
+    navigate = returnTo => window.location.replace(returnTo),
+}: AuthCallbackPageProps = {}) => {
     const auth = useAuth();
     const errorCode = callbackErrorCode();
+    const [returnTo] = useState(callbackReturnTo);
 
     useEffect(() => {
         if (typeof window !== 'undefined' && window.location.search) {
             window.history.replaceState({}, '', '/auth/callback');
         }
     }, []);
+
+    useEffect(() => {
+        if (!errorCode && auth.status === 'authenticated' && auth.session) {
+            navigate(returnTo);
+        }
+    }, [auth.session, auth.status, errorCode, navigate, returnTo]);
 
     if (errorCode) {
         return (
@@ -108,15 +130,28 @@ export const AuthCallbackPage = () => {
                 >
                     {auth.status === 'expired' ?
                         'The session expired. Start a new login.'
+                    : auth.status === 'error' ?
+                        'Patchwork could not verify the new session.'
+                    : auth.status === 'authenticated' ?
+                        'Session verified. Continuing…'
                     :   'Checking your cookie-backed session…'}
                 </p>
-                {auth.status === 'expired' ?
-                    <a
-                        className='mh-link mt-5 inline-block font-bold'
-                        href='/login'
-                    >
-                        Sign in again
-                    </a>
+                {auth.status === 'expired' || auth.status === 'error' ?
+                    <div className='mt-5 flex flex-wrap gap-3'>
+                        <button
+                            type='button'
+                            className='mh-button mh-button--secondary px-4 py-2 font-bold'
+                            onClick={() => void auth.restore()}
+                        >
+                            Retry session check
+                        </button>
+                        <a
+                            className='mh-link inline-block py-2 font-bold'
+                            href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
+                        >
+                            Start a new login
+                        </a>
+                    </div>
                 :   null}
             </section>
         </main>

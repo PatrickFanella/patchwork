@@ -58,6 +58,12 @@ const decodeLoginAppState = (state: string | null): LoginAppState => {
     }
 };
 
+export const oauthCallbackLandingPath = (returnTo: string): string => {
+    const callback = new URL('/auth/callback', 'https://patchwork.invalid');
+    callback.searchParams.set('returnTo', safeReturnTo(returnTo));
+    return `${callback.pathname}${callback.search}`;
+};
+
 export const serializeSessionCookie = (
     token: string,
     secure: boolean,

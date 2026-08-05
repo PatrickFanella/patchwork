@@ -600,6 +600,48 @@ describe('AT authentication flow', () => {
         expect(unavailable).toContain('temporarily unavailable');
     });
 
+    it('verifies the callback cookie before navigating to the sanitized destination', async () => {
+        window.history.replaceState(
+            {},
+            '',
+            '/auth/callback?returnTo=%2Fmap%3Fr%3D3000%26code%3Dsecret',
+        );
+        globalThis.fetch = vi.fn(async () =>
+            new Response(
+                JSON.stringify({
+                    session: {
+                        did: 'did:plc:alice',
+                        expiresAt: '2099-07-12T12:00:00.000Z',
+                    },
+                }),
+                {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                },
+            ),
+        ) as typeof fetch;
+        const navigate = vi.fn();
+        const container = document.createElement('div');
+        const root = createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <AuthProvider>
+                    <AuthCallbackPage navigate={navigate} />
+                </AuthProvider>,
+            );
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+            '/api/auth/session',
+            expect.objectContaining({ credentials: 'include' }),
+        );
+        expect(navigate).toHaveBeenCalledWith('/map?r=3000');
+        expect(window.location.search).toBe('');
+        await act(async () => root.unmount());
+    });
+
     it('links from login to signup with a sanitized returnTo', () => {
         window.history.replaceState({}, '', '/login?returnTo=/feed?state=secret&token=secret');
         const html = renderToStaticMarkup(

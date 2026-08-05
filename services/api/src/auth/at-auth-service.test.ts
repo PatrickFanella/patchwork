@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { OAuthAdapter } from '@patchwork/at-client';
 import {
     AtAuthService,
+    oauthCallbackLandingPath,
     serializeSessionCookie,
 } from './at-auth-service.js';
 import type {
@@ -41,6 +42,20 @@ const browserSessions = (): BrowserSessionRepository => {
 };
 
 describe('AtAuthService', () => {
+    it('routes completed OAuth through a sanitized session-verification landing page', () => {
+        expect(oauthCallbackLandingPath('/map?r=3000')).toBe(
+            '/auth/callback?returnTo=%2Fmap%3Fr%3D3000',
+        );
+        expect(
+            oauthCallbackLandingPath(
+                '/map?code=secret&state=secret&r=3000',
+            ),
+        ).toBe('/auth/callback?returnTo=%2Fmap%3Fr%3D3000');
+        expect(oauthCallbackLandingPath('https://hostile.example')).toBe(
+            '/auth/callback?returnTo=%2F',
+        );
+    });
+
     it('starts OAuth without receiving a password', async () => {
         const oauth = oauthAdapter();
         const service = new AtAuthService(oauth, browserSessions());

@@ -20,7 +20,10 @@ import {
 } from './query-service.js';
 import { AtClientError } from '@patchwork/at-client';
 import { createAtAuthRuntime } from './auth/runtime.js';
-import { serializeSessionCookie } from './auth/at-auth-service.js';
+import {
+    oauthCallbackLandingPath,
+    serializeSessionCookie,
+} from './auth/at-auth-service.js';
 import { AidPostCommandService } from './records/aid-post-command-service.js';
 import { DirectoryResourceCommandService } from './records/directory-resource-command-service.js';
 import { VolunteerProfileCommandService } from './records/volunteer-profile-command-service.js';
@@ -963,9 +966,15 @@ const handleRealAuthRoute = (
                     requestUrl.searchParams,
                 );
                 const csrfToken = createCsrfToken();
+                console.info(
+                    JSON.stringify({
+                        level: 'info',
+                        event: 'oauth_callback_completed',
+                    }),
+                );
                 response.writeHead(302, {
                     location: new URL(
-                        result.returnTo,
+                        oauthCallbackLandingPath(result.returnTo),
                         config.API_PUBLIC_ORIGIN,
                     ).toString(),
                     'set-cookie': [
@@ -1031,6 +1040,16 @@ const handleRealAuthRoute = (
             response.end();
         } catch (error) {
             if (requestUrl.pathname === '/oauth/callback') {
+                console.warn(
+                    JSON.stringify({
+                        level: 'warn',
+                        event: 'oauth_callback_failed',
+                        code:
+                            error instanceof AtClientError ?
+                                error.code
+                            :   'AUTH_ERROR',
+                    }),
+                );
                 const callbackUrl = new URL(
                     '/auth/callback',
                     config.API_PUBLIC_ORIGIN,
