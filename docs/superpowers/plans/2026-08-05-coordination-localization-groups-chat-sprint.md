@@ -1,6 +1,6 @@
 # Coordination, localization, groups, and chat sprint
 
-Status: in progress
+Status: implementation verified; staging release in progress
 
 Date: 2026-08-05 (America/Chicago)
 

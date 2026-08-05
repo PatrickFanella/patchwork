@@ -54,9 +54,9 @@ implementations.
 | Synthetic data | Deterministic test fixtures exist | Persistent, realistic, labeled, provenance-aware US showcase data | Add origin model, safe source import, idempotent seeding, UI labels, cleanup separation |
 | No permanent address | Not a complete public profile option | First-class non-discriminatory option | Update schemas, matching, forms, discovery, and tests |
 | Attachments/account privacy | Account export/deactivation covers current alpha state | Cover files, profiles, org membership, verification, inbox, and notifications | Extend transactional deletion/export and backup-aware retention |
-| Chat | Fixture route/runtime remains in source; production UI defers it | Polished placeholder only | Remove production fixture construction and prevent any chat mutation/history claim |
+| Scheduling, groups, and chat | Durable PostgreSQL services and authenticated production UI are implemented | Retain bounded authorization, privacy, retention, and accessibility behavior | Protected staging repetition and independent security/privacy/translation review remain |
 | Accessibility | Strong automated local coverage; independent review recorded by owner as complete but evidence is not linked in repository | Regression coverage for every new critical flow | Link independent evidence when available and extend browser suite |
-| Legal/policy copy | Unapproved drafts contain stale 16+ and chat statements | 18+, no production chat, ephemeral location, synthetic-data and demo disclosures | Revise only after feature behavior is implemented and reviewable |
+| Legal/policy copy | Unapproved drafts describe 18+, server-readable bounded chat, ephemeral exact location, synthetic data, and retention | Formal approved policy set | Legal/product-owner approval remains external |
 
 ## Architectural decisions required by the target
 

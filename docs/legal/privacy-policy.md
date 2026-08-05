@@ -39,9 +39,12 @@ your data.
 - **Aid requests and offers** -- the content of requests and offers you post,
   including category, description, urgency, and status.
 - **Offers and coordination state** -- offers, accept/decline state,
-  connections, activity-inbox events, and structured outcome feedback.
-- **No production chat** -- Patchwork does not provide chat or store direct
-  message history. The Chat route is a non-mutating placeholder.
+  connections, scheduling windows, activity-inbox events, and structured
+  outcome feedback.
+- **Groups and chat** -- group membership, roles, rooms, invitation lifecycle,
+  and bounded message history for active authorized scopes. Message text is
+  readable by Patchwork's server and is not end-to-end encrypted. Conversation
+  lists and external notifications do not include message text.
 - **Private attachments** -- files you deliberately attach for an allowed
   verification or request purpose, plus scan, transformation, access, and
   deletion metadata. File bodies are held in private object storage, not in
@@ -93,8 +96,9 @@ Patchwork operates on the AT Protocol, which is a federated network. Public AT
 records you publish (aid requests, volunteer profiles, and directory
 resources) are available to other services on the AT Protocol network.
 Private offers, connections, evidence, and attachments are not published as
-AT records. Federated data is subject to the privacy policies of receiving
-services.
+AT records. Group state, schedules, and chat messages also remain private
+PostgreSQL state rather than AT records. Federated data is subject to the
+privacy policies of receiving services.
 
 ### 4.2 Moderator Access
 
@@ -130,7 +134,10 @@ this policy:
 | --------------------- | -------------------------------------------- |
 | Patchwork account/session data | Until deactivation; a hash-only suppression marker remains while the account is deactivated |
 | Patchwork aid-post projections and workflows | Until deletion or account deactivation |
-| Offers, connections, inbox items, and outcomes | Until deletion, policy expiry, or account deactivation, subject to bounded safety retention |
+| Offers, connections, schedules, inbox items, and outcomes | Until deletion, policy expiry, or account deactivation, subject to bounded safety retention |
+| Groups, memberships, rooms, and invitations | Until departure, removal, closure, invitation expiry, account deactivation, or the applicable bounded retention deadline |
+| Chat messages and conversation state | Up to 365 days; sender redaction is available for 24 hours and deactivation redacts authored text |
+| Chat abuse-report evidence | Digest, character count, identifiers, and timestamps only; 30 days, with no stored message body in the evidence record |
 | Private attachments | Until content deletion, account deactivation, purpose expiry, or moderator removal |
 | Notifications and delivery records | Until archive, channel cleanup, policy expiry, or account deactivation |
 | Verification evidence metadata | Through the decision/appeal period and bounded policy retention; file bodies follow attachment deletion |

@@ -83,8 +83,14 @@ grant Patchwork a limited, non-exclusive, royalty-free license to display,
 distribute, and store your content solely for the purpose of operating the
 platform.
 
-Patchwork does not currently provide production chat or direct messaging.
-Activity inbox items describe workflow events; they are not messages.
+Patchwork provides bounded private text chat only for active accepted
+connections and current authorized group-room members. Messages are readable
+by Patchwork's server, are not end-to-end encrypted, and may be retained for up
+to 365 days. Access ends when the underlying connection, request, membership,
+room, group, block, account, or moderation state no longer permits it. Do not
+use chat for emergencies, credentials, financial details, or exact personal
+locations. Activity inbox items and external notifications do not contain
+message text.
 
 ### 6.2 Synthetic and public-source showcase content
 

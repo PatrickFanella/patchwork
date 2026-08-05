@@ -1,6 +1,6 @@
 # Patchwork domain map
 
-Updated: 2026-07-28
+Updated: 2026-08-05
 
 ADR 0003 is the data-placement authority. The
 [current-state matrix](./current-state-matrix.md) records demonstrated
@@ -15,6 +15,9 @@ maturity; this map does not imply operational launch approval.
 | Ingestion and discovery | Repository authority observed through Jetstream; rebuildable PostgreSQL projections | Indexer writes, API reads | Anonymous map/feed/directory/volunteer queries with projection freshness and authenticated block filtering |
 | Organizations and verification | PostgreSQL | API | Membership/stewardship, private evidence metadata, annual decisions/appeals, and separate exact-public-address approval |
 | Private request coordination | PostgreSQL | API | Lifecycle, advisory matching, offers, connections, activity inbox, and outcomes; participant identity stays private until authorized |
+| Connection scheduling | PostgreSQL | API | Versioned UTC windows plus originating IANA timezone for active accepted-connection participants; no location field |
+| Groups | PostgreSQL | API | Role-controlled memberships and rooms with hashed, expiring, single-use invitations and optional request-intersection authorization |
+| Bounded text chat | PostgreSQL | API | Server-readable text for active accepted connections or current room members; no body in URLs, list previews, notifications, audits, or moderation history |
 | Exact personal location | Browser memory and an authenticated encrypted WebRTC peer channel | Web peers; API authorizes short-lived signaling | Fresh mutual consent on an active connection; coordinates never enter signaling, PostgreSQL, AT records, exports, notifications, logs, or backups |
 | Attachments | Private S3-compatible object store for bytes; PostgreSQL for metadata/jobs | API and attachment workers | Authenticated purpose/ownership, type detection, 10 MB limit, malware scanning, transforms, clean-only short-lived access, and deletion reconciliation |
 | Notifications | PostgreSQL durable outbox and delivery attempts | API/notification worker | In-app center plus opted-in email and browser push; private payload fields are forbidden |
@@ -45,8 +48,9 @@ flowchart LR
    to the owner's PDS.
 3. The indexer validates repository events and transactionally updates
    approximate discovery projections and its cursor.
-4. Private workflow, organization, verification, attachment, notification,
-   moderation, and maintenance state remains in PostgreSQL/object storage.
+4. Private workflow, scheduling, group, chat, organization, verification,
+   attachment, notification, moderation, and maintenance state remains in
+   PostgreSQL/object storage.
 5. Exact personal coordinates can move only between freshly authorized peer
    browsers and disappear when the exchange closes.
 
@@ -77,7 +81,7 @@ flowchart TD
 
 ## Deliberately deferred contexts
 
-Production chat, offline mutation synchronization/PWA, native mobile,
-multi-region tenancy, external partner connectors, groups, scheduling, and
-reputation are outside this roadmap. The production Chat route is a truthful
-non-mutating placeholder.
+Offline mutation synchronization/PWA, native mobile, multi-region tenancy,
+external partner connectors, and reputation remain outside this roadmap.
+Scheduling, groups, and bounded text chat now have durable production paths;
+that feature completion does not change the operational `NO-GO`.

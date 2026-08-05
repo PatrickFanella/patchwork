@@ -4,7 +4,8 @@ Updated: 2026-07-28
 
 This is a reader-facing map of the implemented HTTP surface. Executable
 validation remains in shared schemas, handler tests, and the service code.
-The API advertises no production chat route.
+The API advertises bounded production scheduling, group, and chat routes; the
+legacy fixture `/chat/initiate` route remains absent.
 
 ## Common boundaries
 
@@ -66,6 +67,9 @@ exact-address approval are never accepted from these records.
 | Verification | `/verification/mine`, applications, appeals, moderator decisions, exact-address request/review/decision |
 | Attachments | `GET /attachments`, upload authorization, access, review, delete |
 | Coordination | `/coordination/mine`, offers, offer decisions, connections, matches |
+| Scheduling | `/coordination/windows`, `/coordination/window-decisions` |
+| Groups | `/groups`, invitation/response/revocation, member/role/departure/ownership/closure, room/room-closure routes |
+| Bounded chat | `/chat/conversations`, `/chat/messages`, `/chat/read`, `/chat/messages/redactions`, `/chat/reports` |
 | Activity/outcomes | `/inbox`, `/inbox/read`, `/outcomes`, `/outcomes/mine` |
 | Notifications | `/notifications`, read/read-all/archive, email confirmation, push subscription/revocation |
 | Exact exchange | `/location/session`, `/location/consent`, `/location/signal`, `/location/revoke` |
@@ -82,7 +86,9 @@ material only. Exact latitude/longitude is never an accepted server field.
   `POST /maintenance/resume` require `maintenance_mode:manage`; resume is
   audited and cannot override an environment shutdown.
 
-## Explicit absence
+## Explicit absence and payload boundary
 
-`/chat/initiate`, `/chat/messages`, and any equivalent production mutation are
-not registered or advertised. `/chat` is a web-only, non-mutating placeholder.
+The legacy fixture `/chat/initiate` route is not registered or advertised.
+Message bodies are accepted only in the authenticated JSON mutation for
+`POST /chat/messages`; they are forbidden from query strings, list previews,
+notifications, audit rows, metrics, and unrelated moderation history.

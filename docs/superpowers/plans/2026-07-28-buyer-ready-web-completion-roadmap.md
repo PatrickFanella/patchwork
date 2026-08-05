@@ -335,18 +335,19 @@ scheduling, complete English/Spanish localization, production-backed groups,
 and bounded production text chat. Implementation and acceptance details are in
 [`2026-08-05-coordination-localization-groups-chat-sprint.md`](./2026-08-05-coordination-localization-groups-chat-sprint.md).
 
-Connection scheduling is the first verified vertical slice. It replaces the
-production deferral with PostgreSQL-backed, authenticated, versioned proposals,
-responses, counter-proposals, confirmation, reminders, cancellation, expiry,
-export/deactivation handling, privacy-safe notification intent, and responsive
-bilingual UI. Groups and chat remain deferred until their durable slices pass
-the same gate. The operational `NO-GO` remains unchanged.
+Connection scheduling, groups, and bounded text chat have passed their focused
+durable slices. They use PostgreSQL-backed authenticated/idempotent routes,
+live authorization rechecks, export/deactivation/retention handling,
+privacy-safe notification intent, and responsive bilingual UI. Chat is
+explicitly server-readable rather than E2EE. Professional translation review,
+independent review, protected staging repetition, and the operational `NO-GO`
+remain unchanged.
 - Apply consistent demo/non-emergency disclosures.
 - Extend keyboard, screen-reader, reflow, text-size, and reduced-motion tests.
 
 ### 8.3 Align policy and product documentation
 
-- Update legal drafts to 18+, no production chat, synthetic-data disclosure,
+- Update legal drafts to 18+, server-readable bounded chat, synthetic-data disclosure,
   ephemeral exact location, approved exact public-resource addresses,
   attachment processing, and notification channels.
 - Link the independent accessibility review evidence supplied by the owner.
@@ -390,7 +391,7 @@ Add acceptance evidence for:
 - automated moderation, admin review, and maintenance mode;
 - synthetic/sourced/visitor data separation;
 - export and deactivation across every new subsystem;
-- chat placeholder with no production chat runtime.
+- durable scheduling, group, and bounded-chat restart/privacy journeys.
 
 ## Completion definition
 
@@ -398,7 +399,8 @@ The buyer-ready web feature program is complete only when:
 
 - every included charter capability has a real runtime path;
 - no included subsystem remains `fixture-runtime` or `contract-only`;
-- fixture chat is unreachable in production and the placeholder is truthful;
+- fixture group/chat mutations are unreachable from production and the durable
+  routes disclose their trust and retention boundaries truthfully;
 - the full authenticated and anonymous browser journeys pass against a
   production build;
 - the current-state matrix and legal/product copy match observed behavior;
