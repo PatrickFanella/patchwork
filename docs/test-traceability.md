@@ -181,8 +181,9 @@ deployment were external at the time of that recovery drill. Later on
 2026-07-28, four zero-HIGH/CRITICAL images were published to the NUC registry,
 verified against a scoped Cosign public key, deployed by exact digest, rolled
 back as a set, promoted forward, and accepted by the real two-account browser
-journey. Human acknowledgment, protected GHCR/OIDC execution, independent
-durability, and named ownership remain external.
+journey. Patrick Fanella is now the named interim home-staging primary on-call
+and escalation owner. Human acknowledgment, a distinct secondary responder,
+protected GHCR/OIDC execution, and independent durability remain external.
 
 ## Metrics-series integrity
 

@@ -119,5 +119,6 @@ images once, scan/sign/digest-pin, back up and validate restore, deploy through
 the immutable staging workflow, retain rollback, and verify migrations,
 readiness, health, revision labels, restarts, logs, public contracts, and live
 browser behavior. Protected provider delivery, independent security/privacy/
-accessibility/translation review, named ownership, credentialed external
-exercises, and the operational `NO-GO` remain external gates.
+accessibility/translation review, staffed secondary coverage, credentialed
+external exercises, and the operational `NO-GO` remain external gates. Patrick
+Fanella is the named interim home-staging primary on-call and escalation owner.

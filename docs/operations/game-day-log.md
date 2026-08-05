@@ -75,8 +75,24 @@ Copy the block below for each new game day exercise.
 
 ## Completed Exercises
 
-_No exercises have been completed yet. Record each exercise below as it
-is conducted._
+### Exercise: NUC staging indexer disconnect and recovery
+
+**Date**: 2026-07-28
+
+**Scenario**: Indexer event-source disconnect
+
+**Environment**: Home staging
+
+The local Patchwork Jetstream source was stopped at 18:12:54 UTC. The indexer
+remained healthy while publishing connection state `0`; the alert entered
+pending at 18:13:10, fired at 18:15:10 after its two-minute hold, and routed
+through Alertmanager to the configured ntfy receiver. Jetstream restarted at
+18:15:26, the indexer reconnected, and the alert resolved. Alertmanager
+reported zero webhook failures. Human receipt and acknowledgment were not
+observed, so alert-to-acknowledgment remains unmeasured.
+
+Canonical timing and recovery evidence is retained in
+[`evidence/phase-7/staging-readiness.md`](./evidence/phase-7/staging-readiness.md#indexer-disconnect-game-day).
 
 <!-- Paste completed exercise records here, most recent first. -->
 

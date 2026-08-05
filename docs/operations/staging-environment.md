@@ -102,16 +102,22 @@ Both must pass for `allowed: true`. See the `PromotionGateResult` type for detai
 
 ## Staging Ownership
 
-The entries below are role placeholders, not accepted assignments or working
-contact addresses. Replace them with named owners during the required staging
-approval; until then the ownership gate is unmet.
+The entries below record the accepted interim home-staging assignment effective
+2026-08-05. This resolves the unnamed-owner gap but does not provide a distinct
+secondary responder, a staffed rotation, or production-hours coverage.
 
 | Responsibility | Owner |
 |---------------|-------|
-| Environment health | INFRA team |
-| Primary on-call | Unassigned placeholder |
-| Escalation | Unassigned placeholder |
+| Environment health | Patrick Fanella |
+| Primary on-call | Patrick Fanella |
+| Escalation | Patrick Fanella |
 | Deployment pipeline | `ci.yml` deploy-staging job |
+
+Patrick Fanella may act as Incident Commander for home-staging incidents and
+is the first escalation point for alerts. Contact routing remains
+environment-private and must not be committed to this repository. A separate
+secondary owner and demonstrated alert acknowledgment are still required
+before public operation.
 
 ## Make Targets
 

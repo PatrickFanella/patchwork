@@ -12,21 +12,25 @@ ingestion, PostgreSQL projections, secured HTTP commands, and fail-closed
 production data paths. Its complete browser OAuth journey and real staging
 signed-digest deployment, rollback, restore, alert, and post-deploy browser
 exercises are proven on the NUC home-staging environment. Protected
-promotion, independent durability, formal review, production sizing, and named
-human ownership remain unproven. A five-minute mixed workload established a
+promotion, independent durability, formal review, production sizing, a
+distinct secondary responder, and sustained operational coverage remain
+unproven. A five-minute mixed workload established a
 bounded 40-RPS aggregate home-staging envelope; it is not a production
 capacity claim. The
 authoritative subsystem inventory is
 [`docs/architecture/current-state-matrix.md`](docs/architecture/current-state-matrix.md),
 and continuation work is sequenced by the
 [`2026-07-10 continuation roadmap`](docs/superpowers/plans/2026-07-10-patchwork-continuation-roadmap.md).
-The current launch decision is the
-[`2026-07-28 alpha go/no-go review`](docs/operations/evidence/phase-8/alpha-go-no-go.md).
+The current launch decision is the operational **NO-GO** recorded in the
+[`2026-08-05 coordination, localization, groups, and chat evidence`](docs/operations/evidence/coordination-localization-groups-chat-2026-08-05.md).
+The earlier
+[`2026-07-28 alpha go/no-go review`](docs/operations/evidence/phase-8/alpha-go-no-go.md)
+is retained as historical evidence.
 
 The approved feature-completion target is the
 [`buyer-ready web product charter`](docs/product/buyer-ready-web-charter.md),
 with its
-[`current gap assessment`](docs/product/buyer-ready-gap-assessment.md) and
+[`historical baseline gap assessment`](docs/product/buyer-ready-gap-assessment.md) and
 [`ordered completion roadmap`](docs/superpowers/plans/2026-07-28-buyer-ready-web-completion-roadmap.md).
 That product-development decision does not by itself authorize Patchwork to
 operate as a public mutual-aid service.
@@ -127,10 +131,12 @@ Authenticated AT repository commands are exposed separately:
 - `PUT /at/directory-resources`
 - `DELETE /at/directory-resources`
 
-The API runtime exposes no fixture-backed compatibility commands. Deferred chat,
-settings, organization, verification, inbox, feedback, reputation, and
-attachment prototypes are not server routes until they receive durable,
-authenticated implementations.
+The production API exposes no fixture-backed compatibility commands. Durable,
+authenticated routes now cover settings, organizations, verification, inbox,
+feedback, attachments, scheduling, groups, and bounded server-readable chat.
+Reputation remains an unwired experiment and is not a production route. The
+authoritative route inventory is
+[`docs/architecture/buyer-ready-api-contracts.md`](docs/architecture/buyer-ready-api-contracts.md).
 
 Recommended local flow:
 

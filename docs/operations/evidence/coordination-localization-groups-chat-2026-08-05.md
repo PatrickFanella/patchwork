@@ -48,7 +48,7 @@ or production-operations approval.
 | Focused chat browser | Passed duplicate-safe retry, read, redaction, reporting, body-free list presentation, honest trust copy, Spanish/offline draft behavior, and axe scan |
 | Production Chromium matrix | Clean final run passed 147 cases with one credentialed live-PDS case skipped (148 discovered); 9.2 minutes, serial Chromium against a fresh production bundle |
 | Dependency audit | `npm audit --omit=dev --audit-level=high`: 0 vulnerabilities |
-| Prometheus rules | Repository file passed `promtool` with 18 rules; staging loaded and reloaded the same 18-rule file successfully |
+| Prometheus rules | Repository file passed `promtool` with 18 rules; staging loaded and reloaded the same 18-rule file successfully. On-call cleanup added `owner="patchwork-primary-on-call"` to all 18 rules, revalidated them in the running Prometheus container, reloaded the exact repository checksum, and confirmed all 18 through the live rules API. |
 | Playwright artifact redaction | Passed; no retained failure artifacts were present after the clean focused runs |
 | Backup/restore tooling | An archive aimed at the wrong local PostgreSQL 16 database exposed the client/server mismatch risk and was quarantined. The script now rejects mismatched client/server majors. It correctly rejected PostgreSQL 16 tooling for the configured PostgreSQL 17 staging server. |
 | Staging backup/restore | Matching PostgreSQL 17 backup `patchwork_20260805_091609.dump` (312,971 bytes) passed checksum/archive validation and restored into isolated empty PostgreSQL 17 in 2 seconds with a 42-second recovery-point age, scheduling/group/chat tables present, and zero restored sessions. |
@@ -98,10 +98,31 @@ server-readable legal disclosure, English-to-Spanish switching, and the
 Spanish Groups auth gate. Prometheus loaded and reloaded all 18 repository
 rules. Release state retains `43deb5e9` as the immediate rollback manifest.
 
+## Post-release truthfulness and ownership cleanup
+
+Commit `9073901f` removed the obsolete exported “Chat is not available”
+contract, its self-validating test, the unused 928-line in-memory
+`GroupService`, and the volunteer draft's placeholder-DID fallback. The
+experimental group-coordination, reputation, mobile, multi-region, matching,
+and connector stubs remain intentionally available for future experiments and
+are not imported as production implementations. The authoritative matrix,
+README, historical gap/screenshot labels, game-day record, and operations
+documents now distinguish current behavior from dated evidence.
+
+The post-cleanup `npm run check` passed lint, typecheck, 1,017 runnable tests,
+map validation, and the 45-surface exact-location absence gate. The staging
+Prometheus file was backed up as
+`patchwork.yml.pre-owner-labels-20260805T1306Z`, then replaced with the exact
+repository checksum `e2f67e42a883e12168fff7d6cd76878b3ab967c49e8f3efe3ce29196bd3e4d4b`.
+Container-local `promtool` found 18 rules, reload/readiness passed, and the live
+rules API returned all 18 with `owner="patchwork-primary-on-call"`.
+
 ## Residual launch gates
 
 The operational decision remains **NO-GO**. Professional Spanish translation
 review; independent security, privacy, and WCAG/assistive-technology review;
-formal legal approval; named operational ownership; protected provider
-delivery; credentialed external exercises; independent backup durability; and
-production capacity/operations are not supplied by this sprint.
+formal legal approval; a distinct secondary responder and sustained operations
+coverage; protected provider delivery; credentialed external exercises;
+independent backup durability; and production capacity/operations are not
+supplied by this sprint. Patrick Fanella accepted the interim home-staging
+primary on-call and escalation-owner roles on 2026-08-05.

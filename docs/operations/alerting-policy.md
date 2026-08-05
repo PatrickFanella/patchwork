@@ -4,6 +4,12 @@ Patchwork's executable staging rules are
 [`monitoring/prometheus/patchwork-alerts.yml`](../../monitoring/prometheus/patchwork-alerts.yml).
 They are validated with `promtool check rules`; notification delivery and alert
 transitions must still be demonstrated on the authorized staging stack.
+Patrick Fanella is the named interim home-staging primary on-call and
+escalation owner. Every executable rule carries
+`owner="patchwork-primary-on-call"`; this alias resolves to Patrick in the
+staging ownership record while contact routing remains environment-private. A
+distinct secondary responder and a measured human acknowledgment drill remain
+open.
 
 | Alert | Severity | Condition | Response |
 | --- | --- | --- | --- |
@@ -18,6 +24,11 @@ transitions must still be demonstrated on the authorized staging stack.
 | `PatchworkBackupStale` | warning | no successful backup for 7.5 hours | Respond within 15 minutes |
 | `PatchworkRetentionFailed` | warning | latest API retention pass failed for 5 minutes | Respond within 15 minutes |
 | `PatchworkRetentionStale` | warning | no successful API retention pass for 2 hours | Respond within 15 minutes |
+| `PatchworkAttachmentDeletionFailed` | warning | one or more private-object deletion jobs are pending after failure | Respond within 15 minutes |
+| `PatchworkAttachmentPipelineSweepFailed` | warning | an attachment pipeline sweep failed during the last 15 minutes | Respond within 15 minutes |
+| `PatchworkNotificationDeadLetter` | warning | one or more notification deliveries reached dead-letter state | Respond within 15 minutes |
+| `PatchworkNotificationDeliveryStale` | warning | the oldest pending notification delivery exceeds 15 minutes | Respond within 15 minutes |
+| `PatchworkNotificationSweepFailed` | warning | a notification delivery sweep failed during the last 15 minutes | Respond within 15 minutes |
 | `PatchworkModerationRetentionFailed` | warning | latest moderation retention pass failed for 5 minutes | Respond within 15 minutes |
 | `PatchworkModerationRetentionStale` | warning | no successful moderation retention pass for 2 hours | Respond within 15 minutes |
 

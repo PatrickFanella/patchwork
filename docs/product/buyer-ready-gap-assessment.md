@@ -1,6 +1,14 @@
-# Buyer-ready web gap assessment
+# Buyer-ready web gap assessment (historical baseline)
 
 Assessment date: 2026-07-28
+
+> **Historical snapshot.** This document preserves the gap analysis that
+> initiated the buyer-ready work and must not be used as current-state
+> authority. Many “current state” cells and contradictions below were resolved
+> by later vertical slices. Use the
+> [current-state matrix](../architecture/current-state-matrix.md) and the
+> [2026-08-05 sprint evidence](../operations/evidence/coordination-localization-groups-chat-2026-08-05.md)
+> for implemented behavior and remaining gates.
 
 Target:
 [`buyer-ready-web-charter.md`](./buyer-ready-web-charter.md)
@@ -74,7 +82,10 @@ The implementation must record focused ADR updates before affected code lands:
 - notification payloads are a derived private channel, never a store for
   sensitive workflow data.
 
-## Current contradictions to resolve
+## Contradictions identified at assessment time
+
+The statements below are preserved as historical inputs, not claims about the
+current runtime. Later evidence records their disposition.
 
 - `docs/legal/*` still describes a minimum age of 16; the charter requires 18.
 - The legal drafts describe messages/chat; the target provides only a chat

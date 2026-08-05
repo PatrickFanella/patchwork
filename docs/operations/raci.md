@@ -55,6 +55,13 @@ Legend: **R** = Responsible, **A** = Accountable, **C** = Consulted, **I** = Inf
 
 ## 3. On-Call Rotation
 
+### 3.0 Current interim home-staging assignment
+
+Effective 2026-08-05, **Patrick Fanella** is the named home-staging primary
+on-call, escalation owner, and default Incident Commander. This is a
+single-person interim assignment; it does not satisfy the secondary-responder
+or sustained-rotation model below and does not authorize public operation.
+
 ### 3.1 Structure
 
 Three on-call tracks run concurrently, each with a **primary** and a **secondary** responder:

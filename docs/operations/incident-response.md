@@ -23,8 +23,9 @@ the escalation ladder in the [RACI Matrix](raci.md).
 ### 2.1 Who Is the IC?
 
 The Incident Commander is activated for any **P1** or **P2** incident. By
-default, the on-call Infrastructure engineer assumes the IC role. Any senior
-engineer may assume the role if:
+default, the on-call Infrastructure engineer assumes the IC role. For the
+current home-staging environment, Patrick Fanella is the named primary on-call,
+escalation owner, and default IC. Any senior engineer may assume the role if:
 
 - The INFRA on-call is unavailable
 - The incident is primarily a trust-safety or product concern
