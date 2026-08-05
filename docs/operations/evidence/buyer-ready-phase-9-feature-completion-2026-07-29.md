@@ -5,6 +5,12 @@ Verified revision: `6025cb2d`
 Feature decision: **COMPLETE at the repository and configured-runtime boundary**  
 Operational decision: **NO-GO**
 
+> Superseding verification note (2026-08-04): the original completion decision
+> remains valid. Current counts, the post-roadmap product-gap fixes, and the
+> fresh acceptance rerun are recorded in
+> [`buyer-ready-product-gap-sprint-2026-08-04.md`](./buyer-ready-product-gap-sprint-2026-08-04.md).
+> Historical counts below describe the 2026-07-29 run.
+
 ## Conclusion
 
 Every capability included by the

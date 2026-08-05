@@ -2,6 +2,13 @@
 
 Date: 2026-07-28
 
+Execution status: **Complete at the repository/configured-runtime boundary.**
+The original Phase 9 acceptance is recorded in
+[`buyer-ready-phase-9-feature-completion-2026-07-29.md`](../../operations/evidence/buyer-ready-phase-9-feature-completion-2026-07-29.md).
+The 2026-08-04 product-gap sprint and fresh acceptance rerun are recorded in
+[`buyer-ready-product-gap-sprint-2026-08-04.md`](../../operations/evidence/buyer-ready-product-gap-sprint-2026-08-04.md).
+The operational launch decision remains **NO-GO**.
+
 Product authority:
 [`buyer-ready-web-charter.md`](../../product/buyer-ready-web-charter.md)
 

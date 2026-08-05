@@ -44,6 +44,17 @@ The live directory result set contained no approved exact public place, so that
 marker path is verified by focused component/contract tests rather than a claim
 that an exact marker was observed in live data.
 
+**Area-filter follow-up (2026-08-04):** Circle selection now creates a visible
+`Filtered to this area` state with bounded request/public-place counts and
+radius. The selected area is encoded in the URL and supports browser Back and
+Forward; users can clear it or return to the previous area without a page
+reload. Active circles and exact public-place points receive selected styling,
+and the filled/outline/high-contrast preference survives reload in non-sensitive
+local storage. Component tests and the production-bundle browser suite verify
+selection, history restoration, persistence, and clearing. This does not change
+the location authority boundary: area URLs use the already-public displaced aid
+center or an approved exact public-resource point.
+
 **Fixed decisions:**
 
 - US coverage only.
