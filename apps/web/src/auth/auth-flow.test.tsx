@@ -642,6 +642,49 @@ describe('AT authentication flow', () => {
         await act(async () => root.unmount());
     });
 
+    it('offers a new login when the callback has no verified session cookie', async () => {
+        window.history.replaceState(
+            {},
+            '',
+            '/auth/callback?returnTo=%2Fmap&code=sensitive-code',
+        );
+        globalThis.fetch = vi.fn(async () =>
+            new Response(
+                JSON.stringify({
+                    error: {
+                        code: 'AUTHENTICATION_REQUIRED',
+                        message: 'Authentication required.',
+                    },
+                }),
+                {
+                    status: 401,
+                    headers: { 'content-type': 'application/json' },
+                },
+            ),
+        ) as typeof fetch;
+        const container = document.createElement('div');
+        const root = createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <AuthProvider>
+                    <AuthCallbackPage />
+                </AuthProvider>,
+            );
+            await new Promise(resolve => setTimeout(resolve, 0));
+        });
+
+        expect(container.textContent).toContain(
+            'Patchwork could not find a verified session.',
+        );
+        expect(container.innerHTML).toContain(
+            'href="/login?returnTo=%2Fmap"',
+        );
+        expect(container.innerHTML).not.toContain('sensitive-code');
+        expect(window.location.search).toBe('');
+        await act(async () => root.unmount());
+    });
+
     it('links from login to signup with a sanitized returnTo', () => {
         window.history.replaceState({}, '', '/login?returnTo=/feed?state=secret&token=secret');
         const html = renderToStaticMarkup(

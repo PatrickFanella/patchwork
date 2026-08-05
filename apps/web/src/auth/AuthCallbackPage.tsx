@@ -41,6 +41,10 @@ export const AuthCallbackPage = ({
     const auth = useAuth();
     const errorCode = callbackErrorCode();
     const [returnTo] = useState(callbackReturnTo);
+    const sessionUnavailable =
+        auth.status === 'anonymous' ||
+        auth.status === 'expired' ||
+        auth.status === 'error';
 
     useEffect(() => {
         if (typeof window !== 'undefined' && window.location.search) {
@@ -128,7 +132,9 @@ export const AuthCallbackPage = ({
                     aria-live='polite'
                     className='mt-4 text-mh-textMuted'
                 >
-                    {auth.status === 'expired' ?
+                    {auth.status === 'anonymous' ?
+                        'Patchwork could not find a verified session. Start a new login.'
+                    : auth.status === 'expired' ?
                         'The session expired. Start a new login.'
                     : auth.status === 'error' ?
                         'Patchwork could not verify the new session.'
@@ -136,7 +142,7 @@ export const AuthCallbackPage = ({
                         'Session verified. Continuing…'
                     :   'Checking your cookie-backed session…'}
                 </p>
-                {auth.status === 'expired' || auth.status === 'error' ?
+                {sessionUnavailable ?
                     <div className='mt-5 flex flex-wrap gap-3'>
                         <button
                             type='button'
