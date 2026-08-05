@@ -1,7 +1,7 @@
 # Buyer-ready product-gap sprint completion
 
 Date: 2026-08-04 (America/Chicago)  
-Verified implementation through: `2611af4b`  
+Verified implementation through: `45e21906`
 Repository decision: **COMPLETE**  
 Operational decision: **NO-GO**
 
@@ -25,7 +25,7 @@ external gates.
 | Truthful production navigation | Scheduling, feedback, and groups are absent from production navigation. Direct visits remain fail-closed deferred pages without forms, fixture data, or mutation controls. Chat remains the intentional non-mutating placeholder. | `c8347748` |
 | Map interaction and privacy | Stable per-request displacement keeps a displayed aid-circle center from revealing the supplied approximate coordinate after the minimum-1km quantization. Clusters split progressively by zoom; labels show bounded area information; filled, outline, and high-contrast styles persist locally. Circle selection centers the map and creates an explicit URL-backed area filter with Back, Forward, clear, and return-to-previous behavior. Current moderator-approved public resources remain the only exact point-marker class. | `36905c0b` |
 | Outcome safety escalation | Submitting a safety-tagged outcome atomically writes the feedback, one high-priority moderation case, and one moderator notification. The review preview excludes the private comment, participant DIDs, and exact location, retaining only bounded outcome/rating context, a request hash, and connection reference. Duplicate feedback cannot create duplicate casework. | `aab44028` |
-| Dependency security | Patched the transitive ATProto/jsdom Undici lines to 6.28.0, 7.29.0, and 8.10.0 after the current audit feed disclosed a high-severity advisory. | `2611af4b` |
+| Dependency security | Patched the transitive ATProto/jsdom Undici lines to 6.28.0, 7.29.0, and 8.10.0 after the current audit feed disclosed a high-severity advisory. A fresh image scan then found two additional HIGH findings in npm's bundled toolchain; the image build now checksum-pins fixed `brace-expansion` 5.0.9 and `ip-address` 10.4.0 replacements. | `2611af4b`, `45e21906` |
 
 ## Fresh acceptance gate
 
@@ -92,7 +92,34 @@ production certification.
 
 ## Deployment evidence
 
-The exact signed-digest deployment and live checks for this sprint are recorded
-only after the release succeeds. Until that addendum exists, this document
-makes no claim that the repository result is the active staging revision.
+Immutable revision `45e21906d5638f13e4e46efa7646b4a31d7baa3e` is
+deployed on home staging. Before replacement, the release process published and
+validated `patchwork_20260805_042225.dump` with its checksum and metadata.
 
+All four exact-release images parse to zero HIGH/CRITICAL findings under Trivy
+0.59.1 and verify against the retained scoped Cosign public key. The signatures
+use the local home-registry key without Rekor transparency and are not claimed
+as protected GHCR/OIDC evidence. The digest manifest and scan/signature reports
+are retained under the `0600` release directory.
+
+Deployment replayed API 22, indexer 6, and moderation 5 migrations with no new
+migration required. API, indexer, moderation, and web containers report the
+exact revision, healthy status, zero restarts, and no error/fatal log lines.
+Public health, contracts, and `/map` return 200; anonymous `/api/auth/session`
+returns the intentional 401 `AUTHENTICATION_REQUIRED` contract; the
+content-addressed PMTiles range returns 206/1,024 bytes and the mutable path
+returns 404.
+
+A live Chromium pass rendered one map container, one labeled 100-request
+cluster, and repeated 206 PMTiles reads with no map alert. Production navigation
+contained none of Scheduling, Feedback, or Groups. Clicking the live cluster
+created a visible area filter at
+`/map?r=6991&lat=40.716541&lng=-74.004138`; outline mode survived reload and
+Clear returned to `/map`.
+
+No credentialed browser state or disposable account secret was available for a
+fresh live OAuth callback or real safety-feedback mutation. Those two external
+mutations are not fabricated here: callback/session restoration is covered by
+the API/web production-bundle gate, and safety escalation is covered by the
+fresh PostgreSQL transaction plus two-context browser gate. A user-authenticated
+live retry remains external evidence.
