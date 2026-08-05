@@ -48,9 +48,10 @@ or production-operations approval.
 | Focused chat browser | Passed duplicate-safe retry, read, redaction, reporting, body-free list presentation, honest trust copy, Spanish/offline draft behavior, and axe scan |
 | Production Chromium matrix | Clean final run passed 147 cases with one credentialed live-PDS case skipped (148 discovered); 9.2 minutes, serial Chromium against a fresh production bundle |
 | Dependency audit | `npm audit --omit=dev --audit-level=high`: 0 vulnerabilities |
-| Prometheus rules | Repository file passed `promtool` with 18 rules; currently deployed pre-sprint file passed with 11 rules |
+| Prometheus rules | Repository file passed `promtool` with 18 rules; staging loaded and reloaded the same 18-rule file successfully |
 | Playwright artifact redaction | Passed; no retained failure artifacts were present after the clean focused runs |
-| Pre-deploy backup/restore | A PostgreSQL 17 client archive failed against the PostgreSQL 16 server and was quarantined. The script now rejects client/server major mismatches. Matching PostgreSQL 16 backup `patchwork_20260805_090220.dump` passed checksum/archive validation and an empty-database restore in 3 seconds with a 13-second recovery-point age and zero restored sessions. |
+| Backup/restore tooling | An archive aimed at the wrong local PostgreSQL 16 database exposed the client/server mismatch risk and was quarantined. The script now rejects mismatched client/server majors. It correctly rejected PostgreSQL 16 tooling for the configured PostgreSQL 17 staging server. |
+| Staging backup/restore | Matching PostgreSQL 17 backup `patchwork_20260805_091609.dump` (312,971 bytes) passed checksum/archive validation and restored into isolated empty PostgreSQL 17 in 2 seconds with a 42-second recovery-point age, scheduling/group/chat tables present, and zero restored sessions. |
 
 ## Privacy and failure evidence
 
@@ -66,6 +67,36 @@ contract and returns `404`.
 Exact personal location remains excluded from schedules, groups, chat
 metadata, exports, notifications, audit rows, and backups. It can move only
 through the separately authorized ephemeral peer channel.
+
+## Immutable home-staging release
+
+Revision `55f724a8f0efbb533ddb163f06cc0ff27c617334` was pushed to `origin/main`.
+Four runtime targets were built once with that full OCI revision, scanned
+before push with Trivy 0.59.1, pushed to the loopback registry, digest-pinned,
+signed with the scoped local staging Cosign key, and verified against its
+retained public key. All four scan reports contain zero HIGH/CRITICAL findings.
+The local signatures intentionally have no transparency-log proof and are not
+represented as protected GHCR/OIDC evidence.
+
+| Service | Deployed digest |
+| --- | --- |
+| API | `sha256:484966e4660bcb131e9b7e8927e52eeff218a0a58e7642894b7b32445916892e` |
+| Indexer | `sha256:98c563ef6b1e62e8d8907fd4a3c5cdb0d8295ce4f944edd076f56c62bc0aa9f0` |
+| Moderation | `sha256:e117863640bff40478929bb9712d38bd0b681f1226023615cffedf1a61604644` |
+| Web | `sha256:aebb85d82ca8248b5e5729103080c3b4d788ffb47a6cdcc1650484acd258a667` |
+
+The deployment applied API migrations 0023–0025 and skipped the already
+applied 22 API, 6 indexer, and 5 moderation migrations. All four services
+reported the exact revision, healthy status, zero restarts, and no
+error/fatal/exception/unhandled log lines. Public readiness, status, Map,
+Groups, Chat, content-addressed PMTiles range, and contract probes passed; the
+mutable tile path returned 404. Contracts advertise scheduling, groups, and
+bounded chat while omitting `/chat/initiate`.
+
+A live clean Chromium session confirmed the production Chat auth gate, the
+server-readable legal disclosure, English-to-Spanish switching, and the
+Spanish Groups auth gate. Prometheus loaded and reloaded all 18 repository
+rules. Release state retains `43deb5e9` as the immediate rollback manifest.
 
 ## Residual launch gates
 

@@ -1,6 +1,6 @@
 # Coordination, localization, groups, and chat sprint
 
-Status: implementation verified; staging release in progress
+Status: implementation and immutable home-staging release verified; operational NO-GO unchanged
 
 Date: 2026-08-05 (America/Chicago)
 
