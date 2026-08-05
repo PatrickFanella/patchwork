@@ -147,6 +147,36 @@ validated ~313 KB staging archives, and Prometheus returned backup success.
 Nine ~149 KB local-development archives and their sidecars were moved to
 recoverable `quarantine/local-postgres16`; no archive was deleted.
 
+## Latest synchronized immutable release
+
+The exact synchronized application revision
+`d791fb015fb2d6839b509bc3f873b3062d4a8b49` was built once after the scheduled
+backup correction was committed and pushed. Trivy 0.59.1 found zero
+HIGH/CRITICAL vulnerabilities across all four images before publication. Each
+digest was signed with the scoped local staging key and verified against the
+retained public key; these signatures retain the same documented no-tlog,
+home-staging boundary.
+
+| Service | Deployed digest |
+| --- | --- |
+| API | `sha256:e313893f88f551509d3096744aad97bd9d8e34877cf7cd4fc68482cda7bd29f1` |
+| Indexer | `sha256:decf62f78df03d80803bf57b8600323c6d06abb64ee07dbbafdde9bc0e96c8e0` |
+| Moderation | `sha256:3c15b888f48c8845d0cae5bd577bd792f25fe0031d4c57e694d967a61b978b98` |
+| Web | `sha256:4abe44e2b5d1dd82014c805cf8321bb369b0715211df31f0fe77a5bc71038a00` |
+
+Pre-deploy timer archive `patchwork_20260805_185159.dump` passed checksum and
+archive validation and restored into a fresh PostgreSQL 17 container in 7
+seconds with scheduling/group/chat tables present and zero browser sessions;
+the disposable container was removed. The immutable deployment applied zero
+new migrations and skipped API 25, indexer 6, and moderation 5. All four
+services report the exact revision, healthy state, and zero restarts. Public
+readiness, status, Map, Groups, Chat, content-addressed PMTiles range, mutable
+tile denial, contract inclusion/legacy-route absence, clean logs,
+obsolete-module absence, 18 owned alert rules, and current/rollback manifest
+checks passed. The post-deploy systemd job published and checksummed
+`patchwork_20260805_185911.dump`; Prometheus reported backup success. Release
+state retains `7c7b4142` as the immediate rollback manifest.
+
 ## Residual launch gates
 
 The operational decision remains **NO-GO**. Professional Spanish translation
