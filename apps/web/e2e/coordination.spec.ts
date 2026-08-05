@@ -270,7 +270,13 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
                 };
                 feedback.push(item);
                 const { submitterDid: _submitterDid, ...publicItem } = item;
-                await fulfill({ feedback: publicItem }, 201);
+                await fulfill(
+                    {
+                        feedback: publicItem,
+                        safetyEscalated: item.tags.includes('safety-concern'),
+                    },
+                    201,
+                );
                 return;
             }
             if (path === '/inbox/read') {
@@ -391,10 +397,15 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
         .getByLabel('Optional comment')
         .fill('The handoff was completed safely.');
     await requesterPage
+        .getByLabel('Flag as a safety concern for structured review')
+        .check();
+    await requesterPage
         .getByRole('button', { name: 'Submit outcome' })
         .click();
     await expect(
-        requesterPage.getByText('Your outcome feedback is recorded.'),
+        requesterPage.getByText(
+            'Your outcome feedback is recorded and the safety concern was sent for moderator review.',
+        ),
     ).toBeVisible();
 
     expect(commandBodies).not.toContainEqual(
@@ -412,6 +423,7 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
         submitterDid: requesterDid,
         outcome: 'successful',
         rating: 5,
+        tags: ['safety-concern'],
     });
 
     offers.push({

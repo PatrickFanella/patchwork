@@ -3078,7 +3078,12 @@ export const submitOutcomeFeedbackViaApi = async (
         >;
     },
     signal?: AbortSignal,
-): Promise<ApiClientResult<{ feedback: OutcomeFeedback }>> => {
+): Promise<
+    ApiClientResult<{
+        feedback: OutcomeFeedback;
+        safetyEscalated: boolean;
+    }>
+> => {
     const result = await requestJsonPost('/outcomes', input, signal);
     return result.ok ?
             parseRecordPayload(

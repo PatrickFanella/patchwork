@@ -6936,10 +6936,11 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                     </p>
                 :   <div className='space-y-3'>
                         {connections.map(connection => {
-                            const alreadySubmitted = feedback.some(
+                            const submittedFeedback = feedback.find(
                                 entry =>
                                     entry.connectionId === connection.id,
                             );
+                            const alreadySubmitted = Boolean(submittedFeedback);
                             const draft = outcomes[connection.id] ?? {
                                 outcome: 'successful',
                                 rating: 5,
@@ -7148,7 +7149,11 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                         </form>
                                     : alreadySubmitted ?
                                         <p className='mt-3 text-sm text-mh-textMuted'>
-                                            Your outcome feedback is recorded.
+                                            {submittedFeedback?.tags.includes(
+                                                'safety-concern',
+                                            ) ?
+                                                'Your outcome feedback is recorded and the safety concern was sent for moderator review.'
+                                            :   'Your outcome feedback is recorded.'}
                                         </p>
                                     :   null}
                                 </Card>

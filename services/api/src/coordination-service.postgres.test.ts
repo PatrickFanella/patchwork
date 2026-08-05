@@ -22,7 +22,8 @@ describePostgres('CoordinationService PostgreSQL boundary', () => {
 
     beforeEach(async () => {
         await pool.query(
-            `TRUNCATE coordination_outcome_feedback,
+            `TRUNCATE moderation_notification_events,
+                      coordination_outcome_feedback,
                       activity_inbox_items,
                       coordination_offer_events,
                       coordination_connections,
@@ -282,6 +283,118 @@ describePostgres('CoordinationService PostgreSQL boundary', () => {
             [helperDid],
         );
         expect(remaining.rowCount).toBe(0);
+    });
+
+    it('atomically escalates safety-concern outcomes without copying private comments or identity', async () => {
+        const service = new CoordinationService(pool);
+        const created = await service.createOffer(
+            helperDid,
+            { requestUri, note: null },
+            new Date('2026-02-01T12:00:00.000Z'),
+        );
+        const offerId = (created as { offer: { id: string } }).offer.id;
+        const accepted = await service.decideOffer(
+            requesterDid,
+            { offerId, decision: 'accept' },
+            new Date('2026-02-02T12:00:00.000Z'),
+        );
+        const connectionId = (
+            accepted as { connection: { id: string } }
+        ).connection.id;
+        await service.transitionConnection(
+            requesterDid,
+            { connectionId, action: 'complete' },
+            new Date('2026-02-03T12:00:00.000Z'),
+        );
+
+        const privateComment = 'Private safety narrative for the feedback owner.';
+        await expect(
+            service.submitFeedback(
+                helperDid,
+                {
+                    connectionId,
+                    outcome: 'unsuccessful',
+                    rating: 1,
+                    comment: privateComment,
+                    tags: ['safety-concern'],
+                },
+                new Date('2026-02-04T12:00:00.000Z'),
+            ),
+        ).resolves.toMatchObject({
+            safetyEscalated: true,
+            feedback: {
+                connectionId,
+                tags: ['safety-concern'],
+            },
+        });
+
+        const queue = await pool.query<{
+            subject_uri: string;
+            subject_type: string;
+            priority: string;
+            reason_codes: string[];
+            safe_preview: Record<string, string>;
+            context: Record<string, unknown>;
+        }>(
+            `SELECT subject_uri, subject_type, priority, reason_codes,
+                    safe_preview, context
+             FROM moderation_queue_items
+             WHERE latest_reason = 'Outcome feedback flagged for safety review'`,
+        );
+        expect(queue.rows).toHaveLength(1);
+        expect(queue.rows[0]).toMatchObject({
+            subject_type: 'other',
+            priority: 'high',
+            reason_codes: ['outcome-safety-concern'],
+            safe_preview: {
+                source: 'outcome-feedback',
+                outcome: 'unsuccessful',
+                rating: '1',
+                requestReference: hash(requestUri),
+                connectionReference: connectionId,
+            },
+        });
+        const queueJson = JSON.stringify(queue.rows[0]);
+        expect(queueJson).not.toContain(privateComment);
+        expect(queueJson).not.toContain(requesterDid);
+        expect(queueJson).not.toContain(helperDid);
+
+        const notifications = await pool.query<{
+            priority: string;
+            reason_codes: string[];
+        }>(
+            `SELECT priority, reason_codes
+             FROM moderation_notification_events
+             WHERE subject_uri = $1`,
+            [queue.rows[0]!.subject_uri],
+        );
+        expect(notifications.rows).toEqual([
+            {
+                priority: 'high',
+                reason_codes: ['outcome-safety-concern'],
+            },
+        ]);
+
+        await expect(
+            service.submitFeedback(helperDid, {
+                connectionId,
+                outcome: 'unsuccessful',
+                rating: 1,
+                comment: null,
+                tags: ['safety-concern'],
+            }),
+        ).rejects.toMatchObject({
+            statusCode: 409,
+            code: 'OUTCOME_FEEDBACK_ALREADY_SUBMITTED',
+        });
+        await expect(
+            pool.query(`SELECT COUNT(*)::int AS count FROM moderation_queue_items`),
+        ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+        await expect(
+            pool.query(
+                `SELECT COUNT(*)::int AS count FROM moderation_notification_events`,
+            ),
+        ).resolves.toMatchObject({ rows: [{ count: 1 }] });
     });
 
     it('rechecks block and request state, expires offers, and returns deterministic explainable matches without reputation', async () => {

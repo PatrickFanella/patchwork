@@ -724,35 +724,40 @@ export class CoordinationService {
                 'The outcome feedback is invalid.',
             );
         }
-        const connection = await this.loadConnection(
-            this.pool,
-            parsed.data.connectionId,
-        );
-        if (
-            actorDid !== connection.requester_did &&
-            actorDid !== connection.helper_did
-        ) {
-            throw new PublicHttpError(
-                403,
-                'OUTCOME_FEEDBACK_FORBIDDEN',
-                'Only a connection participant may submit outcome feedback.',
-            );
-        }
-        if (connection.status !== 'completed') {
-            throw new PublicHttpError(
-                409,
-                'OUTCOME_FEEDBACK_NOT_AVAILABLE',
-                'Outcome feedback is available after a completed handoff.',
-            );
-        }
-        await this.assertAccountsAndBlocks(
-            this.pool,
-            connection.requester_did,
-            connection.helper_did,
-        );
         const feedbackId = randomUUID();
+        const safetyEscalated = parsed.data.tags.includes('safety-concern');
+        const client = await this.pool.connect();
+        let connection: ConnectionRow;
         try {
-            await this.pool.query(
+            await client.query('BEGIN');
+            connection = await this.loadConnection(
+                client,
+                parsed.data.connectionId,
+                true,
+            );
+            if (
+                actorDid !== connection.requester_did &&
+                actorDid !== connection.helper_did
+            ) {
+                throw new PublicHttpError(
+                    403,
+                    'OUTCOME_FEEDBACK_FORBIDDEN',
+                    'Only a connection participant may submit outcome feedback.',
+                );
+            }
+            if (connection.status !== 'completed') {
+                throw new PublicHttpError(
+                    409,
+                    'OUTCOME_FEEDBACK_NOT_AVAILABLE',
+                    'Outcome feedback is available after a completed handoff.',
+                );
+            }
+            await this.assertAccountsAndBlocks(
+                client,
+                connection.requester_did,
+                connection.helper_did,
+            );
+            await client.query(
                 `INSERT INTO coordination_outcome_feedback (
                     feedback_id, connection_id, request_uri, submitter_did,
                     outcome, rating, comment, tags, submitted_at,
@@ -771,7 +776,62 @@ export class CoordinationService {
                     plusDays(now, 365),
                 ],
             );
+            if (safetyEscalated) {
+                const subjectUri =
+                    `urn:patchwork:outcome-feedback:${feedbackId}`;
+                const queueId = randomUUID();
+                const reasonCodes = ['outcome-safety-concern'];
+                await client.query(
+                    `INSERT INTO moderation_queue_items (
+                        subject_uri, queue_id, subject_type, reasons,
+                        latest_reason, report_count, queue_status,
+                        visibility, appeal_state, context, priority,
+                        reason_codes, safe_preview, automated_decision,
+                        record_origin, seed_version, created_at,
+                        requested_at, updated_at, retention_until
+                     ) VALUES (
+                        $1, $2, 'other', $3::jsonb,
+                        'Outcome feedback flagged for safety review', 1,
+                        'queued', 'visible', 'none', $4::jsonb, 'high',
+                        $3::jsonb, $5::jsonb, NULL,
+                        'visitor-created', NULL, $6, $6, $6, NULL
+                     )`,
+                    [
+                        subjectUri,
+                        queueId,
+                        JSON.stringify(reasonCodes),
+                        JSON.stringify({
+                            summary:
+                                'A completed handoff was flagged for structured safety review.',
+                            tags: ['outcome-feedback', 'safety-concern'],
+                        }),
+                        JSON.stringify({
+                            source: 'outcome-feedback',
+                            outcome: parsed.data.outcome,
+                            rating: String(parsed.data.rating),
+                            requestReference: hash(connection.request_uri),
+                            connectionReference: connection.connection_id,
+                        }),
+                        now,
+                    ],
+                );
+                await client.query(
+                    `INSERT INTO moderation_notification_events (
+                        subject_uri, priority, reason_codes,
+                        deduplication_key, created_at, retention_until
+                     ) VALUES ($1, 'high', $2::jsonb, $3, $4, $5)`,
+                    [
+                        subjectUri,
+                        JSON.stringify(reasonCodes),
+                        `outcome-safety:${feedbackId}`,
+                        now,
+                        plusDays(now, 30),
+                    ],
+                );
+            }
+            await client.query('COMMIT');
         } catch (error) {
+            await client.query('ROLLBACK');
             if (
                 typeof error === 'object' &&
                 error !== null &&
@@ -785,8 +845,11 @@ export class CoordinationService {
                 );
             }
             throw error;
+        } finally {
+            client.release();
         }
         return {
+            safetyEscalated,
             feedback: {
                 id: feedbackId,
                 connectionId: connection.connection_id,
