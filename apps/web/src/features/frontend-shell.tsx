@@ -314,6 +314,9 @@ const secondaryRoutes = appRoutes.filter(
         !accountRoutes.includes(route) &&
         !route.startsWith('/legal/'),
 );
+const productionSecondaryRoutes = secondaryRoutes.filter(
+    route => !deferredFixtureRoutes.has(route),
+);
 
 const resourceCategoryOptions: readonly DirectoryResourceCategory[] = [
     'food-bank',
@@ -9090,7 +9093,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const visibleSecondaryRoutes =
         webDataMode === 'fixture' ?
             secondaryRoutes
-        :   [...secondaryRoutes, '/volunteer', '/chat'] as const;
+        :   [...productionSecondaryRoutes, '/volunteer', '/chat'] as const;
 
     const content =
         isDeferredFixtureRoute ?

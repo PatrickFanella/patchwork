@@ -136,6 +136,24 @@ test('public home advertises only implemented alpha capabilities', async ({
     await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Volunteer' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Chat' })).toBeHidden();
+    await page.locator('.mh-more-menu summary').click();
+    const more = page.locator('.mh-more-menu-panel');
+    await expect(more.getByRole('link', { name: 'Scheduling' })).toHaveCount(0);
+    await expect(more.getByRole('link', { name: 'Feedback' })).toHaveCount(0);
+    await expect(more.getByRole('link', { name: 'Groups' })).toHaveCount(0);
+    await expect(more.getByRole('link', { name: 'Chat' })).toBeVisible();
+});
+
+test('direct deferred routes never expose fixture implementations', async ({
+    page,
+}) => {
+    for (const route of ['/scheduling', '/feedback', '/groups']) {
+        await page.goto(route);
+        await expect(
+            page.getByRole('region', { name: 'Deferred from the alpha' }),
+        ).toBeVisible();
+        await expect(page.locator('form')).toHaveCount(0);
+    }
 });
 
 test('legal routes show aligned unapproved buyer-ready policy boundaries', async ({
