@@ -21,8 +21,8 @@ RUN apk upgrade --no-cache \
     && mv /tmp/npm/package /usr/local/lib/node_modules/npm \
     && rm -rf /tmp/npm /tmp/npm.tgz \
     && wget -qO /tmp/brace-expansion.tgz \
-        https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.8.tgz \
-    && echo 'a03b06e66d862d0278b1ff45b66427f245f99c665800dc9bd790c0c13d2247fe  /tmp/brace-expansion.tgz' \
+        https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.9.tgz \
+    && echo '5d06001fddd25cbee90c96db4dc5b7b57711b984c3141e28d10f143deb52dbaf  /tmp/brace-expansion.tgz' \
         | sha256sum -c - \
     && mkdir /tmp/brace-expansion \
     && tar -xzf /tmp/brace-expansion.tgz -C /tmp/brace-expansion \
@@ -30,6 +30,16 @@ RUN apk upgrade --no-cache \
     && mv /tmp/brace-expansion/package \
         /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
     && rm -rf /tmp/brace-expansion /tmp/brace-expansion.tgz \
+    && wget -qO /tmp/ip-address.tgz \
+        https://registry.npmjs.org/ip-address/-/ip-address-10.4.0.tgz \
+    && echo 'e1faffa2aa19b4382664fd78ab9e5bf06a6ddcc525bd9c82bd74522487be2932  /tmp/ip-address.tgz' \
+        | sha256sum -c - \
+    && mkdir /tmp/ip-address \
+    && tar -xzf /tmp/ip-address.tgz -C /tmp/ip-address \
+    && rm -rf /usr/local/lib/node_modules/npm/node_modules/ip-address \
+    && mv /tmp/ip-address/package \
+        /usr/local/lib/node_modules/npm/node_modules/ip-address \
+    && rm -rf /tmp/ip-address /tmp/ip-address.tgz \
     && npm --version
 
 COPY package.json package-lock.json ./
