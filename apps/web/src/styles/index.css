@@ -578,6 +578,11 @@ code {
     cursor: pointer;
 }
 
+.mh-map-place.is-selected {
+    stroke: var(--mh-border);
+    stroke-width: 4;
+}
+
 .mh-map-place:hover {
     fill: var(--mh-danger);
 }

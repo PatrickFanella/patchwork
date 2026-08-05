@@ -6,6 +6,7 @@ import { InteractiveMap } from './InteractiveMap.js';
 
 // Mock matchMedia for reduced motion check
 beforeEach(() => {
+    window.localStorage.clear();
     Object.defineProperty(window, 'matchMedia', {
         writable: true,
         value: vi.fn().mockImplementation(query => ({
@@ -294,6 +295,7 @@ describe('InteractiveMap', () => {
         expect(onFocusArea).toHaveBeenCalledWith({
             center: { lat: 40.7128, lng: -74.006 },
             radiusMeters: 1000,
+            label: 'Public Clinic',
         });
         await act(async () => root.unmount());
     });
@@ -364,6 +366,27 @@ describe('InteractiveMap', () => {
             choices[1]?.click();
         });
         expect(container.querySelector('.mh-map-style-outline')).not.toBeNull();
+        expect(
+            window.localStorage.getItem('patchwork.map.circle-style.v1'),
+        ).toBe('outline');
         await act(async () => root.unmount());
+
+        const nextContainer = document.createElement('div');
+        document.body.appendChild(nextContainer);
+        const nextRoot = createRoot(nextContainer);
+        await act(async () => {
+            nextRoot.render(
+                <InteractiveMap
+                    cards={[]}
+                    center={{ lat: 1.3, lng: 103.8 }}
+                    onSelectPostId={vi.fn()}
+                    onTilesFailed={vi.fn()}
+                />,
+            );
+        });
+        expect(
+            nextContainer.querySelector('.mh-map-style-outline'),
+        ).not.toBeNull();
+        await act(async () => nextRoot.unmount());
     });
 });

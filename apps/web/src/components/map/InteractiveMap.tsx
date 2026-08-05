@@ -24,9 +24,35 @@ export interface InteractiveMapProps {
     onFocusArea?: (area: {
         center: { lat: number; lng: number };
         radiusMeters: number;
+        label: string;
     }) => void;
+    focusedArea?: {
+        center: { lat: number; lng: number };
+        radiusMeters: number;
+    };
     onTilesFailed: (message: string) => void;
 }
+
+type CircleStyle = 'filled' | 'outline' | 'contrast';
+const circleStyleStorageKey = 'patchwork.map.circle-style.v1';
+const readCircleStyle = (): CircleStyle => {
+    if (typeof window === 'undefined') return 'filled';
+    try {
+        const stored = window.localStorage.getItem(circleStyleStorageKey);
+        return stored === 'outline' || stored === 'contrast' || stored === 'filled' ?
+                stored
+            :   'filled';
+    } catch {
+        return 'filled';
+    }
+};
+
+const sameCenter = (
+    left: { lat: number; lng: number },
+    right: { lat: number; lng: number },
+): boolean =>
+    Math.abs(left.lat - right.lat) < 0.000001 &&
+    Math.abs(left.lng - right.lng) < 0.000001;
 
 export const InteractiveMap = ({
     cards,
@@ -35,6 +61,7 @@ export const InteractiveMap = ({
     center,
     onSelectPostId,
     onFocusArea,
+    focusedArea,
     onTilesFailed,
 }: InteractiveMapProps) => {
     const mapRef = useRef<HTMLDivElement | null>(null);
@@ -43,9 +70,7 @@ export const InteractiveMap = ({
     const onSelectPostIdRef = useRef(onSelectPostId);
     const onFocusAreaRef = useRef(onFocusArea);
     const [zoom, setZoom] = useState(9);
-    const [circleStyle, setCircleStyle] = useState<
-        'filled' | 'outline' | 'contrast'
-    >('filled');
+    const [circleStyle, setCircleStyle] = useState<CircleStyle>(readCircleStyle);
     const mapId = useId();
     const instructionsId = `map-instructions-${mapId.replace(/:/g, '')}`;
 
@@ -139,7 +164,12 @@ export const InteractiveMap = ({
             const circle = L.circle([cluster.lat, cluster.lng], {
                 radius: cluster.radiusMeters,
                 className:
-                    selectedPostId && cluster.postIds.includes(selectedPostId) ?
+                    (selectedPostId && cluster.postIds.includes(selectedPostId)) ||
+                    (focusedArea &&
+                        sameCenter(focusedArea.center, {
+                            lat: cluster.lat,
+                            lng: cluster.lng,
+                        })) ?
                         'mh-map-cluster is-selected'
                     :   'mh-map-cluster',
             }).addTo(map);
@@ -165,6 +195,7 @@ export const InteractiveMap = ({
                 onFocusAreaRef.current?.({
                     center: { lat: cluster.lat, lng: cluster.lng },
                     radiusMeters: Math.ceil(cluster.radiusMeters),
+                    label: `${cluster.count} requests`,
                 });
             });
             layers.push(circle);
@@ -185,6 +216,7 @@ export const InteractiveMap = ({
                 onFocusAreaRef.current?.({
                     center: { lat: marker.lat, lng: marker.lng },
                     radiusMeters: marker.radiusMeters,
+                    label: marker.label,
                 });
                 onSelectPostIdRef.current(marker.id);
             });
@@ -193,7 +225,14 @@ export const InteractiveMap = ({
         for (const { resource, exact } of exactPlaces) {
             const marker = L.circleMarker([exact.latitude, exact.longitude], {
                 radius: 7,
-                className: 'mh-map-place',
+                className:
+                    focusedArea &&
+                    sameCenter(focusedArea.center, {
+                        lat: exact.latitude,
+                        lng: exact.longitude,
+                    }) ?
+                        'mh-map-place is-selected'
+                    :   'mh-map-place',
             }).addTo(map);
             marker.bindTooltip(
                 `${resource.name} · ${resource.openHours ?? 'hours unavailable'}`,
@@ -208,12 +247,13 @@ export const InteractiveMap = ({
                 onFocusAreaRef.current?.({
                     center: { lat: exact.latitude, lng: exact.longitude },
                     radiusMeters: 1000,
+                    label: resource.name,
                 });
             });
             layers.push(marker);
         }
         return () => layers.forEach(layer => layer.remove());
-    }, [cards, clusteredPostIds, clusters, exactPlaces, markers, selectedPostId]);
+    }, [cards, clusteredPostIds, clusters, exactPlaces, focusedArea, markers, selectedPostId]);
 
     const hasItems =
         markers.length > 0 || clusters.length > 0 || exactPlaces.length > 0;
@@ -233,7 +273,18 @@ export const InteractiveMap = ({
                             name={`circle-style-${mapId}`}
                             value={value}
                             checked={circleStyle === value}
-                            onChange={() => setCircleStyle(value)}
+                            onChange={() => {
+                                setCircleStyle(value);
+                                try {
+                                    window.localStorage.setItem(
+                                        circleStyleStorageKey,
+                                        value,
+                                    );
+                                } catch {
+                                    // Style choice remains usable for this page
+                                    // even when storage is unavailable.
+                                }
+                            }}
                         />
                         <span>{label}</span>
                     </label>

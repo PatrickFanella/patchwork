@@ -999,6 +999,7 @@ const DashboardRoute = ({
 interface MapRouteProps {
     discoveryState: DiscoveryFilterState;
     onPatchDiscovery: (patch: Partial<DiscoveryFilterState>) => void;
+    onPushDiscovery: (patch: Partial<DiscoveryFilterState>) => void;
     feedRecords: readonly FeedRecordEnvelope[];
     resourceCards: readonly ResourceDirectoryCard[];
     resourceErrorMessage?: string;
@@ -1022,6 +1023,7 @@ const LazyInteractiveMap = lazy(() =>
 const MapRoute = ({
     discoveryState,
     onPatchDiscovery,
+    onPushDiscovery,
     feedRecords,
     resourceCards,
     resourceErrorMessage,
@@ -1036,6 +1038,13 @@ const MapRoute = ({
     onOpenChat,
 }: MapRouteProps) => {
     const [tileError, setTileError] = useState<string>();
+    const [focusedArea, setFocusedArea] = useState<{
+        center: { lat: number; lng: number };
+        radiusMeters: number;
+        label: string;
+        previousCenter?: { lat: number; lng: number };
+        previousRadiusMeters?: number;
+    }>();
     useEffect(() => {
         if (!selectedPostId) {
             return undefined;
@@ -1064,6 +1073,66 @@ const MapRoute = ({
         () => buildResourceOverlayViewModel(resourceCards, discoveryState),
         [discoveryState, resourceCards],
     );
+    const activeArea =
+        focusedArea ??
+        (discoveryState.center && discoveryState.radiusMeters ?
+            {
+                center: discoveryState.center,
+                radiusMeters: discoveryState.radiusMeters,
+                label: 'Selected map area',
+            }
+        :   undefined);
+
+    useEffect(() => {
+        if (!focusedArea) return;
+        if (
+            !discoveryState.center ||
+            discoveryState.radiusMeters !== focusedArea.radiusMeters ||
+            discoveryState.center.lat !== focusedArea.center.lat ||
+            discoveryState.center.lng !== focusedArea.center.lng
+        ) {
+            setFocusedArea(undefined);
+        }
+    }, [discoveryState.center, discoveryState.radiusMeters, focusedArea]);
+
+    const focusMapArea = (area: {
+        center: { lat: number; lng: number };
+        radiusMeters: number;
+        label: string;
+    }) => {
+        const normalized = applyDiscoveryFilterPatch(discoveryState, area);
+        if (!normalized.center || !normalized.radiusMeters) return;
+        setFocusedArea({
+            center: normalized.center,
+            radiusMeters: normalized.radiusMeters,
+            label: area.label,
+            ...(discoveryState.center ?
+                { previousCenter: discoveryState.center }
+            :   {}),
+            ...(discoveryState.radiusMeters ?
+                { previousRadiusMeters: discoveryState.radiusMeters }
+            :   {}),
+        });
+        onPushDiscovery({
+            center: normalized.center,
+            radiusMeters: normalized.radiusMeters,
+        });
+    };
+
+    const leaveFocusedArea = (
+        target: 'previous' | 'clear',
+    ) => {
+        const patch =
+            target === 'previous' && focusedArea ?
+                {
+                    center: focusedArea.previousCenter,
+                    radiusMeters: focusedArea.previousRadiusMeters,
+                }
+            :   { center: undefined, radiusMeters: undefined };
+        setFocusedArea(undefined);
+        onSelectPost(undefined);
+        onPushDiscovery(patch);
+    };
 
     const selectedRecord =
         selectedPostId ?
@@ -1148,6 +1217,45 @@ const MapRoute = ({
                         <p>{tileError}</p>
                     </div>
                 ) : null}
+                {activeArea ?
+                    <div
+                        className='mb-3 flex flex-wrap items-center gap-2 border-2 border-mh-borderSoft bg-mh-surface p-3'
+                        role='status'
+                        aria-live='polite'
+                    >
+                        <Badge tone='info'>Filtered to this area</Badge>
+                        <p className='mr-auto text-sm text-mh-textMuted'>
+                            <strong className='text-mh-text'>
+                                {activeArea.label}
+                            </strong>{' '}
+                            · {mapView.filteredCards.length} requests ·{' '}
+                            {mapResourceView.cards.length} public places · within{' '}
+                            {(activeArea.radiusMeters / 1000).toLocaleString(
+                                undefined,
+                                { maximumFractionDigits: 1 },
+                            )}{' '}
+                            km
+                        </p>
+                        {focusedArea ?
+                            <Button
+                                type='button'
+                                variant='neutral'
+                                className='px-3 py-1 text-xs'
+                                onClick={() => leaveFocusedArea('previous')}
+                            >
+                                Return to previous area
+                            </Button>
+                        :   null}
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            className='px-3 py-1 text-xs'
+                            onClick={() => leaveFocusedArea('clear')}
+                        >
+                            Clear area filter
+                        </Button>
+                    </div>
+                :   null}
                 <Suspense fallback={<div className='mh-skeleton h-96 w-full' />}>
                     <LazyInteractiveMap
                         cards={mapView.filteredCards}
@@ -1155,9 +1263,8 @@ const MapRoute = ({
                         selectedPostId={selectedPostId}
                         center={discoveryState.center ?? defaultDiscoveryCenter}
                         onSelectPostId={onSelectPost}
-                        onFocusArea={({ center, radiusMeters }) =>
-                            onPatchDiscovery({ center, radiusMeters })
-                        }
+                        focusedArea={activeArea}
+                        onFocusArea={focusMapArea}
                         onTilesFailed={setTileError}
                     />
                 </Suspense>
@@ -8944,6 +9051,20 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         setDiscoveryState(current => applyDiscoveryFilterPatch(current, patch));
     };
 
+    const pushDiscoveryState = (patch: Partial<DiscoveryFilterState>) => {
+        setDiscoveryState(current => {
+            const next = applyDiscoveryFilterPatch(current, patch);
+            if (typeof window !== 'undefined') {
+                const nextUrl = `${currentRoute}${serializeDiscoveryFilterState(next)}`;
+                const currentUrl = `${window.location.pathname}${window.location.search}`;
+                if (nextUrl !== currentUrl) {
+                    window.history.pushState({}, '', nextUrl);
+                }
+            }
+            return next;
+        });
+    };
+
     const applyLifecycleAction = (action: FeedLifecycleAction) => {
         setFeedRecords(current => {
             const currentCards = current.map(record => record.card);
@@ -9158,6 +9279,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             <MapRoute
                 discoveryState={discoveryState}
                 onPatchDiscovery={patchDiscoveryState}
+                onPushDiscovery={pushDiscoveryState}
                 feedRecords={feedRecords}
                 resourceCards={resourceCards}
                 resourceErrorMessage={directoryErrorMessage}

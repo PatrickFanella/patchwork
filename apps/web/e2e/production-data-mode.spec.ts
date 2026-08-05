@@ -156,6 +156,110 @@ test('direct deferred routes never expose fixture implementations', async ({
     }
 });
 
+test('map area selection is explicit, reversible, historical, and remembers style', async ({
+    page,
+}) => {
+    await page.route('**/api/**', async route => {
+        const requestUrl = new URL(route.request().url());
+        const path = requestUrl.pathname.replace(/^\/api/, '');
+        if (path === '/status') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    maintenance: {
+                        active: false,
+                        reasonCodes: [],
+                        publicMessage: '',
+                        environmentOverride: false,
+                        declaredAt: null,
+                        declaredBy: null,
+                    },
+                }),
+            });
+            return;
+        }
+        if (path === '/query/map') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    total: 1,
+                    page: 1,
+                    pageSize: 20,
+                    hasNextPage: false,
+                    results: [{
+                        uri: 'at://did:plc:map/app.patchwork.aid.post/area',
+                        authorDid: 'did:plc:map',
+                        title: 'Area filter request',
+                        summary: 'Approximate test request.',
+                        category: 'food',
+                        status: 'open',
+                        urgency: 'high',
+                        createdAt: '2026-08-04T00:00:00.000Z',
+                        updatedAt: '2026-08-04T00:00:00.000Z',
+                        approximateGeo: {
+                            latitude: 40.73,
+                            longitude: -73.98,
+                            precisionKm: 1,
+                        },
+                        recordOrigin: 'synthetic',
+                    }],
+                }),
+            });
+            return;
+        }
+        if (path === '/query/directory') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    total: 0,
+                    page: 1,
+                    pageSize: 20,
+                    hasNextPage: false,
+                    results: [],
+                }),
+            });
+            return;
+        }
+        await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                error: {
+                    code: 'AUTHENTICATION_REQUIRED',
+                    message: 'Authentication required.',
+                },
+            }),
+        });
+    });
+
+    await page.goto('/map');
+    await expect(page.getByText('Area filter request')).toBeVisible();
+    await page.locator('.mh-map-circle').first().click({ force: true });
+    await expect(page.getByText('Filtered to this area')).toBeVisible();
+    await expect(page).toHaveURL(/r=1000/);
+    await expect(
+        page.getByRole('button', { name: 'Return to previous area' }),
+    ).toBeVisible();
+
+    await page.goBack();
+    await expect(page).not.toHaveURL(/(?:\?|&)r=/);
+    await expect(page.getByText('Filtered to this area')).toHaveCount(0);
+    await page.goForward();
+    await expect(page).toHaveURL(/r=1000/);
+    await expect(page.getByText('Filtered to this area')).toBeVisible();
+
+    await page.getByRole('radio', { name: 'Outline' }).check({ force: true });
+    await expect(page.locator('.mh-map-style-outline')).toBeVisible();
+    await page.reload();
+    await expect(page.locator('.mh-map-style-outline')).toBeVisible();
+    await page.getByRole('button', { name: 'Clear area filter' }).click();
+    await expect(page).not.toHaveURL(/(?:\?|&)r=/);
+    await expect(page.getByText('Filtered to this area')).toHaveCount(0);
+});
+
 test('legal routes show aligned unapproved buyer-ready policy boundaries', async ({
     page,
 }) => {
