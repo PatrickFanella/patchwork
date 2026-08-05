@@ -12,6 +12,14 @@ Run `scripts/backup-postgres.sh` at least every six hours and copy its `.dump`,
 Prometheus textfile at `PATCHWORK_BACKUP_METRICS_FILE`. The alert threshold of
 7.5 hours allows one delayed six-hour run before paging.
 
+On home staging, `patchwork-staging-backup.timer` invokes the installed copy of
+`scripts/run-staging-backup.sh`. The wrapper derives `API_DATABASE_URL` from
+the running staging API, uses the locally retained `postgres:17` client image
+with `--pull=never`, and then delegates to the validated backup script. This
+prevents the timer from silently backing up a development PostgreSQL container.
+The archive and sidecars remain `0600`; the non-sensitive Prometheus textfile
+is `0644` so the `nobody` node-exporter process can ingest it.
+
 Use backup tooling from the same PostgreSQL major version as the source. The
 script intentionally lets `pg_dump` reject a major-version mismatch rather
 than producing ambiguous recovery evidence.

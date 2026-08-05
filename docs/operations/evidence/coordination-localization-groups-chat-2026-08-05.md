@@ -117,6 +117,36 @@ repository checksum `e2f67e42a883e12168fff7d6cd76878b3ab967c49e8f3efe3ce29196bd3
 Container-local `promtool` found 18 rules, reload/readiness passed, and the live
 rules API returned all 18 with `owner="patchwork-primary-on-call"`.
 
+The complete pushed cleanup revision
+`7c7b4142b2055e153e1058c7e54003a63fc22214` was then built once into four
+runtime targets, scanned before publication with Trivy 0.59.1 at zero
+HIGH/CRITICAL findings, pushed to the loopback registry, signed with the scoped
+local staging key, and verified against its public key. The immutable deploy
+replayed all migrations with 25/6/5 skips and zero new applications. All four
+services report the exact revision, healthy status, and zero restarts; public
+readiness/routes/contracts, clean logs, and obsolete `group-service.js`
+absence passed. Release state retains `55f724a8` as immediate rollback.
+
+| Service | Cleanup-release digest |
+| --- | --- |
+| API | `sha256:3896b77335a1c547470d77ab2b9557644072e754e54889ce9f24a721ebee8c63` |
+| Indexer | `sha256:b3eda578f719b65c7c632ea97a3e3e35c82cc7a168fa768cccfbebd4011ae55c` |
+| Moderation | `sha256:0a12b0e725fdb0c31911d9bfcdf88317b38c395c5cbb948300197d8ceb4ee9b6` |
+| Web | `sha256:5bea6a3e62f9b4febb20ff59ab3d44c273e6db36d71b37fd54ab1dade90d29a6` |
+
+Pre-deploy archive `patchwork_20260805_182117.dump` (312,971 bytes) passed
+checksum/archive validation and restored into a fresh isolated PostgreSQL 17
+container in 6 seconds with scheduling, groups, and chat tables present and
+zero browser sessions; the container was removed. The audit also found that
+`patchwork-staging-backup.timer` still targeted the local PostgreSQL 16
+development container and wrote metrics to an obsolete path. The installed
+wrapper now derives the target from the running staging API, runs matching
+PostgreSQL 17 tools, and publishes a `0644` metric for the `nobody`
+node-exporter process while keeping archives `0600`. Two service runs produced
+validated ~313 KB staging archives, and Prometheus returned backup success.
+Nine ~149 KB local-development archives and their sidecars were moved to
+recoverable `quarantine/local-postgres16`; no archive was deleted.
+
 ## Residual launch gates
 
 The operational decision remains **NO-GO**. Professional Spanish translation

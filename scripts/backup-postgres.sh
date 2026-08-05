@@ -35,6 +35,7 @@ atomic_write_metrics() {
             grep 'patchwork_backup_last_success_timestamp_seconds' "$PATCHWORK_BACKUP_METRICS_FILE" || true
         fi
     } >"$temporary"
+    chmod 0644 "$temporary"
     mv "$temporary" "$PATCHWORK_BACKUP_METRICS_FILE"
 }
 
