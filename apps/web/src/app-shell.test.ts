@@ -80,11 +80,11 @@ describe('app-shell route visibility', () => {
             expect(routes).toContain('/notifications');
             expect(routes).toContain('/feedback');
             expect(routes).toContain('/groups');
+            expect(routes).toContain('/scheduling');
             expect(routes).not.toContain('/moderation');
-            expect(routes).not.toContain('/scheduling');
         });
 
-        it('volunteer sees the same as user plus scheduling (but not moderation)', () => {
+        it('volunteer sees scheduling but not moderation', () => {
             const visible = getVisibleRoutes('volunteer');
             const routes = visible.map(s => s.route);
 
@@ -153,8 +153,8 @@ describe('app-shell route visibility', () => {
         const legalRoutes = ['/legal/terms', '/legal/privacy', '/legal/community-guidelines'];
         const expectations: Record<PlatformRole, string[]> = {
             anonymous: ['/map', '/feed', '/resources', ...legalRoutes],
-            user: ['/map', '/feed', '/resources', '/volunteer', '/settings', '/inbox', '/notifications', '/feedback', '/groups', ...legalRoutes],
-            verified_user: ['/map', '/feed', '/resources', '/volunteer', '/settings', '/inbox', '/notifications', '/feedback', '/groups', ...legalRoutes],
+            user: ['/map', '/feed', '/resources', '/volunteer', '/settings', '/inbox', '/notifications', '/scheduling', '/feedback', '/groups', ...legalRoutes],
+            verified_user: ['/map', '/feed', '/resources', '/volunteer', '/settings', '/inbox', '/notifications', '/scheduling', '/feedback', '/groups', ...legalRoutes],
             volunteer: ['/map', '/feed', '/resources', '/volunteer', '/settings', '/inbox', '/notifications', '/scheduling', '/feedback', '/groups', ...legalRoutes],
             moderator: ['/map', '/feed', '/resources', '/volunteer', '/settings', '/moderation', '/inbox', '/notifications', '/scheduling', '/feedback', '/groups', ...legalRoutes],
             admin: ['/map', '/feed', '/resources', '/volunteer', '/settings', '/moderation', '/inbox', '/notifications', '/scheduling', '/feedback', '/groups', ...legalRoutes],

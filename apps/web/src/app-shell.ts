@@ -82,8 +82,8 @@ export const shellSections: readonly ShellSection[] = [
     {
         route: '/scheduling',
         title: 'Scheduling',
-        description: 'Calendar, availability windows, and volunteer shift management.',
-        requiresRole: 'volunteer',
+        description: 'Privacy-safe coordination windows for accepted connections.',
+        requiresRole: 'user',
     },
     {
         route: '/feedback',

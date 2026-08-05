@@ -32,6 +32,10 @@ export const useLocale = () => {
         (locale: SupportedLocale) => {
             void i18n.changeLanguage(locale);
 
+            if (typeof window !== 'undefined') {
+                window.localStorage.setItem('patchwork-locale', locale);
+            }
+
             if (typeof document !== 'undefined') {
                 document.documentElement.lang = locale;
             }

@@ -147,7 +147,7 @@ test('public home advertises only implemented alpha capabilities', async ({
 test('direct deferred routes never expose fixture implementations', async ({
     page,
 }) => {
-    for (const route of ['/scheduling', '/feedback', '/groups']) {
+    for (const route of ['/feedback', '/groups']) {
         await page.goto(route);
         await expect(
             page.getByRole('region', { name: 'Deferred from the alpha' }),

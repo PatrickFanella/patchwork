@@ -71,6 +71,11 @@ import {
     isCoordinationRoute,
 } from './http/coordination-handler.js';
 import { CoordinationService } from './coordination-service.js';
+import { CoordinationSchedulingService } from './coordination-scheduling-service.js';
+import {
+    createCoordinationSchedulingHandler,
+    isCoordinationSchedulingRoute,
+} from './http/coordination-scheduling-handler.js';
 import {
     createAttachmentHandler,
     isAttachmentRoute,
@@ -254,6 +259,8 @@ const verificationCaseService =
     postgresPool ? new VerificationCaseService(postgresPool) : undefined;
 const coordinationService =
     postgresPool ? new CoordinationService(postgresPool) : undefined;
+const coordinationSchedulingService =
+    postgresPool ? new CoordinationSchedulingService(postgresPool) : undefined;
 const maintenanceModeService =
     postgresPool ?
         new MaintenanceModeService(
@@ -544,6 +551,14 @@ const coordinationHandler =
     authenticateApiRequest && coordinationService ?
         createCoordinationHandler({
             service: coordinationService,
+            authenticate: authenticateApiRequest,
+            executeIdempotent: executeIdempotentMutation,
+        })
+    :   undefined;
+const coordinationSchedulingHandler =
+    authenticateApiRequest && coordinationSchedulingService ?
+        createCoordinationSchedulingHandler({
+            service: coordinationSchedulingService,
             authenticate: authenticateApiRequest,
             executeIdempotent: executeIdempotentMutation,
         })
@@ -1937,6 +1952,9 @@ export const createApiServer = () => {
         if (verificationHandler?.(request, response, requestUrl)) {
             return;
         }
+        if (coordinationSchedulingHandler?.(request, response, requestUrl)) {
+            return;
+        }
         if (coordinationHandler?.(request, response, requestUrl)) {
             return;
         }
@@ -1983,6 +2001,15 @@ export const createApiServer = () => {
                 error: {
                     code: 'COORDINATION_SERVICE_UNAVAILABLE',
                     message: 'Coordination services are unavailable.',
+                },
+            });
+            return;
+        }
+        if (isCoordinationSchedulingRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'COORDINATION_SCHEDULING_UNAVAILABLE',
+                    message: 'Coordination scheduling is unavailable.',
                 },
             });
             return;
@@ -2323,11 +2350,14 @@ export const startApiServer = () => {
                 enforce: async () => {
                     const result =
                         await coordinationService.runExpirySweep();
+                    const scheduling =
+                        await coordinationSchedulingService?.runSweep();
                     console.log(
                         JSON.stringify({
                             level: 'info',
                             event: 'coordination_expiry_sweep_completed',
                             ...result,
+                            scheduling,
                         }),
                     );
                 },

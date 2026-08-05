@@ -8,6 +8,12 @@ import { defaultLocale, supportedLocales } from './types';
  * Detects the preferred locale from the browser, falling back to the default.
  */
 const detectBrowserLocale = (): string => {
+    if (typeof window !== 'undefined') {
+        const saved = window.localStorage.getItem('patchwork-locale');
+        if (saved && supportedLocales.includes(saved as (typeof supportedLocales)[number])) {
+            return saved;
+        }
+    }
     if (typeof navigator === 'undefined') {
         return defaultLocale;
     }

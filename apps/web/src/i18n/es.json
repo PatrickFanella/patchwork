@@ -218,6 +218,36 @@
         "number": "{{value, number}}",
         "currency": "{{value, currency}}"
     },
+    "common": {
+        "error": "Error"
+    },
+    "scheduling": {
+        "heading": "Programación de la conexión",
+        "description": "Propón un intervalo después de aceptar una conexión. Las horas se guardan en UTC con tu zona horaria IANA; las ubicaciones exactas nunca forman parte del horario.",
+        "loading": "Cargando horarios de coordinación…",
+        "ready": "Los horarios están listos.",
+        "saving": "Guardando horario…",
+        "failed": "La acción de horario falló.",
+        "empty": "No hay conexiones aceptadas activas disponibles para programar.",
+        "proposeHeading": "Proponer o cambiar un intervalo",
+        "currentHeading": "Intervalo actual",
+        "connection": "Conexión",
+        "start": "Inicio",
+        "end": "Fin",
+        "propose": "Proponer intervalo",
+        "counter": "Proponer reemplazo",
+        "accept": "Aceptar",
+        "decline": "Rechazar",
+        "cancel": "Cancelar intervalo confirmado",
+        "noProposal": "No se ha propuesto un intervalo para esta conexión.",
+        "status": {
+            "proposed": "Propuesto",
+            "confirmed": "Confirmado",
+            "declined": "Rechazado",
+            "cancelled": "Cancelado",
+            "expired": "Vencido"
+        }
+    },
     "a11y": {
         "languageSwitcher": "Idioma",
         "currentLanguage": "Idioma actual: {{language}}",

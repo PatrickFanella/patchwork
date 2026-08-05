@@ -815,6 +815,33 @@ export class AccountPrivacyService {
              ORDER BY accepted_at, connection_id`,
             [did],
         );
+        const coordinationWindows = await client.query<{
+            window_id: string;
+            connection_id: string;
+            proposer_did: string;
+            recipient_did: string;
+            start_at: Date | string;
+            end_at: Date | string;
+            originating_timezone: string;
+            status: string;
+            version: number;
+            proposal_expires_at: Date | string;
+            reminder_eligible_at: Date | string;
+            reminder_sent_at: Date | string | null;
+            created_at: Date | string;
+            updated_at: Date | string;
+        }>(
+            `SELECT w.window_id, w.connection_id, w.proposer_did,
+                    w.recipient_did, w.start_at, w.end_at,
+                    w.originating_timezone, w.status, w.version,
+                    w.proposal_expires_at, w.reminder_eligible_at,
+                    w.reminder_sent_at, w.created_at, w.updated_at
+             FROM coordination_windows w
+             JOIN coordination_connections c USING (connection_id)
+             WHERE c.requester_did = $1 OR c.helper_did = $1
+             ORDER BY w.start_at, w.window_id`,
+            [did],
+        );
         const coordinationInbox = await client.query<{
             item_id: string;
             item_type: string;
@@ -1283,6 +1310,22 @@ export class AccountPrivacyService {
                         helperDid: row.helper_did,
                         acceptedAt: iso(row.accepted_at),
                         completedAt: iso(row.completed_at),
+                        updatedAt: iso(row.updated_at),
+                    })),
+                    windows: coordinationWindows.rows.map(row => ({
+                        id: row.window_id,
+                        connectionId: row.connection_id,
+                        proposerDid: row.proposer_did,
+                        recipientDid: row.recipient_did,
+                        startAt: iso(row.start_at),
+                        endAt: iso(row.end_at),
+                        timezone: row.originating_timezone,
+                        status: row.status,
+                        version: row.version,
+                        proposalExpiresAt: iso(row.proposal_expires_at),
+                        reminderEligibleAt: iso(row.reminder_eligible_at),
+                        reminderSentAt: iso(row.reminder_sent_at),
+                        createdAt: iso(row.created_at),
                         updatedAt: iso(row.updated_at),
                     })),
                     inbox: coordinationInbox.rows.map(row => ({

@@ -218,6 +218,36 @@
         "number": "{{value, number}}",
         "currency": "{{value, currency}}"
     },
+    "common": {
+        "error": "Error"
+    },
+    "scheduling": {
+        "heading": "Connection scheduling",
+        "description": "Propose a time window after a connection is accepted. Times are stored in UTC with your IANA timezone; exact locations are never part of a schedule.",
+        "loading": "Loading coordination schedules…",
+        "ready": "Schedules are ready.",
+        "saving": "Saving schedule…",
+        "failed": "The schedule action failed.",
+        "empty": "No active accepted connections are available for scheduling.",
+        "proposeHeading": "Propose or change a window",
+        "currentHeading": "Current window",
+        "connection": "Connection",
+        "start": "Starts",
+        "end": "Ends",
+        "propose": "Propose window",
+        "counter": "Propose replacement",
+        "accept": "Accept",
+        "decline": "Decline",
+        "cancel": "Cancel confirmed window",
+        "noProposal": "No window has been proposed for this connection.",
+        "status": {
+            "proposed": "Proposed",
+            "confirmed": "Confirmed",
+            "declined": "Declined",
+            "cancelled": "Cancelled",
+            "expired": "Expired"
+        }
+    },
     "a11y": {
         "languageSwitcher": "Language",
         "currentLanguage": "Current language: {{language}}",

@@ -2,7 +2,7 @@
 
 Status: **approved target for feature completion**
 
-Decision date: 2026-07-28 (America/Chicago)
+Decision date: 2026-08-05 (America/Chicago; expanded sprint authorization)
 
 Decision source: product-owner interview
 
@@ -75,12 +75,15 @@ organization participates in Patchwork.
 - Account settings, versioned policy consent, export, and deactivation.
 - Realistic synthetic United States data with provenance and safety labeling.
 - Structured post-handoff outcome feedback.
-- A polished chat placeholder that does not expose a simulated chat runtime.
+- Durable privacy-safe scheduling for participants in accepted connections.
+- Production-backed groups with bounded roles, invitations, and rooms.
+- Bounded production text chat for active accepted connections and authorized
+  group-room members.
+- Complete English and Spanish production localization, subject to external
+  professional translation review before launch.
 
 ### Explicitly excluded
 
-- A production chat or direct-message system.
-- Public or private group chat.
 - Native iOS or Android applications.
 - Multi-region deployment.
 - Contractual uptime or support service levels.
@@ -195,9 +198,13 @@ automatically. A helper must offer and a requester must accept. Blocking,
 deactivation, expiry, moderation state, and capability checks must be applied
 before recommendations and again before connection acceptance.
 
-Chat is not part of this release. The accepted connection surface may show
-status, actions, notifications, and the ephemeral exact-location control, but
-must not provide a hidden or fixture-backed messaging feature.
+Accepted connection participants may schedule coordination windows and use the
+bounded production text-chat runtime. Scheduling stores only canonical time
+intervals and the originating IANA timezone, never an exact personal location.
+Chat is server-readable and is not end-to-end encrypted; transport and storage
+protections must not be described as E2EE. Access ends immediately when the
+connection, membership, block, deactivation, room, request, or moderation state
+no longer permits it.
 
 ## Attachments
 
@@ -304,7 +311,8 @@ Patchwork is feature-complete against this charter only when:
    production build with fixture fallback disabled;
 6. restart, retry, deletion, expiry, deactivation, and account-export tests
    cover every new subsystem;
-7. the chat route exposes only the approved placeholder;
+7. scheduling, groups, and bounded chat expose only durable authenticated
+   production paths, with fixture paths unreachable;
 8. accessibility regression coverage includes every new critical flow;
 9. the current-state matrix is updated with evidence rather than intent.
 

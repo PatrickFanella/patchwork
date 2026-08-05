@@ -327,6 +327,20 @@ API tests.
   deactivation UX.
 - Add loading, empty, stale, error, retry, offline, and maintenance states.
 - Keep Chat as an intentional placeholder with no fixture data or mutation.
+
+## 2026-08-05 authorized expansion sprint
+
+The product owner subsequently authorized durable accepted-connection
+scheduling, complete English/Spanish localization, production-backed groups,
+and bounded production text chat. Implementation and acceptance details are in
+[`2026-08-05-coordination-localization-groups-chat-sprint.md`](./2026-08-05-coordination-localization-groups-chat-sprint.md).
+
+Connection scheduling is the first verified vertical slice. It replaces the
+production deferral with PostgreSQL-backed, authenticated, versioned proposals,
+responses, counter-proposals, confirmation, reminders, cancellation, expiry,
+export/deactivation handling, privacy-safe notification intent, and responsive
+bilingual UI. Groups and chat remain deferred until their durable slices pass
+the same gate. The operational `NO-GO` remains unchanged.
 - Apply consistent demo/non-emergency disclosures.
 - Extend keyboard, screen-reader, reflow, text-size, and reduced-motion tests.
 

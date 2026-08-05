@@ -2498,7 +2498,8 @@ export interface ActivityInboxItem {
         | 'moderation'
         | 'expiry'
         | 'notification'
-        | 'outcome';
+        | 'outcome'
+        | 'scheduling';
     title: string;
     summary: string;
     actionUrl: string;
@@ -2634,6 +2635,48 @@ export const transitionCoordinationConnectionViaApi = async (
                 'Connection response was malformed.',
             )
         :   result;
+};
+
+export interface CoordinationWindow {
+    id: string;
+    connectionId: string;
+    proposerDid: string;
+    recipientDid: string;
+    startAt: string;
+    endAt: string;
+    timezone: string;
+    status: 'proposed' | 'confirmed' | 'declined' | 'cancelled' | 'expired';
+    version: number;
+    proposalExpiresAt: string;
+    reminderEligibleAt: string;
+    reminderSentAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const fetchCoordinationWindowsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ windows: CoordinationWindow[] }>> => {
+    const result = await requestJson('/coordination/windows', new URLSearchParams(), signal);
+    if (!result.ok) return result;
+    const parsed = parseArrayProperty<CoordinationWindow>(result.data, 'windows', 'Schedule response was malformed.');
+    return parsed.ok ? { ok: true, data: { windows: parsed.data } } : parsed;
+};
+
+export const proposeCoordinationWindowViaApi = async (
+    input: { connectionId: string; startAt: string; endAt: string; timezone: string; expectedVersion?: number },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ window: CoordinationWindow }>> => {
+    const result = await requestJsonPost('/coordination/windows', input, signal);
+    return result.ok ? parseRecordPayload(result.data, 'window', 'Schedule proposal response was malformed.') : result;
+};
+
+export const decideCoordinationWindowViaApi = async (
+    input: { connectionId: string; action: 'accept' | 'decline' | 'cancel'; expectedVersion: number },
+    signal?: AbortSignal,
+): Promise<ApiClientResult<{ window: CoordinationWindow }>> => {
+    const result = await requestJsonPost('/coordination/window-decisions', input, signal);
+    return result.ok ? parseRecordPayload(result.data, 'window', 'Schedule decision response was malformed.') : result;
 };
 
 const parseExactLocationState = (
