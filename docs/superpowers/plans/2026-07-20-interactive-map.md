@@ -56,7 +56,7 @@ the location authority boundary: area URLs use the already-public displaced aid
 center or an approved exact public-resource point.
 
 **Area-filter deployment verification (2026-08-04):** Signed immutable
-revision `45e21906d5638f13e4e46efa7646b4a31d7baa3e` is healthy with zero
+revision `43deb5e9928b3f3c17916146c92bab3d569aa38b` is healthy with zero
 restarts. Live Chromium rendered the labeled 100-request cluster over repeated
 206 PMTiles reads. Its click produced an explicit 7km URL-backed area filter;
 outline mode survived reload, and Clear restored `/map`. The live result set

@@ -1,7 +1,7 @@
 # Buyer-ready product-gap sprint completion
 
 Date: 2026-08-04 (America/Chicago)  
-Verified implementation through: `45e21906`
+Verified implementation through: `43deb5e9`
 Repository decision: **COMPLETE**  
 Operational decision: **NO-GO**
 
@@ -21,7 +21,7 @@ external gates.
 
 | Slice | Result | Focused commit |
 | --- | --- | --- |
-| OAuth callback restoration | A successful OAuth callback now passes through a same-origin restoration page, verifies the cookie-backed Patchwork session before navigation, strips sensitive callback fields, preserves only a sanitized return route, and exposes bounded retry/re-login states. | `961edd5b` |
+| OAuth callback restoration | A successful OAuth callback now passes through a same-origin restoration page, verifies the cookie-backed Patchwork session before navigation, strips sensitive callback fields, preserves only a sanitized return route, and exposes bounded retry/re-login states. A callback reached without a session now terminates in an explicit recoverable state instead of waiting indefinitely. | `961edd5b`, `43deb5e9` |
 | Truthful production navigation | Scheduling, feedback, and groups are absent from production navigation. Direct visits remain fail-closed deferred pages without forms, fixture data, or mutation controls. Chat remains the intentional non-mutating placeholder. | `c8347748` |
 | Map interaction and privacy | Stable per-request displacement keeps a displayed aid-circle center from revealing the supplied approximate coordinate after the minimum-1km quantization. Clusters split progressively by zoom; labels show bounded area information; filled, outline, and high-contrast styles persist locally. Circle selection centers the map and creates an explicit URL-backed area filter with Back, Forward, clear, and return-to-previous behavior. Current moderator-approved public resources remain the only exact point-marker class. | `36905c0b` |
 | Outcome safety escalation | Submitting a safety-tagged outcome atomically writes the feedback, one high-priority moderation case, and one moderator notification. The review preview excludes the private comment, participant DIDs, and exact location, retaining only bounded outcome/rating context, a request hash, and connection reference. Duplicate feedback cannot create duplicate casework. | `aab44028` |
@@ -36,17 +36,17 @@ from zero. No production rows or participant content were used.
 | --- | --- |
 | Fresh migrations | API 22, indexer 6, moderation 5 |
 | Repository `npm run check` | Passed twice, including after the dependency update |
-| Unit/contract baseline | Web 253; API 314 runnable with 75 environment skips; indexer 35 with 17 skips; moderation 53 with 18 skips; AT client 26; lexicons 5; shared 322; map archive and exact-location absence gates passed |
+| Unit/contract baseline | Web 254; API 314 runnable with 75 environment skips; indexer 35 with 17 skips; moderation 53 with 18 skips; AT client 26; lexicons 5; shared 322; map archive and exact-location absence gates passed |
 | API PostgreSQL integration | 69 passed across 16 files |
 | Indexer PostgreSQL integration | 52 passed |
 | Moderation PostgreSQL integration | 71 passed |
 | Real object/scanner integration | 1 passed against isolated MinIO and ClamAV |
 | Web service integration | 8 passed |
 | Production build | Passed; Vite emitted only the existing bundle-size advisory |
-| Production-bundle Chromium | 98 passed in 5.8 minutes; 1 credential-required real PDS lifecycle skipped |
+| Production-bundle Chromium | 98 passed in 6.5 minutes; 1 credential-required real PDS lifecycle skipped |
 | Browser accessibility | Eighteen unfiltered axe route scans plus keyboard, focus, landmark, 320px reflow, 200% text, and reduced-motion cases passed |
-| Browser artifact redaction | Passed with zero retained trace/screenshot artifacts; Playwright retained only its non-sensitive `.last-run.json` status file |
-| Diagnostic coverage | 1,008 passed with 110 environment skips; 46.38% statements, 36.35% branches, 41.14% functions, 47.24% lines |
+| Browser artifact redaction | Passed with zero retained trace/screenshot artifacts |
+| Diagnostic coverage | 1,009 passed with 110 environment skips; 46.39% statements, 36.41% branches, 41.14% functions, 47.25% lines |
 | Dependency audit | Production-only and full dependency trees report 0 vulnerabilities |
 | Prometheus rules | `promtool check rules` passed all 18 rules |
 
@@ -92,9 +92,10 @@ production certification.
 
 ## Deployment evidence
 
-Immutable revision `45e21906d5638f13e4e46efa7646b4a31d7baa3e` is
+Immutable revision `43deb5e9928b3f3c17916146c92bab3d569aa38b` is
 deployed on home staging. Before replacement, the release process published and
-validated `patchwork_20260805_042225.dump` with its checksum and metadata.
+validated `patchwork_20260805_044900.dump` with its checksum and metadata. The
+immediately previous `45e21906` exact-digest release is retained for rollback.
 
 All four exact-release images parse to zero HIGH/CRITICAL findings under Trivy
 0.59.1 and verify against the retained scoped Cosign public key. The signatures
@@ -115,7 +116,9 @@ cluster, and repeated 206 PMTiles reads with no map alert. Production navigation
 contained none of Scheduling, Feedback, or Groups. Clicking the live cluster
 created a visible area filter at
 `/map?r=6991&lat=40.716541&lng=-74.004138`; outline mode survived reload and
-Clear returned to `/map`.
+Clear returned to `/map`. A separate clean-browser visit to
+`/auth/callback?returnTo=%2Fmap` without a session sanitized the URL, terminated
+the checking state, and rendered the explicit new-login recovery action.
 
 No credentialed browser state or disposable account secret was available for a
 fresh live OAuth callback or real safety-feedback mutation. Those two external

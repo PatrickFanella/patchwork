@@ -47,7 +47,7 @@ decision remains **NO-GO**.
 | HTTP security | Phase 4 method, auth, CSRF, stable-error, idempotency, and privacy evidence | Local gate passes |
 | Live ingestion and discovery | Phase 5 cursor, reconnect, projection, tombstone, dead-letter, rebuild, query, and automatic lifecycle-reconciliation evidence plus controlled live aid and directory lifecycles | Home-network external gate passes; protected staging repetition remains |
 | Web journey | The 2026-08-04 clean gate builds and serves the production bundle and passes 98 runnable Chromium cases; one credentialed live OAuth/PDS case is skipped locally. Earlier controlled two-account OAuth cases passed before and after prior immutable deployments. | Buyer-ready local feature gate and prior controlled external OAuth path pass; fresh credentialed callback/signup/PDS repetition remains external |
-| Staging topology and delivery | Revision `45e21906` is the current four-image exact-digest release. Its images parse to zero HIGH/CRITICAL findings, verify with the retained local key, and passed migration/readiness/zero-restart/live-map checks after a validated backup. Earlier evidence rolled the four-image set back and promoted it forward. | Technical home-staging gate satisfied; protected GHCR/OIDC execution remains absent |
+| Staging topology and delivery | Revision `43deb5e9` is the current four-image exact-digest release. Its images parse to zero HIGH/CRITICAL findings, verify with the retained local key, and passed migration/readiness/zero-restart/live-map/missing-session-callback checks after a validated backup. Revision `45e21906` is retained as the immediate rollback set; earlier evidence rolled a four-image set back and promoted it forward. | Technical home-staging gate satisfied; protected GHCR/OIDC execution remains absent |
 | Recovery and alerting | NUC indexer-disconnect alert/recovery plus live PostgreSQL 17 backup and empty-target restore with measured RTO/RPO | Mechanisms pass; independent backup durability and human acknowledgment remain |
 | Security | `npm audit --omit=dev --audit-level=high` is green; Trivy 0.59.1 reports zero HIGH/CRITICAL findings for all four deployed images; Cosign verifies every digest | Home-staging image gate green; signing key and registry share the host and have no transparency-log record |
 | Data retention | API migration 0012 and moderation migration 003 drive hourly non-overlapping cleanup for all alpha-private state. Active moderation cases and sessions are preserved; failure/staleness metrics alert for both runtimes. The immutable NUC schedulers removed representative expired API and moderation rows on their next natural hourly pass with successful metrics, zero alerts, and zero restarts. | Formal privacy/backup-deletion, retained-exception, suppression-marker, and AT-repository-boundary approval remains incomplete |
@@ -59,15 +59,15 @@ decision remains **NO-GO**.
 
 Current verification baseline:
 
-- repository unit/contract suite: web 253, API 314 runnable, indexer 35
+- repository unit/contract suite: web 254, API 314 runnable, indexer 35
   runnable, moderation 53 runnable, AT client 26, lexicons 5, and shared 322;
 - fresh PostgreSQL suites: API 69, indexer 52, and moderation 71;
 - direct web service integration: 8 tests;
 - real MinIO/clamd attachment integration: 1 end-to-end case;
 - production-bundle Chromium: 98 runnable cases passed and 1
   credential-required external PDS case skipped;
-- diagnostic coverage: 46.38% statements, 36.35% branches, 41.14% functions,
-  and 47.24% lines across 1,008 runnable tests;
+- diagnostic coverage: 46.39% statements, 36.41% branches, 41.14% functions,
+  and 47.25% lines across 1,009 runnable tests;
 - API/indexer/moderation migrations replay cleanly at 22/6/5;
 - build, typecheck, lint, exact-location absence, artifact redaction,
   Prometheus rule validation, and production/full dependency audits pass.
