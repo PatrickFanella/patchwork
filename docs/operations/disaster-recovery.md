@@ -18,7 +18,9 @@ than producing ambiguous recovery evidence.
 
 The backup is written with a restrictive `077` umask to a private temporary
 directory, checked with
-`pg_restore --list`, checksummed, and only then atomically published. A failed
+`pg_restore --list`, checksummed, and only then atomically published. The
+backup script also requires the `pg_dump` major version to match the PostgreSQL
+server major so an archive cannot introduce unsupported session settings. A failed
 attempt publishes no archive and changes `patchwork_backup_last_attempt_success`
 to zero without erasing the last-success timestamp.
 

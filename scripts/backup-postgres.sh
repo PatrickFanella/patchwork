@@ -48,9 +48,16 @@ on_error() {
 trap cleanup EXIT
 trap on_error ERR
 
-for command in pg_dump pg_restore; do
+for command in pg_dump pg_restore psql; do
     command -v "$command" >/dev/null 2>&1 || { log "ERROR: ${command} not found in PATH."; exit 1; }
 done
+client_major="$(pg_dump --version | sed -E 's/.* ([0-9]+)(\.[0-9]+)?.*/\1/')"
+server_major="$(psql -XAt -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
+    -c "SELECT current_setting('server_version_num')::int / 10000;")"
+if [[ ! "$client_major" =~ ^[0-9]+$ || ! "$server_major" =~ ^[0-9]+$ || "$client_major" != "$server_major" ]]; then
+    log "ERROR: pg_dump major ${client_major} must match PostgreSQL server major ${server_major}."
+    exit 1
+fi
 if command -v sha256sum >/dev/null 2>&1; then
     sha256() { sha256sum "$1" | awk '{print $1}'; }
 elif command -v shasum >/dev/null 2>&1; then

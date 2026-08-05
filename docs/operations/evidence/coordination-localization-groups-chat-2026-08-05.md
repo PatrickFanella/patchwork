@@ -50,6 +50,7 @@ or production-operations approval.
 | Dependency audit | `npm audit --omit=dev --audit-level=high`: 0 vulnerabilities |
 | Prometheus rules | Repository file passed `promtool` with 18 rules; currently deployed pre-sprint file passed with 11 rules |
 | Playwright artifact redaction | Passed; no retained failure artifacts were present after the clean focused runs |
+| Pre-deploy backup/restore | A PostgreSQL 17 client archive failed against the PostgreSQL 16 server and was quarantined. The script now rejects client/server major mismatches. Matching PostgreSQL 16 backup `patchwork_20260805_090220.dump` passed checksum/archive validation and an empty-database restore in 3 seconds with a 13-second recovery-point age and zero restored sessions. |
 
 ## Privacy and failure evidence
 
