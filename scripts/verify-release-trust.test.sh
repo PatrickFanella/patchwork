@@ -38,8 +38,12 @@ fi
 touch "$tmpdir/public.pem"
 PATCHWORK_RELEASE_VERIFY_MODE=key \
 PATCHWORK_COSIGN_PUBLIC_KEY="$tmpdir/public.pem" \
+PATCHWORK_COSIGN_ALLOW_INSECURE_REGISTRY=true \
+PATCHWORK_COSIGN_INSECURE_IGNORE_TLOG=true \
 bash "$repo_root/scripts/verify-release-trust.sh" "$tmpdir/manifest.json" >/dev/null
 grep -q -- '--key .*public.pem' "$tmpdir/calls"
+grep -q -- '--allow-insecure-registry' "$tmpdir/calls"
+grep -q -- '--insecure-ignore-tlog' "$tmpdir/calls"
 
 if PATCHWORK_RELEASE_VERIFY_MODE=invalid \
     bash "$repo_root/scripts/verify-release-trust.sh" "$tmpdir/manifest.json" >/dev/null 2>&1; then

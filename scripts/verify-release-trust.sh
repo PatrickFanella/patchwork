@@ -7,6 +7,8 @@ manifest=${1:?Usage: verify-release-trust.sh MANIFEST}
 mode=${PATCHWORK_RELEASE_VERIFY_MODE:?Set PATCHWORK_RELEASE_VERIFY_MODE to keyless or key}
 allowed_prefix=${PATCHWORK_ALLOWED_IMAGE_PREFIX:?Set PATCHWORK_ALLOWED_IMAGE_PREFIX}
 require_attestations=${PATCHWORK_REQUIRE_RELEASE_ATTESTATIONS:-true}
+allow_insecure_registry=${PATCHWORK_COSIGN_ALLOW_INSECURE_REGISTRY:-false}
+ignore_transparency_log=${PATCHWORK_COSIGN_INSECURE_IGNORE_TLOG:-false}
 
 for command in jq cosign; do
     command -v "$command" >/dev/null
@@ -32,6 +34,13 @@ case "$mode" in
         exit 2
         ;;
 esac
+
+if [[ "$allow_insecure_registry" == true ]]; then
+    verify_args+=(--allow-insecure-registry)
+fi
+if [[ "$ignore_transparency_log" == true ]]; then
+    verify_args+=(--insecure-ignore-tlog)
+fi
 
 git_sha=$(jq -er '.gitSha' "$manifest")
 [[ "$git_sha" =~ ^[0-9a-f]{40}$ ]]

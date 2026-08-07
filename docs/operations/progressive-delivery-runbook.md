@@ -26,6 +26,12 @@ Before any pull or release-state change, the host runs
 verifies the signature plus both attestations using either the protected
 GitHub OIDC identity or the scoped home-staging public key.
 
+The loopback-only home-staging registry additionally sets
+`PATCHWORK_COSIGN_ALLOW_INSECURE_REGISTRY=true` and, because its scoped local
+key has no transparency-log record,
+`PATCHWORK_COSIGN_INSECURE_IGNORE_TLOG=true`. Both defaults are false and must
+not be enabled for the protected GHCR/OIDC path.
+
 ## Deployment state sequence
 
 ```
