@@ -187,9 +187,12 @@ jobs:
                     PATCHWORK_RELEASE_VERIFY_MODE=keyless \
                     PATCHWORK_ALLOWED_IMAGE_PREFIX='${REGISTRY}/patchwork-' \
                     PATCHWORK_COSIGN_CERTIFICATE_IDENTITY_REGEXP='https://github.com/${GITHUB_REPOSITORY}/.github/workflows/deploy-staging.yml@refs/heads/main' \
+                    PATCHWORK_EXPECTED_WEB_API_BASE_URL='${{ vars.STAGING_VITE_API_BASE_URL }}' \
                     ./deploy-staging-digests.sh artifact-digests.json '${{ vars.STAGING_ENV_FILE }}' docker-compose.staging.yml"; then
                       ssh "$remote" \
-                        "cd '$destination' && ./rollback-staging-digests.sh '${{ vars.STAGING_ENV_FILE }}' docker-compose.staging.yml"
+                        "cd '$destination' && \
+                        PATCHWORK_EXPECTED_WEB_API_BASE_URL='${{ vars.STAGING_VITE_API_BASE_URL }}' \
+                        ./rollback-staging-digests.sh '${{ vars.STAGING_ENV_FILE }}' docker-compose.staging.yml"
                       exit 1
                   fi
             - uses: actions/setup-node@v4

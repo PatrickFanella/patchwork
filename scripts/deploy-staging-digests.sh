@@ -24,6 +24,13 @@ export STAGING_PATCHWORK_PM_TILES_FILENAME="${map_tile_url##*/}"
 export VITE_MAP_TILE_URL="$map_tile_url"
 export PATCHWORK_PM_TILES_FILENAME="${map_tile_url##*/}"
 
+expected_web_api_base_url=${PATCHWORK_EXPECTED_WEB_API_BASE_URL:-}
+if [[ -n "$expected_web_api_base_url" &&
+      ! "$expected_web_api_base_url" =~ ^(https://|/) ]]; then
+    echo 'Refusing a browser API base URL that is not HTTPS or same-origin.' >&2
+    exit 1
+fi
+
 for service in api indexer moderation web; do
     image=$(jq -er ".images.${service}" "$manifest")
     [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || {
@@ -106,6 +113,14 @@ done
 "${compose[@]}" exec -T patchwork-web sh -ceu \
     'grep -R -F -- "$1" /usr/share/nginx/html/assets >/dev/null' \
     _ "$map_tile_url"
+if [[ -n "$expected_web_api_base_url" ]]; then
+    "${compose[@]}" exec -T patchwork-web sh -ceu \
+        'grep -R -F -- "$1" /usr/share/nginx/html/assets >/dev/null' \
+        _ "$expected_web_api_base_url" || {
+        echo 'Deployed web bundle does not contain the expected API base URL.' >&2
+        exit 1
+    }
+fi
 tile_bytes=$("${compose[@]}" exec -T patchwork-web sh -ceu \
     'curl -fsS --range 0-1023 "http://127.0.0.1$1" | wc -c' \
     _ "$map_tile_url")

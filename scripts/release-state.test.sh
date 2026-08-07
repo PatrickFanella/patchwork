@@ -55,6 +55,7 @@ export PATH="$tmpdir/bin:$PATH"
 export PATCHWORK_RELEASE_STATE_DIR="$tmpdir/state"
 export PATCHWORK_RELEASE_VERIFY_SCRIPT="$tmpdir/verify"
 export FAKE_REVISION="$new_sha"
+export PATCHWORK_EXPECTED_WEB_API_BASE_URL=https://patchwork.test/api
 bash "$repo_root/scripts/deploy-staging-digests.sh" \
     "$tmpdir/new.json" "$tmpdir/env" "$tmpdir/compose.yml" >/dev/null
 
@@ -70,6 +71,12 @@ export FAKE_REVISION="$old_sha"
 bash "$repo_root/scripts/rollback-staging-digests.sh" \
     "$tmpdir/env" "$tmpdir/compose.yml" >/dev/null
 grep -q "$old_sha" "$tmpdir/state/current-artifact-digests.json"
+
+if PATCHWORK_EXPECTED_WEB_API_BASE_URL=http://10.0.0.56:3023 \
+    bash "$repo_root/scripts/rollback-staging-digests.sh" \
+        "$tmpdir/env" "$tmpdir/compose.yml" >/dev/null 2>&1; then
+    exit 1
+fi
 
 printf '\n' >> "$tmpdir/state/previous-artifact-digests.json"
 if bash "$repo_root/scripts/rollback-staging-digests.sh" \
