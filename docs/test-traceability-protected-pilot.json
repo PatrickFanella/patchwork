@@ -48,13 +48,13 @@
         },
         {
           "kind": "operational",
-          "path": "scripts/deploy-staging-digests.sh",
-          "covers": ["PPR-1-AC3"]
+          "path": "scripts/release-state.test.sh",
+          "covers": ["PPR-1-AC3", "PPR-1-AC4"]
         },
         {
           "kind": "operational",
-          "path": "scripts/rollback-staging-digests.sh",
-          "covers": ["PPR-1-AC4"]
+          "path": "scripts/deploy-staging-digests.sh",
+          "covers": ["PPR-1-AC3"]
         }
       ]
     },

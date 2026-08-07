@@ -46,6 +46,16 @@ groups:
         for: 5m
         labels: { severity: warning, owner: patchwork-primary-on-call }
         annotations: { runbook_url: "docs/operations/disaster-recovery.md#backup-monitoring" }
+      - alert: PatchworkIndependentBackupFailed
+        expr: patchwork_independent_backup_last_attempt_success{environment="staging"} == 0 or absent(patchwork_independent_backup_last_attempt_success{environment="staging"})
+        for: 1m
+        labels: { severity: warning, owner: patchwork-primary-on-call }
+        annotations: { runbook_url: "docs/operations/disaster-recovery.md#independent-database-and-private-object-replication" }
+      - alert: PatchworkIndependentBackupStale
+        expr: time() - patchwork_independent_backup_last_success_timestamp_seconds{environment="staging"} > 27000 or absent(patchwork_independent_backup_last_success_timestamp_seconds{environment="staging"})
+        for: 5m
+        labels: { severity: warning, owner: patchwork-primary-on-call }
+        annotations: { runbook_url: "docs/operations/disaster-recovery.md#independent-database-and-private-object-replication" }
       - alert: PatchworkRetentionFailed
         expr: patchwork_retention_last_attempt_success{service="api",environment="staging"} == 0
         for: 5m

@@ -9,6 +9,10 @@ state_dir=${PATCHWORK_RELEASE_STATE_DIR:-/var/lib/patchwork/releases}
 command -v jq >/dev/null
 [[ -r "$manifest" && -r "$env_file" && -r "$compose_file" ]]
 
+verify_script=${PATCHWORK_RELEASE_VERIFY_SCRIPT:-$(dirname "$0")/verify-release-trust.sh}
+[[ -x "$verify_script" ]]
+"$verify_script" "$manifest"
+
 git_sha=$(jq -er '.gitSha' "$manifest")
 [[ "$git_sha" =~ ^[0-9a-f]{40}$ ]] || {
     echo 'Refusing manifest without a full Git SHA.' >&2
@@ -40,8 +44,16 @@ done
 
 install -d -m 0750 "$state_dir"
 if [[ -f "$state_dir/current-artifact-digests.json" ]]; then
+    current_checksum="$state_dir/current-artifact-digests.json.sha256"
+    [[ -r "$current_checksum" ]] || {
+        echo 'Refusing to retain an unverified current rollback manifest.' >&2
+        exit 1
+    }
+    (cd "$state_dir" && sha256sum -c "$(basename "$current_checksum")")
     cp "$state_dir/current-artifact-digests.json" \
         "$state_dir/previous-artifact-digests.json"
+    sha256sum "$state_dir/previous-artifact-digests.json" \
+        > "$state_dir/previous-artifact-digests.json.sha256"
 fi
 
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
@@ -106,4 +118,6 @@ if "${compose[@]}" exec -T patchwork-web \
 fi
 
 cp "$manifest" "$state_dir/current-artifact-digests.json"
+sha256sum "$state_dir/current-artifact-digests.json" \
+    > "$state_dir/current-artifact-digests.json.sha256"
 echo "Staging deployment ready at ${git_sha}."

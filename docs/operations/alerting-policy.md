@@ -22,6 +22,8 @@ open.
 | `PatchworkDatabaseUnavailable` | critical | PostgreSQL scrape target down for 1 minute | Page within 5 minutes |
 | `PatchworkBackupFailed` | warning | most recent backup attempt failed | Respond within 15 minutes |
 | `PatchworkBackupStale` | warning | no successful backup for 7.5 hours | Respond within 15 minutes |
+| `PatchworkIndependentBackupFailed` | warning | database/private-object replication failed | Respond within 15 minutes |
+| `PatchworkIndependentBackupStale` | warning | no independent snapshot for 7.5 hours | Respond within 15 minutes |
 | `PatchworkRetentionFailed` | warning | latest API retention pass failed for 5 minutes | Respond within 15 minutes |
 | `PatchworkRetentionStale` | warning | no successful API retention pass for 2 hours | Respond within 15 minutes |
 | `PatchworkAttachmentDeletionFailed` | warning | one or more private-object deletion jobs are pending after failure | Respond within 15 minutes |

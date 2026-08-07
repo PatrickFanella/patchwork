@@ -13,12 +13,18 @@ were not deployment evidence and are disabled.
 2. `deploy-staging.yml` builds each of four runtime targets exactly once.
 3. Trivy rejects high/critical findings before publication.
 4. Images are pushed to GHCR, resolved to registry digests, keyless-signed with
-   Cosign, and recorded in `artifact-digests.json`.
+   Cosign, accompanied by SPDX SBOM and SLSA provenance attestations, and
+   recorded in `artifact-digests.json`.
 5. The protected `staging` environment authorizes deployment.
 6. The host pulls those exact digests, applies all migration jobs, and starts
    services with `--no-build`.
 7. Deep readiness and the real two-account OAuth/PDS browser test determine
    success. A failure invokes the previous digest manifest automatically.
+
+Before any pull or release-state change, the host runs
+`scripts/verify-release-trust.sh`. It constrains the permitted image prefix and
+verifies the signature plus both attestations using either the protected
+GitHub OIDC identity or the scoped home-staging public key.
 
 ## Deployment state sequence
 

@@ -16,6 +16,10 @@ permissions:
     id-token: write
     checks: read
 
+concurrency:
+    group: patchwork-staging
+    cancel-in-progress: false
+
 env:
     REGISTRY: ghcr.io/${{ github.repository_owner }}
     SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}
@@ -58,6 +62,7 @@ jobs:
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
             - uses: sigstore/cosign-installer@v3
+            - uses: anchore/sbom-action/download-syft@v0
             - name: Build once
               env:
                   STAGING_VITE_MAP_TILE_URL: ${{ vars.STAGING_VITE_MAP_TILE_URL }}
@@ -79,6 +84,21 @@ jobs:
                   image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ env.SOURCE_SHA }}
                   severity: HIGH,CRITICAL
                   exit-code: '1'
+            - name: Generate SBOM and provenance predicates
+              run: |
+                  image="${REGISTRY}/${{ matrix.image }}:${SOURCE_SHA}"
+                  syft "$image" -o spdx-json="sbom-${{ matrix.service }}.spdx.json"
+                  jq -n \
+                    --arg source "git+${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}@${SOURCE_SHA}" \
+                    --arg workflow "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+                    --arg service '${{ matrix.service }}' \
+                    '{
+                      builder:{id:$workflow},
+                      buildType:"https://github.com/Attestations/GitHubActionsWorkflow@v1",
+                      invocation:{configSource:{uri:$source,digest:{sha1:env.SOURCE_SHA}},parameters:{service:$service}},
+                      metadata:{buildInvocationId:$workflow,completeness:{parameters:true,environment:false,materials:true},reproducible:false},
+                      materials:[{uri:$source,digest:{sha1:env.SOURCE_SHA}}]
+                    }' > "provenance-${{ matrix.service }}.json"
             - name: Push, resolve digest, and sign
               run: |
                   image="${REGISTRY}/${{ matrix.image }}:${SOURCE_SHA}"
@@ -86,14 +106,26 @@ jobs:
                   digest_ref=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
                   [[ "$digest_ref" =~ @sha256:[0-9a-f]{64}$ ]]
                   cosign sign --yes "$digest_ref"
+                  cosign attest --yes --type spdxjson \
+                    --predicate "sbom-${{ matrix.service }}.spdx.json" "$digest_ref"
+                  cosign attest --yes --type slsaprovenance \
+                    --predicate "provenance-${{ matrix.service }}.json" "$digest_ref"
                   cosign verify "$digest_ref" \
-                    --certificate-identity-regexp="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/deploy-staging.yml@.*" \
+                    --certificate-identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/deploy-staging.yml@refs/heads/main" \
                     --certificate-oidc-issuer=https://token.actions.githubusercontent.com >/dev/null
+                  for attestation_type in spdxjson slsaprovenance; do
+                    cosign verify-attestation "$digest_ref" --type "$attestation_type" \
+                      --certificate-identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/deploy-staging.yml@refs/heads/main" \
+                      --certificate-oidc-issuer=https://token.actions.githubusercontent.com >/dev/null
+                  done
                   printf '%s' "$digest_ref" > "digest-${{ matrix.service }}.txt"
             - uses: actions/upload-artifact@v4
               with:
                   name: digest-${{ matrix.service }}
-                  path: digest-${{ matrix.service }}.txt
+                  path: |
+                      digest-${{ matrix.service }}.txt
+                      sbom-${{ matrix.service }}.spdx.json
+                      provenance-${{ matrix.service }}.json
                   retention-days: 14
 
     manifest:
@@ -148,9 +180,14 @@ jobs:
                   ssh "$remote" "mkdir -p '$destination'"
                   scp artifact-digests.json docker-compose.staging.yml \
                     scripts/deploy-staging-digests.sh scripts/rollback-staging-digests.sh \
+                    scripts/verify-release-trust.sh \
                     "$remote:$destination/"
                   if ! ssh "$remote" \
-                    "cd '$destination' && chmod 0750 *.sh && ./deploy-staging-digests.sh artifact-digests.json '${{ vars.STAGING_ENV_FILE }}' docker-compose.staging.yml"; then
+                    "cd '$destination' && chmod 0750 *.sh && \
+                    PATCHWORK_RELEASE_VERIFY_MODE=keyless \
+                    PATCHWORK_ALLOWED_IMAGE_PREFIX='${REGISTRY}/patchwork-' \
+                    PATCHWORK_COSIGN_CERTIFICATE_IDENTITY_REGEXP='https://github.com/${GITHUB_REPOSITORY}/.github/workflows/deploy-staging.yml@refs/heads/main' \
+                    ./deploy-staging-digests.sh artifact-digests.json '${{ vars.STAGING_ENV_FILE }}' docker-compose.staging.yml"; then
                       ssh "$remote" \
                         "cd '$destination' && ./rollback-staging-digests.sh '${{ vars.STAGING_ENV_FILE }}' docker-compose.staging.yml"
                       exit 1

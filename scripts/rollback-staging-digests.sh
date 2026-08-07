@@ -5,11 +5,13 @@ env_file=${1:?Usage: rollback-staging-digests.sh ENV_FILE [COMPOSE_FILE]}
 compose_file=${2:-docker-compose.staging.yml}
 state_dir=${PATCHWORK_RELEASE_STATE_DIR:-/var/lib/patchwork/releases}
 manifest="$state_dir/previous-artifact-digests.json"
+manifest_checksum="${manifest}.sha256"
 
-[[ -r "$manifest" ]] || {
-    echo 'No previous-artifact-digests.json is available.' >&2
+[[ -r "$manifest" && -r "$manifest_checksum" ]] || {
+    echo 'No verified previous-artifact-digests.json is available.' >&2
     exit 1
 }
+(cd "$state_dir" && sha256sum -c "$(basename "$manifest_checksum")")
 git_sha=$(jq -er '.gitSha' "$manifest")
 [[ "$git_sha" =~ ^[0-9a-f]{40}$ ]] || {
     echo 'Refusing rollback manifest without a full Git SHA.' >&2
@@ -90,4 +92,6 @@ if "${compose[@]}" exec -T patchwork-web \
 fi
 
 cp "$manifest" "$state_dir/current-artifact-digests.json"
+sha256sum "$state_dir/current-artifact-digests.json" \
+    > "$state_dir/current-artifact-digests.json.sha256"
 echo "Rolled staging back to ${git_sha}."

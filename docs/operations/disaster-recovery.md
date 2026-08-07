@@ -75,3 +75,34 @@ the configured staging notification path.
 Run a restore drill at least quarterly and after material schema or backup
 changes. Always restore into a disposable empty database; never use the live
 database as the drill target.
+
+## Independent database and private-object replication
+
+The validated local archive is necessary but does not survive loss of the
+staging host. `scripts/replicate-independent-backup.sh` copies a checksum-
+verified database archive and a snapshot of the private attachment bucket to a
+separately configured S3-compatible destination. Each run uses a unique,
+append-only snapshot prefix, requests destination-side encryption, reads the
+database back for SHA-256 verification, and compares every attachment byte
+after readback. It never deletes the source archive or object bucket.
+
+Required protected configuration:
+
+- `PATCHWORK_INDEPENDENT_BACKUP_URI` and destination AWS profile;
+- `PATCHWORK_ATTACHMENT_SOURCE_URI` and source AWS profile;
+- separate source/destination endpoints where applicable;
+- `AES256` or KMS encryption, with the KMS key identifier held outside Git;
+- a Prometheus textfile path exported by the host collector.
+
+The destination account, credentials, encryption keys, and retention controls
+must be independent of the staging host. A successful local mock or same-host
+copy is mechanism evidence, not independent durability evidence. Before
+launch, restore one replicated database archive into an isolated empty target,
+validate session invalidation and required tables, and compare the restored
+private-object snapshot. Record RPO, RTO, destination control owner,
+retention/deletion handling, and the exact release revision.
+
+`PatchworkIndependentBackupFailed` fires after a failed attempt and
+`PatchworkIndependentBackupStale` fires when the last successful independent
+snapshot is older than 7.5 hours. An absent metric is also a deployment error:
+the alert rules and textfile collector must be checked together during setup.
