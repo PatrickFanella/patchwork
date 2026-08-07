@@ -323,8 +323,8 @@ code {
 
     .mh-nav-main,
     .mh-nav-tools {
-        overflow-x: auto;
-        scrollbar-width: thin;
+        flex-wrap: wrap;
+        overflow: visible;
     }
 
     .mh-nav-tools {
@@ -332,7 +332,7 @@ code {
     }
 
     .mh-auth-control {
-        margin-left: auto;
+        margin-left: 0;
     }
 }
 
@@ -347,7 +347,10 @@ code {
     }
 
     .mh-auth-control {
-        min-width: max-content;
+        width: 100%;
+        border-left: 0;
+        border-top: 1px solid var(--mh-border-soft);
+        padding: 8px 0 0;
     }
 
     .mh-footer {

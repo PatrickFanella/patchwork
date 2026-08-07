@@ -118,6 +118,7 @@ const DEFAULT_BROWSER_ORIGIN = 'http://localhost';
 const REQUEST_TIMEOUT_MS = 6_000;
 const DEFAULT_NEARBY_RADIUS_KM = 20;
 const DEFAULT_FEED_RADIUS_KM = 100;
+const DEFAULT_DISCOVERY_PAGE_SIZE = 20;
 
 const csrfHeaders = (): Record<string, string> => {
     if (typeof document === 'undefined') return {};
@@ -228,7 +229,7 @@ const buildAidQueryParams = (
         longitude: center.lng.toFixed(6),
         radiusKm: String(radiusKm),
         page: '1',
-        pageSize: '100',
+        pageSize: String(DEFAULT_DISCOVERY_PAGE_SIZE),
     });
 
     if (state.category) {
@@ -270,7 +271,7 @@ const buildDirectoryQueryParams = (
         longitude: center.lng.toFixed(6),
         radiusKm: String(radiusKm),
         page: '1',
-        pageSize: '100',
+        pageSize: String(DEFAULT_DISCOVERY_PAGE_SIZE),
     });
 
     if (state.text) {
@@ -997,7 +998,10 @@ export const fetchVolunteerProfilesViaApi = async (
     } = {},
     signal?: AbortSignal,
 ): Promise<ApiClientResult<VolunteerDiscoveryProfile[]>> => {
-    const params = new URLSearchParams({ page: '1', pageSize: '100' });
+    const params = new URLSearchParams({
+        page: '1',
+        pageSize: String(DEFAULT_DISCOVERY_PAGE_SIZE),
+    });
     for (const [key, value] of Object.entries(filters)) {
         if (value) params.set(key, value);
     }

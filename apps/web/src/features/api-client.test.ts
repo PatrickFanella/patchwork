@@ -576,6 +576,7 @@ describe('api client', () => {
         expect(String(url)).toContain('/query/map?');
         expect(String(url)).toContain('latitude=1.300000');
         expect(String(url)).toContain('searchText=food');
+        expect(String(url)).toContain('pageSize=20');
     });
 
     it.each([
@@ -637,7 +638,7 @@ describe('api client', () => {
             createJsonResponse({
                 total: 1,
                 page: 1,
-                pageSize: 100,
+                pageSize: 20,
                 hasNextPage: false,
                 results: [
                     {
@@ -690,6 +691,7 @@ describe('api client', () => {
             fetchMock.mock.calls as unknown as Array<[unknown]>
         )[0];
         expect(String(firstCall?.[0])).toContain('/query/directory');
+        expect(String(firstCall?.[0])).toContain('pageSize=20');
     });
 
     it('creates, reads, updates, and deletes directory AT records through authenticated routes', async () => {
@@ -1237,7 +1239,7 @@ describe('api client', () => {
                 createJsonResponse({
                     total: 1,
                     page: 1,
-                    pageSize: 100,
+                    pageSize: 20,
                     hasNextPage: false,
                     results: [
                         {
@@ -1306,6 +1308,7 @@ describe('api client', () => {
             'alex-private@example.test',
         );
         expect(String(calls[2]?.[0])).not.toContain('alex-private');
+        expect(String(calls[2]?.[0])).toContain('pageSize=20');
         expect(JSON.stringify(discovery)).not.toContain(
             'alex-private@example.test',
         );

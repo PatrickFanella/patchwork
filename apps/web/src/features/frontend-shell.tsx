@@ -299,10 +299,6 @@ const primaryRoutes: readonly AppRoute[] = [
     '/map',
     '/feed',
     '/resources',
-    '/volunteer',
-    '/organizations',
-    '/verification',
-    '/posting',
 ];
 
 const accountRoutes: readonly AppRoute[] = ['/volunteer', '/chat', '/settings'];
@@ -474,6 +470,26 @@ const DiscoveryFiltersPanel = ({
 
     return (
         <Panel title={String(t('discovery.title'))}>
+            {!state.center ? (
+                <div className='mh-alert mb-4 text-sm' role='status'>
+                    <strong>{t('discovery.demoAreaTitle')}</strong>{' '}
+                    {t('discovery.demoAreaHelp')}
+                    <div className='mt-2'>
+                        <Button
+                            type='button'
+                            variant='neutral'
+                            className='px-3 py-1 text-xs'
+                            onClick={() => onPatch(buildNearbyPatch())}
+                        >
+                            {t('discovery.useDemoArea')}
+                        </Button>
+                    </div>
+                </div>
+            ) : (
+                <p className='mb-4 text-sm text-mh-textMuted' role='status'>
+                    {t('discovery.selectedAreaHelp')}
+                </p>
+            )}
             <label
                 htmlFor={`${idPrefix}-search`}
                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
@@ -589,8 +605,15 @@ const DiscoveryFiltersPanel = ({
                     </div>
                 </div>
 
-                <div className='grid gap-3 sm:grid-cols-3'>
-                    <div>
+                <details>
+                    <summary className='cursor-pointer text-sm font-bold'>
+                        {t('discovery.advancedLocation')}
+                    </summary>
+                    <p className='mt-2 text-xs text-mh-textMuted'>
+                        {t('discovery.coordinateHelp')}
+                    </p>
+                    <div className='mt-3 grid gap-3 sm:grid-cols-3'>
+                        <div>
                         <label
                             htmlFor={`${idPrefix}-radius`}
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'
@@ -618,8 +641,8 @@ const DiscoveryFiltersPanel = ({
                                 });
                             }}
                         />
-                    </div>
-                    <div>
+                        </div>
+                        <div>
                         <label
                             htmlFor={`${idPrefix}-lat`}
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'
@@ -632,6 +655,8 @@ const DiscoveryFiltersPanel = ({
                             autoComplete='off'
                             type='number'
                             step='0.0001'
+                            min={-90}
+                            max={90}
                             value={latValue}
                             onChange={(event) => {
                                 const value = Number.parseFloat(
@@ -648,8 +673,8 @@ const DiscoveryFiltersPanel = ({
                                 });
                             }}
                         />
-                    </div>
-                    <div>
+                        </div>
+                        <div>
                         <label
                             htmlFor={`${idPrefix}-lng`}
                             className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-textMuted'
@@ -662,6 +687,8 @@ const DiscoveryFiltersPanel = ({
                             autoComplete='off'
                             type='number'
                             step='0.0001'
+                            min={-180}
+                            max={180}
                             value={lngValue}
                             onChange={(event) => {
                                 const value = Number.parseFloat(
@@ -678,8 +705,9 @@ const DiscoveryFiltersPanel = ({
                                 });
                             }}
                         />
+                        </div>
                     </div>
-                </div>
+                </details>
 
                 <div className='flex flex-wrap items-center justify-between gap-3 border-t-2 border-mh-borderSoft pt-4'>
                     <Button
@@ -2250,6 +2278,13 @@ const FeedRoute = ({
                                             <Button
                                                 variant='neutral'
                                                 className='px-3 py-1 text-xs'
+                                                aria-label={t(
+                                                    'feed.timelineFor',
+                                                    {
+                                                        title: card.title,
+                                                        count: card.timeline.length,
+                                                    },
+                                                )}
                                                 onClick={() =>
                                                     setExpandedTimelineId(
                                                         (current) =>
@@ -2325,13 +2360,11 @@ const PostingRoute = ({
     onCreateViaApi,
 }: PostingRouteProps) => {
     const { t } = useLocale();
-    const [title, setTitle] = useState('Need urgent support');
-    const [description, setDescription] = useState(
-        'Describe the request, constraints, and safest handoff instructions.',
-    );
+    const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
     const [category, setCategory] = useState<AidPostingCategory>('food');
     const [urgency, setUrgency] = useState<1 | 2 | 3 | 4 | 5>(4);
-    const [tagsText, setTagsText] = useState('wheelchair, quiet-arrival');
+    const [tagsText, setTagsText] = useState('');
     const [lat, setLat] = useState(center.lat.toFixed(4));
     const [lng, setLng] = useState(center.lng.toFixed(4));
     const [precisionMeters, setPrecisionMeters] = useState('450');
@@ -2431,7 +2464,7 @@ const PostingRoute = ({
                     : undefined,
             );
             setSuccessMessage(
-                `Created post ${localId} and persisted via API/DB.`,
+                t('posting.publicationPending', { id: localId }),
             );
         } finally {
             setIsSubmitting(false);
@@ -2460,6 +2493,9 @@ const PostingRoute = ({
                             id='posting-title'
                             name='title'
                             autoComplete='off'
+                            required
+                            minLength={1}
+                            maxLength={140}
                             value={title}
                             onChange={(event) => setTitle(event.target.value)}
                         />
@@ -2476,6 +2512,9 @@ const PostingRoute = ({
                             id='posting-description'
                             name='description'
                             autoComplete='off'
+                            required
+                            minLength={1}
+                            maxLength={5000}
                             className='mh-input min-h-35 w-full px-3 py-2 text-base'
                             value={description}
                             onChange={(event) =>
@@ -2565,7 +2604,14 @@ const PostingRoute = ({
                         />
                     </div>
 
-                    <div className='grid gap-4 sm:grid-cols-3'>
+                    <details className='border-2 border-mh-borderSoft p-3'>
+                        <summary className='cursor-pointer font-bold'>
+                            {t('posting.approximateArea')}
+                        </summary>
+                        <p className='mt-2 text-sm text-mh-textMuted'>
+                            {t('posting.approximateAreaHelp')}
+                        </p>
+                        <div className='mt-3 grid gap-4 sm:grid-cols-3'>
                         <div>
                             <label
                                 htmlFor='posting-lat'
@@ -2579,6 +2625,9 @@ const PostingRoute = ({
                                 autoComplete='off'
                                 type='number'
                                 step='0.0001'
+                                min={-90}
+                                max={90}
+                                required
                                 value={lat}
                                 onChange={(event) => setLat(event.target.value)}
                             />
@@ -2596,6 +2645,9 @@ const PostingRoute = ({
                                 autoComplete='off'
                                 type='number'
                                 step='0.0001'
+                                min={-180}
+                                max={180}
+                                required
                                 value={lng}
                                 onChange={(event) => setLng(event.target.value)}
                             />
@@ -2613,12 +2665,26 @@ const PostingRoute = ({
                                 autoComplete='off'
                                 type='number'
                                 min={300}
+                                max={50000}
+                                required
                                 value={precisionMeters}
                                 onChange={(event) =>
                                     setPrecisionMeters(event.target.value)
                                 }
                             />
                         </div>
+                        </div>
+                    </details>
+
+                    <div className='border-2 border-mh-border bg-mh-surfaceElev p-4'>
+                        <h3 className='font-bold'>
+                            {t('posting.privacySummary')}
+                        </h3>
+                        <ul className='mt-2 list-disc space-y-1 pl-5 text-sm text-mh-textMuted'>
+                            <li>{t('posting.publicSummary')}</li>
+                            <li>{t('posting.privateSummary')}</li>
+                            <li>{t('posting.neverSummary')}</li>
+                        </ul>
                     </div>
 
                     <div className='grid gap-4 sm:grid-cols-2'>
@@ -3540,6 +3606,10 @@ const ResourceRoute = ({
                                     <Button
                                         variant='neutral'
                                         className='px-3 py-1 text-xs'
+                                        aria-label={t(
+                                            'resources.openDetailsFor',
+                                            { name: card.name },
+                                        )}
                                         onClick={() => setSelectedUri(card.uri)}
                                     >
                                         {t('resources.openDetails')}
@@ -3547,6 +3617,10 @@ const ResourceRoute = ({
                                     <Button
                                         variant='secondary'
                                         className='px-3 py-1 text-xs'
+                                        aria-label={t(
+                                            'resources.startIntakeFor',
+                                            { name: card.name },
+                                        )}
                                         onClick={() => onNavigate('/posting')}
                                     >
                                         {t('resources.startIntake')}
@@ -3559,6 +3633,10 @@ const ResourceRoute = ({
                                         <Button
                                             variant='neutral'
                                             className='px-3 py-1 text-xs'
+                                            aria-label={t(
+                                                'resources.manageListingFor',
+                                                { name: card.name },
+                                            )}
                                             onClick={() =>
                                                 setManageUri(card.uri)
                                             }
@@ -6592,6 +6670,10 @@ const NotificationCenterRoute = () => {
                                 type='button'
                                 variant='neutral'
                                 onClick={() => void disablePush()}
+                                disabled={
+                                    (channels?.push.activeSubscriptions ?? 0) ===
+                                    0
+                                }
                             >
                                 {t('notifications.revokePush')}
                             </Button>
@@ -7661,6 +7743,9 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                     <Button
                                         className='mt-3'
                                         variant='neutral'
+                                        aria-label={t('inbox.markReadFor', {
+                                            title: item.title,
+                                        })}
                                         onClick={() =>
                                             void finish(
                                                 t('inbox.markingRead'),
@@ -8775,8 +8860,10 @@ const maintenanceReasonOptions: readonly {
 
 const ModeratorConsoleRoute = ({
     onMaintenanceChanged,
+    currentUserDid,
 }: {
     onMaintenanceChanged(state: MaintenanceState): void;
+    currentUserDid: string;
 }) => {
     const { t, fmt } = useLocale();
     const [items, setItems] = useState<ModerationQueueItem[]>([]);
@@ -8799,6 +8886,7 @@ const ModeratorConsoleRoute = ({
     const [error, setError] = useState<string>();
     const [accessDenied, setAccessDenied] = useState(false);
     const [notice, setNotice] = useState<string>();
+    const [shutdownConfirmed, setShutdownConfirmed] = useState(false);
 
     const load = useCallback(
         async (signal?: AbortSignal) => {
@@ -8914,6 +9002,7 @@ const ModeratorConsoleRoute = ({
         }
         setMaintenance(result.data);
         onMaintenanceChanged(result.data);
+        setShutdownConfirmed(false);
         setNotice(t('moderator.shutdownRecorded'));
     };
 
@@ -8940,10 +9029,35 @@ const ModeratorConsoleRoute = ({
 
     return (
         <div className='space-y-5'>
-            <Panel title={t('moderator.title')}>
-                <p className='text-sm text-mh-textMuted'>
+            <header className='mh-route-header'>
+                <h1 className='mh-route-title'>{t('moderator.title')}</h1>
+                <p className='mt-2 text-sm text-mh-textMuted'>
                     {t('moderator.description')}
                 </p>
+            </header>
+            <Panel title={t('moderator.title')}>
+                <dl className='grid gap-2 text-sm sm:grid-cols-2'>
+                    <div>
+                        <dt className='font-bold'>{t('moderator.actor')}</dt>
+                        <dd className='break-all'>{currentUserDid}</dd>
+                    </div>
+                    <div>
+                        <dt className='font-bold'>
+                            {t('moderator.capability')}
+                        </dt>
+                        <dd>{t('moderator.capabilityValue')}</dd>
+                    </div>
+                    <div>
+                        <dt className='font-bold'>
+                            {t('moderator.environment')}
+                        </dt>
+                        <dd>{import.meta.env.MODE}</dd>
+                    </div>
+                    <div>
+                        <dt className='font-bold'>{t('moderator.scope')}</dt>
+                        <dd>{t('moderator.scopeValue')}</dd>
+                    </div>
+                </dl>
                 <p className='mt-2 text-sm font-bold'>
                     {t('moderator.reviewTarget')}
                 </p>
@@ -9027,10 +9141,32 @@ const ModeratorConsoleRoute = ({
                         }
                     />
                 </label>
+                <div className='mt-3 border-2 border-mh-danger p-3 text-sm'>
+                    <p className='font-bold'>{t('moderator.blastRadius')}</p>
+                    <p className='mt-1 text-mh-textMuted'>
+                        {t('moderator.blastRadiusHelp')}
+                    </p>
+                    <label className='mt-3 flex items-start gap-2 font-bold'>
+                        <input
+                            type='checkbox'
+                            checked={shutdownConfirmed}
+                            onChange={(event) =>
+                                setShutdownConfirmed(event.target.checked)
+                            }
+                        />
+                        {t('moderator.confirmShutdown')}
+                    </label>
+                </div>
                 <div className='mt-3 flex flex-wrap gap-2'>
                     <Button
                         variant='neutral'
-                        disabled={isSaving || maintenance?.active}
+                        disabled={
+                            isSaving ||
+                            maintenance?.active ||
+                            !shutdownConfirmed ||
+                            maintenanceReasons.length === 0 ||
+                            publicMessage.trim().length === 0
+                        }
                         onClick={() => void declareMaintenance()}
                     >
                         {t('moderator.shutDown')}
@@ -9342,6 +9478,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     );
 
     const currentUserDid = auth.session?.did ?? '';
+
+    useEffect(() => {
+        document.title = `${t(routeLabelKeys[currentRoute])} · ${appTitle}`;
+    }, [appTitle, currentRoute, locale, t]);
 
     useEffect(() => {
         if (!auth.session || webDataMode === 'fixture') return;
@@ -10007,7 +10147,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     ) : currentRoute === '/notifications' ? (
         <NotificationCenterRoute />
     ) : currentRoute === '/moderation' ? (
-        <ModeratorConsoleRoute onMaintenanceChanged={setMaintenanceStatus} />
+        <ModeratorConsoleRoute
+            onMaintenanceChanged={setMaintenanceStatus}
+            currentUserDid={currentUserDid}
+        />
     ) : currentRoute === '/groups' ? (
         <ProductionGroups />
     ) : currentRoute === '/chat' ? (
