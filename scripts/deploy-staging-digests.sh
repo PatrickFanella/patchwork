@@ -9,10 +9,6 @@ state_dir=${PATCHWORK_RELEASE_STATE_DIR:-/var/lib/patchwork/releases}
 command -v jq >/dev/null
 [[ -r "$manifest" && -r "$env_file" && -r "$compose_file" ]]
 
-verify_script=${PATCHWORK_RELEASE_VERIFY_SCRIPT:-$(dirname "$0")/verify-release-trust.sh}
-[[ -x "$verify_script" ]]
-"$verify_script" "$manifest"
-
 git_sha=$(jq -er '.gitSha' "$manifest")
 [[ "$git_sha" =~ ^[0-9a-f]{40}$ ]] || {
     echo 'Refusing manifest without a full Git SHA.' >&2
@@ -41,6 +37,12 @@ for service in api indexer moderation web; do
         web) export PATCHWORK_WEB_IMAGE=$image ;;
     esac
 done
+
+# Preserve stable structural errors for malformed manifests, then establish
+# cryptographic trust before pulling images or changing retained release state.
+verify_script=${PATCHWORK_RELEASE_VERIFY_SCRIPT:-$(dirname "$0")/verify-release-trust.sh}
+[[ -x "$verify_script" ]]
+"$verify_script" "$manifest"
 
 install -d -m 0750 "$state_dir"
 if [[ -f "$state_dir/current-artifact-digests.json" ]]; then
