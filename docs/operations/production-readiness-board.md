@@ -13,12 +13,19 @@ Current authority:
 
 ## Current decision
 
-The refreshed 2026-07-28 review records **NO-GO**. Local implementation and verification
-continue, but public deployment and pilot recruitment remain prohibited until
-formal retention approval, independent accessibility review, and ownership
-gates have current evidence. The real two-account browser, signed-digest
-staging/rollback, staging restore, alert-game-day, deployed retention, and
-bounded capacity gates are complete.
+The refreshed 2026-08-07 review records **NO-GO**. Local implementation and
+home-staging verification are complete for the protected-pilot sprint, but
+public deployment and pilot recruitment remain prohibited until the
+credentialed provider/independent-backup exercises, independent reviews,
+distinct secondary coverage, human acknowledgment game day, and production
+capacity authority have current evidence. Patrick Fanella is the accepted
+home-staging primary on-call and escalation owner. The real earlier two-account
+browser path, signed-and-attested digest staging/rollback, staging restore,
+deployed retention, and historical bounded home-staging capacity gates are
+complete.
+The earlier 40-RPS home-staging point is retained as historical evidence, but
+the 2026-08-07 re-certification attempt failed under severe shared-host
+contention; only the fresh 8-RPS zero-error stability soak is current.
 
 An issue being represented by code or tests does not mean its subsystem is externally integrated, durable, or production-ready. Use the maturity matrix for that determination.
 
@@ -29,8 +36,8 @@ An issue being represented by code or tests does not mean its subsystem is exter
 | Program governance | #94, #95 | Historical planning artifacts; Phase 1 of the continuation roadmap replaces their status model. |
 | Runtime completeness | #96, #97, #98, #99 | Some contracts, guards, checkpoints, and tests landed; durable moderation, live ingestion, and real integration remain continuation work. |
 | Security and privacy | #100, #101, #102, #103 | The authenticated HTTP perimeter, privacy redaction, and scheduled API/moderation retention are implemented and the immutable NUC schedulers enforced representative expired rows on their normal cadence. Formal privacy approval remains incomplete. |
-| Reliability and observability | #104, #105, #106, #107 | NUC alert, restore, rollback, and game-day evidence is current; independent durability and human acknowledgment remain absent. |
-| Release engineering | #108, #109, #110, #111 | Four zero-HIGH/CRITICAL signed digests are deployed and rollback-tested on NUC staging; protected GHCR/OIDC promotion remains unproven. |
+| Reliability and observability | #104, #105, #106, #107 | NUC alert, restore, checksummed rollback, twenty deployed alert rules, and independent-replication mechanism tests are current; live independent durability and human acknowledgment remain absent. |
+| Release engineering | #108, #109, #110, #111 | Four zero-HIGH/CRITICAL signed-and-attested digests are deployed and rollback/forward-tested on NUC staging; protected GHCR/OIDC promotion remains unproven. |
 | Trust, safety, and launch | #112, #113, #114, #115 | Console models, policies, and documents exist; durable casework and pilot/GA evidence do not. |
 | Core lifecycle and account experience | #116, #117, #118, #119, #120, #121, #122, #123 | Rich in-memory services and UX models exist; real AT identity and durable cross-service journeys do not. |
 | Collaboration and trust expansion | #124, #125, #126, #127, #128, #129, #130, #131, #132 | Notifications, scheduling, groups, reputation, offline sync, feedback, verification, and matching are primarily tested models or fixture services. |
