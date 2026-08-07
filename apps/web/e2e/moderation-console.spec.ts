@@ -175,8 +175,27 @@ test('moderators can quarantine, appeal, audit, and shut down submissions withou
     });
 
     await page.goto('/moderation');
+    const consoleRegion = page.getByRole('region', {
+        name: 'Moderator safety console',
+    });
+    await expect(consoleRegion).toBeVisible();
     await expect(
-        page.getByRole('region', { name: 'Moderator safety console' }),
+        page.getByRole('heading', {
+            level: 1,
+            name: 'Moderator safety console',
+        }),
+    ).toBeVisible();
+    await expect(
+        consoleRegion.getByText(moderatorDid, { exact: true }),
+    ).toBeVisible();
+    await expect(
+        page.getByText('Maintenance-mode management', { exact: true }),
+    ).toBeVisible();
+    await expect(
+        page.getByText(
+            'All new submissions and exact-location exchange',
+            { exact: true },
+        ),
     ).toBeVisible();
     const queueItem = page.getByRole('button', {
         name: /Meal delivery high · aid-post/,
@@ -196,7 +215,17 @@ test('moderators can quarantine, appeal, audit, and shut down submissions withou
     await page.getByRole('button', { name: 'Uphold appeal' }).click();
     await expect(page.getByText('Action recorded: Resolve appeal as upheld.')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Shut down new submissions' }).click();
+    const shutdown = page.getByRole('button', {
+        name: 'Shut down new submissions',
+    });
+    await expect(shutdown).toBeDisabled();
+    await page
+        .getByRole('checkbox', {
+            name: /intend to apply this platform-wide shutdown/,
+        })
+        .check();
+    await expect(shutdown).toBeEnabled();
+    await shutdown.click();
     await expect(page.getByText('Patchwork is temporarily read-only.')).toBeVisible();
     await expect(page.getByText(/exact-location exchange are disabled/)).toBeVisible();
     await page.goto('/posting');

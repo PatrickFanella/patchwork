@@ -143,7 +143,10 @@ for (const locale of ['en', 'es'] as const) {
             await page.waitForLoadState('networkidle');
             await expect(page.locator('html')).toHaveAttribute('lang', locale);
             await expect(
-                page.getByText(expectedCopy, { exact: true }).first(),
+                page
+                    .getByText(expectedCopy, { exact: true })
+                    .filter({ visible: true })
+                    .first(),
                 path,
             ).toBeVisible();
             if (path === '/inbox') {

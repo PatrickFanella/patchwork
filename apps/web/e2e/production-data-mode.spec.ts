@@ -108,8 +108,10 @@ test('API failure stays visible and never substitutes fixture discovery data', a
 
     await page.goto('/map');
     const alert = page.getByRole('alert');
-    await expect(alert).toContainText('The request could not be completed.');
-    await expect(alert).not.toContainText('NETWORK_ERROR');
+    await expect(alert).toContainText(
+        'The service could not complete this request.',
+    );
+    await expect(page.getByText('NETWORK_ERROR')).toHaveCount(0);
     await expect(page.getByText('API unavailable')).toBeVisible();
     await expect(page.getByText('Need groceries before 21:00')).toHaveCount(0);
 
@@ -135,10 +137,11 @@ test('public home advertises only implemented alpha capabilities', async ({
     ).toHaveCount(0);
 
     await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Volunteer' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Volunteer' })).toBeHidden();
     await expect(page.getByRole('link', { name: 'Chat' })).toBeHidden();
     await page.locator('.mh-more-menu summary').click();
     const more = page.locator('.mh-more-menu-panel');
+    await expect(more.getByRole('link', { name: 'Volunteer' })).toBeVisible();
     await expect(more.getByRole('link', { name: 'Scheduling' })).toHaveCount(0);
     await expect(more.getByRole('link', { name: 'Feedback' })).toHaveCount(0);
     await expect(more.getByRole('link', { name: 'Groups' })).toBeVisible();
