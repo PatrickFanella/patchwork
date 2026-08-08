@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AttachmentService } from './attachment-service.js';
@@ -63,10 +64,14 @@ describeReal('real MinIO and ClamAV attachment boundary', () => {
         await pool.end();
     });
 
-    const upload = async (body: Buffer, filename: string) => {
+    const upload = async (
+        body: Buffer,
+        filename: string,
+        declaredMime = 'image/png',
+    ) => {
         const authorized = await service.authorizeUpload(ownerDid, {
             filename,
-            declaredMime: 'image/png',
+            declaredMime,
             byteSize: body.length,
             purpose: 'verification-evidence',
             subjectRef: null,
@@ -83,7 +88,7 @@ describeReal('real MinIO and ClamAV attachment boundary', () => {
                 ).token,
             },
             body,
-            'image/png',
+            declaredMime,
         );
         return attachmentId;
     };
@@ -127,10 +132,25 @@ describeReal('real MinIO and ClamAV attachment boundary', () => {
             },
         });
 
-        const malwareMarker = Buffer.from('PATCHWORK-MALWARE-TEST');
+        const antivirusTestMarker = Buffer.from(
+            [
+                'X5O!P%@AP[4',
+                String.fromCharCode(92),
+                'PZX54(P^)7CC)7}$',
+                'EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*',
+            ].join(''),
+        );
+        const antivirusTestPdf = await PDFDocument.create();
+        antivirusTestPdf.addPage();
+        await antivirusTestPdf.attach(
+            antivirusTestMarker,
+            'antivirus-test.txt',
+            { mimeType: 'text/plain' },
+        );
         const infectedId = await upload(
-            Buffer.concat([png, malwareMarker]),
-            'infected.png',
+            Buffer.from(await antivirusTestPdf.save()),
+            'antivirus-test.pdf',
+            'application/pdf',
         );
         await expect(service.runScanSweep()).resolves.toMatchObject({
             quarantined: 1,
