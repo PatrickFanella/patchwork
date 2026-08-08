@@ -223,19 +223,6 @@ jobs:
                       sleep 10
                     done
                   done
-                  node --input-type=module - <<'NODE'
-                  import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
-                  const client = new S3Client({
-                    endpoint: 'http://127.0.0.1:9000',
-                    region: 'us-east-1',
-                    forcePathStyle: true,
-                    credentials: {
-                      accessKeyId: 'patchwork-ci',
-                      secretAccessKey: 'patchwork-ci-secret-key',
-                    },
-                  });
-                  await client.send(new CreateBucketCommand({ Bucket: 'patchwork-ci' }));
-                  NODE
 
             - name: Private attachment provider integration tests
               env:
