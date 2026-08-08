@@ -79,7 +79,7 @@ jobs:
                     --build-arg VITE_MAP_TILE_URL="$STAGING_VITE_MAP_TILE_URL" \
                     -t "$image" .
             - name: Scan before publication
-              uses: aquasecurity/trivy-action@0.28.0
+              uses: aquasecurity/trivy-action@v0.36.0
               with:
                   image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ env.SOURCE_SHA }}
                   severity: HIGH,CRITICAL
