@@ -50,6 +50,7 @@ import {
     updateAtDirectoryResourceViaApi,
     updateAtVolunteerProfileViaApi,
     applyModerationPolicyViaApi,
+    appendDedupedPage,
     declareMaintenanceViaApi,
     resumeMaintenanceViaApi,
 } from './api-client.js';
@@ -100,6 +101,15 @@ describe('api client', () => {
 
     afterAll(() => {
         globalThis.fetch = originalFetch;
+    });
+
+    it.each([
+        [[], [], []],
+        [['one'], [], ['one']],
+        [Array.from({ length: 20 }, (_, index) => `item-${index}`), ['item-20'], Array.from({ length: 21 }, (_, index) => `item-${index}`)],
+        [['one'], ['one', 'two', 'two'], ['one', 'two']],
+    ])('dedupes discovery page appends (%o + %o)', (current, page, expected) => {
+        expect(appendDedupedPage(current, page, (value) => value)).toEqual(expected);
     });
 
     it('exports the authenticated account without putting identity in the request', async () => {
@@ -470,7 +480,7 @@ describe('api client', () => {
     it('loads consent status and persists only schema-valid account preferences', async () => {
         const updated = {
             ...defaultAccountPreferences,
-            privacy: 'private' as const,
+            audience: 'hidden' as const,
             location: {
                 sharing: 'hidden' as const,
                 noPermanentAddress: true,
@@ -577,6 +587,46 @@ describe('api client', () => {
         expect(String(url)).toContain('latitude=1.300000');
         expect(String(url)).toContain('searchText=food');
         expect(String(url)).toContain('pageSize=20');
+    });
+
+    it('does not substitute an implicit city when map discovery has no selected area', async () => {
+        const fetchMock = vi.fn();
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        const result = await fetchFeedRecordsFromApi(
+            { feedTab: 'nearby' },
+            'map',
+        );
+
+        expect(result).toMatchObject({
+            ok: false,
+            code: 'AREA_REQUIRED',
+            kind: 'validation',
+            retryable: false,
+        });
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('does not send an implicit location with a latest feed request', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({
+                total: 0,
+                page: 1,
+                pageSize: 20,
+                hasNextPage: false,
+                results: [],
+            }),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await fetchFeedRecordsFromApi({ feedTab: 'latest' }, 'feed');
+
+        const url = String(
+            (fetchMock.mock.calls as unknown as Array<[unknown]>)[0]?.[0],
+        );
+        expect(url).toContain('/query/feed?');
+        expect(url).not.toContain('latitude=');
+        expect(url).not.toContain('longitude=');
     });
 
     it.each([
@@ -1006,6 +1056,38 @@ describe('api client', () => {
         expect(init).toMatchObject({ method: 'GET', credentials: 'include' });
         expect(url).not.toContain('actorRole');
         expect(url).not.toContain('actorDid');
+    });
+
+    it('exposes the durable projection receipt instead of inferring public visibility', async () => {
+        const fetchMock = vi.fn(async () =>
+            createJsonResponse({
+                postUri: 'at://did:plc:owner/app.patchwork.aid.post/post-1',
+                currentStatus: 'open',
+                statusLabel: 'Open',
+                timeline: [],
+                validTransitions: ['open', 'resolved'],
+                updatedAt: '2026-07-11T12:00:00.000Z',
+                projectionReceipt: {
+                    sourceUri: 'at://did:plc:owner/app.patchwork.aid.post/post-1',
+                    sourceCid: 'bafy-source',
+                    state: 'pending',
+                    retryAfterSeconds: 12,
+                },
+            }),
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await expect(
+            queryAidPostLifecycleViaApi('at://did:plc:owner/app.patchwork.aid.post/post-1'),
+        ).resolves.toMatchObject({
+            ok: true,
+            data: {
+                projectionReceipt: {
+                    state: 'pending',
+                    retryAfterSeconds: 12,
+                },
+            },
+        });
     });
 
     it('maps chat initiation fallback payload from API', async () => {

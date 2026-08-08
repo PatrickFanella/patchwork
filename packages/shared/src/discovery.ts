@@ -7,6 +7,7 @@ import {
     type NormalizedFirehoseEvent,
 } from './firehose.js';
 import {
+    computeDiscoveryRank,
     type RankingBreakdown,
     rankCardsDeterministically,
 } from './ranking.js';
@@ -41,6 +42,13 @@ export interface AidQueryInput extends PaginationInput {
     nowIso?: string;
 }
 
+/** Feed supports a global, newest-first view before the visitor selects an area. */
+export interface AidFeedQueryInput extends Omit<AidQueryInput, 'latitude' | 'longitude' | 'radiusKm'> {
+    latitude?: number;
+    longitude?: number;
+    radiusKm?: number;
+}
+
 export interface DirectoryQueryInput extends PaginationInput {
     category?: string;
     status?: 'unverified' | 'community-verified' | 'partner-verified';
@@ -73,7 +81,8 @@ export interface RankedAidCard {
     approximateGeo: ApproximateGeoPoint;
     createdAt: string;
     updatedAt: string;
-    distanceKm: number;
+    /** Present only when an explicit area was supplied. */
+    distanceKm?: number;
     ranking: RankingBreakdown;
     recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
@@ -254,8 +263,15 @@ export class DiscoveryIndexStore {
         return this.queryRankedAid(input);
     }
 
-    queryFeed(input: AidQueryInput): PaginatedQueryResult<RankedAidCard> {
-        return this.queryRankedAid(input);
+    queryFeed(input: AidFeedQueryInput): PaginatedQueryResult<RankedAidCard> {
+        if (
+            input.latitude !== undefined &&
+            input.longitude !== undefined &&
+            input.radiusKm !== undefined
+        ) {
+            return this.queryRankedAid(input as AidQueryInput);
+        }
+        return this.queryLatestAid(input);
     }
 
     queryDirectory(
@@ -436,6 +452,47 @@ export class DiscoveryIndexStore {
         }));
 
         return applyPagination(cards, pagination);
+    }
+
+    private queryLatestAid(
+        input: AidFeedQueryInput,
+    ): PaginatedQueryResult<RankedAidCard> {
+        const nowIso = input.nowIso ?? new Date().toISOString();
+        const nowMs = new Date(nowIso).getTime();
+        const cards = this.collectAidCandidates(input as AidQueryInput)
+            .filter(record => {
+                if (input.freshnessHours !== undefined) {
+                    const updatedMs = new Date(record.updatedAt).getTime();
+                    if (!Number.isFinite(updatedMs) ||
+                        (nowMs - updatedMs) / 3_600_000 > input.freshnessHours) return false;
+                }
+                return !input.searchText || record.searchableText.includes(input.searchText.toLowerCase());
+            })
+            .sort((left, right) => {
+                const updated = new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+                return updated || left.uri.localeCompare(right.uri);
+            })
+            .map(record => ({
+                uri: record.uri,
+                authorDid: record.authorDid,
+                ...(record.cid ? { cid: record.cid } : {}),
+                title: record.title,
+                summary: record.description,
+                category: record.category,
+                urgency: record.urgency,
+                status: record.status,
+                approximateGeo: record.approximateGeo,
+                createdAt: record.createdAt,
+                updatedAt: record.updatedAt,
+                // No fake distance: global feed is explicitly newest-first.
+                ranking: computeDiscoveryRank({
+                    distanceKm: Number.POSITIVE_INFINITY,
+                    createdAt: record.createdAt,
+                    trustScore: record.trustScore,
+                    nowIso,
+                }),
+            }));
+        return applyPagination(cards, ensurePagination(input));
     }
 
     private collectAidCandidates(input: AidQueryInput): IndexedAidRecord[] {
@@ -657,7 +714,7 @@ export class DiscoveryIndexStore {
     }
 }
 
-const aidQuerySchema = z.object({
+const aidQueryFields = {
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
     radiusKm: z.number().positive().max(250),
@@ -676,6 +733,25 @@ const aidQuerySchema = z.object({
     page: z.number().int().positive().optional(),
     pageSize: z.number().int().positive().max(MAX_PAGE_SIZE).optional(),
     nowIso: isoDateTimeSchema.optional(),
+};
+
+const aidQuerySchema = z.object(aidQueryFields);
+
+const aidFeedQuerySchema = z.object({
+    ...aidQueryFields,
+    latitude: aidQueryFields.latitude.optional(),
+    longitude: aidQueryFields.longitude.optional(),
+    radiusKm: aidQueryFields.radiusKm.optional(),
+}).superRefine((value, ctx) => {
+    const supplied = [value.latitude, value.longitude, value.radiusKm]
+        .filter(value => value !== undefined).length;
+    if (supplied !== 0 && supplied !== 3) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['latitude'],
+            message: 'latitude, longitude, and radiusKm must be supplied together.',
+        });
+    }
 });
 
 const directoryQuerySchema = z
@@ -722,6 +798,9 @@ const directoryQuerySchema = z
 
 export const validateAidQueryInput = (input: unknown): AidQueryInput =>
     aidQuerySchema.parse(input);
+
+export const validateAidFeedQueryInput = (input: unknown): AidFeedQueryInput =>
+    aidFeedQuerySchema.parse(input);
 
 export const validateDirectoryQueryInput = (
     input: unknown,

@@ -148,7 +148,7 @@ jobs:
     e2e-production:
         runs-on: ubuntu-latest
         needs: quality-gates
-        timeout-minutes: 15
+        timeout-minutes: 30
 
         services:
             postgres:
@@ -169,6 +169,7 @@ jobs:
             NODE_ENV: production
             API_DATA_SOURCE: postgres
             API_DATABASE_URL: postgresql://patchwork:patchwork_ci@localhost:5432/patchwork
+            DATABASE_URL: postgresql://patchwork:patchwork_ci@localhost:5432/patchwork
             TEST_DATABASE_URL: postgresql://patchwork:patchwork_ci@localhost:5432/patchwork
             ATPROTO_SERVICE_DID: did:example:patchwork-ci
             ATPROTO_PDS_URL: https://bsky.social
@@ -187,13 +188,68 @@ jobs:
               run: npm ci
 
             - name: Run database migrations
-              run: npm run db:migrate -w @patchwork/api
+              run: |
+                  npm run db:migrate -w @patchwork/api
+                  npm run db:migrate -w @patchwork/indexer
+                  npm run db:migrate -w @patchwork/moderation-worker
 
             - name: PostgreSQL integration tests
               run: npm run test:integration:postgres -w @patchwork/api
 
             - name: Direct lifecycle service integration tests
               run: npm run test:integration:service -w @patchwork/web
+
+            - name: Indexer PostgreSQL integration tests
+              run: npm run test -w @patchwork/indexer
+
+            - name: Moderation PostgreSQL integration tests
+              run: npm run test -w @patchwork/moderation-worker
+
+            - name: Start private attachment integration services
+              env:
+                  ATTACHMENT_OBJECT_ACCESS_KEY: patchwork-ci
+                  ATTACHMENT_OBJECT_SECRET_KEY: patchwork-ci-secret-key
+              run: |
+                  set -euo pipefail
+                  docker compose -f docker-compose.postgres.yml up -d objects clamav
+                  for container in patchwork-objects patchwork-clamav; do
+                    for attempt in $(seq 1 90); do
+                      status=$(docker inspect --format '{{.State.Health.Status}}' "$container")
+                      if [ "$status" = healthy ]; then break; fi
+                      if [ "$status" = unhealthy ] || [ "$attempt" -eq 90 ]; then
+                        docker logs "$container"
+                        exit 1
+                      fi
+                      sleep 10
+                    done
+                  done
+                  node --input-type=module - <<'NODE'
+                  import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
+                  const client = new S3Client({
+                    endpoint: 'http://127.0.0.1:9000',
+                    region: 'us-east-1',
+                    forcePathStyle: true,
+                    credentials: {
+                      accessKeyId: 'patchwork-ci',
+                      secretAccessKey: 'patchwork-ci-secret-key',
+                    },
+                  });
+                  await client.send(new CreateBucketCommand({ Bucket: 'patchwork-ci' }));
+                  NODE
+
+            - name: Private attachment provider integration tests
+              env:
+                  TEST_ATTACHMENT_OBJECT_ENDPOINT: http://127.0.0.1:9000
+                  TEST_ATTACHMENT_OBJECT_ACCESS_KEY: patchwork-ci
+                  TEST_ATTACHMENT_OBJECT_SECRET_KEY: patchwork-ci-secret-key
+                  TEST_ATTACHMENT_OBJECT_BUCKET: patchwork-ci
+                  TEST_ATTACHMENT_CLAMD_HOST: 127.0.0.1
+                  TEST_ATTACHMENT_CLAMD_PORT: '3310'
+              run: npm run test:integration:attachments -w @patchwork/api
+
+            - name: Stop private attachment integration services
+              if: always()
+              run: docker compose -f docker-compose.postgres.yml down -v
 
     # -----------------------------------------------------------------------
     # Wave 4 (#108): Auto-deploy to staging on main push

@@ -63,7 +63,14 @@ test.describe('real two-account AT record lifecycle', () => {
             });
         }
 
-        await requester.goto('/posting');
+        const postingArea = new URLSearchParams({
+            tab: 'nearby',
+            r: '20000',
+            lat: exactLatitude!,
+            lng: exactLongitude!,
+            area: 'Disposable staging area',
+        });
+        await requester.goto(`/posting?${postingArea.toString()}`);
         await expect(requester.getByText(/did:/).first()).toBeVisible();
         await requester.getByLabel('Title').fill(title);
         await requester

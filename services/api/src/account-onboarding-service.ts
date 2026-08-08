@@ -90,9 +90,9 @@ export class AccountOnboardingService {
 
     async preferencesFor(did: string): Promise<AccountPreferences> {
         const result = await this.pool.query<{
-            privacy: AccountPreferences['privacy'];
+            privacy: string;
             notifications: AccountPreferences['notifications'];
-            visibility: AccountPreferences['visibility'];
+            visibility: string;
             language: AccountPreferences['language'];
             location: AccountPreferences['location'];
         }>(
@@ -146,9 +146,13 @@ export class AccountOnboardingService {
                     updated_at = EXCLUDED.updated_at`,
                 [
                     did,
-                    preferences.data.privacy,
+                    preferences.data.audience === 'public'
+                        ? 'public'
+                        : preferences.data.audience === 'authenticated'
+                          ? 'community'
+                          : 'private',
                     JSON.stringify(preferences.data.notifications),
-                    preferences.data.visibility,
+                    preferences.data.audience,
                     preferences.data.language,
                     JSON.stringify(preferences.data.location),
                     changedAt.toISOString(),

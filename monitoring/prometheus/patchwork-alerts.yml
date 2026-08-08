@@ -31,6 +31,26 @@ groups:
         for: 5m
         labels: { severity: warning, owner: patchwork-primary-on-call }
         annotations: { runbook_url: "docs/operations/incident-response.md#maintenance-mode" }
+      - alert: PatchworkChatRouteErrors
+        expr: sum(increase(patchwork_http_route_error_total{service="api",environment="staging",endpoint=~"/chat/.*"}[10m])) > 0
+        for: 2m
+        labels: { severity: warning, owner: patchwork-primary-on-call }
+        annotations: { runbook_url: "docs/operations/incident-response.md#api-error-rate" }
+      - alert: PatchworkDiscoveryRouteErrors
+        expr: sum(increase(patchwork_http_route_error_total{service="api",environment="staging",endpoint=~"/query/(map|feed|directory|volunteers)"}[10m])) > 0
+        for: 2m
+        labels: { severity: warning, owner: patchwork-primary-on-call }
+        annotations: { runbook_url: "docs/operations/incident-response.md#api-error-rate" }
+      - alert: PatchworkProjectionLagHigh
+        expr: patchwork_event_source_lag_seconds{service="indexer",environment="staging"} > 60
+        for: 5m
+        labels: { severity: warning, owner: patchwork-primary-on-call }
+        annotations: { runbook_url: "docs/operations/incident-response.md#indexer-disconnect-or-lag" }
+      - alert: PatchworkMaintenanceStepUpDenied
+        expr: sum(increase(patchwork_http_route_request_total{service="api",environment="staging",endpoint=~"/maintenance/(declare|resume)",outcome="4xx"}[10m])) > 5
+        for: 5m
+        labels: { severity: warning, owner: patchwork-primary-on-call }
+        annotations: { runbook_url: "docs/operations/incident-response.md#maintenance-mode" }
       - alert: PatchworkDatabaseUnavailable
         expr: up{job="patchwork-postgres",environment="staging"} == 0
         for: 1m

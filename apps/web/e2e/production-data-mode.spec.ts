@@ -106,7 +106,9 @@ test('API failure stays visible and never substitutes fixture discovery data', a
         await route.abort('failed');
     });
 
-    await page.goto('/map');
+    await page.goto(
+        '/map?tab=nearby&r=20000&lat=41.88&lng=-87.63&area=Disposable+test+area',
+    );
     const alert = page.getByRole('alert');
     await expect(alert).toContainText(
         'The service could not complete this request.',
@@ -239,7 +241,9 @@ test('map area selection is explicit, reversible, historical, and remembers styl
         });
     });
 
-    await page.goto('/map');
+    await page.goto(
+        '/map?tab=nearby&r=20000&lat=40.72&lng=-73.99&area=Disposable+test+area',
+    );
     await expect(page.getByText('Area filter request')).toBeVisible();
     await page.locator('.mh-map-circle').first().click({ force: true });
     await expect(page.getByText('Filtered to this area')).toBeVisible();
@@ -249,8 +253,8 @@ test('map area selection is explicit, reversible, historical, and remembers styl
     ).toBeVisible();
 
     await page.goBack();
-    await expect(page).not.toHaveURL(/(?:\?|&)r=/);
-    await expect(page.getByText('Filtered to this area')).toHaveCount(0);
+    await expect(page).toHaveURL(/(?:\?|&)r=20000(?:&|$)/);
+    await expect(page.getByText(/within 20 km/)).toBeVisible();
     await page.goForward();
     await expect(page).toHaveURL(/r=1000/);
     await expect(page.getByText('Filtered to this area')).toBeVisible();
@@ -305,9 +309,8 @@ test('authenticated production settings expose durable account controls only', a
     let deactivated = false;
     let exportRequests = 0;
     let preferences = {
-        privacy: 'community',
+        audience: 'authenticated',
         notifications: { inApp: true, email: true, push: false },
-        visibility: 'authenticated',
         language: 'en',
         location: { sharing: 'approximate', noPermanentAddress: false },
     };
@@ -427,13 +430,13 @@ test('authenticated production settings expose durable account controls only', a
     await expect(page.getByText('Privacy and delivery preferences')).toBeVisible();
     await page
         .getByRole('article', { name: 'Privacy and delivery preferences' })
-        .getByRole('combobox', { name: /^Privacy/ })
-        .selectOption('private');
+        .getByRole('combobox', { name: /^Profile visibility/ })
+        .selectOption('hidden');
     await page.getByLabel('I do not have a permanent address').check();
     await page.getByRole('button', { name: 'Save preferences' }).click();
     await expect(page.getByText('Preferences saved.')).toBeVisible();
     expect(preferences).toMatchObject({
-        privacy: 'private',
+        audience: 'hidden',
         location: { noPermanentAddress: true },
     });
 

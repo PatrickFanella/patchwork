@@ -20,6 +20,33 @@ do not commit resolved Compose output or an environment file.
 | `STAGING_MODERATION_SERVICE_TOKEN` | Random internal bearer secret | API and moderation worker |
 | `INDEXER_FIREHOSE_URL` | Approved Jetstream/WebSocket source | Indexer |
 
+## Protected browser-lifecycle inputs
+
+The deploy workflow has two non-mocked browser suites.  They run only in the
+GitHub `staging` environment after the digest deployment has passed readiness.
+These values are **test credentials and disposable fixtures**, not application
+configuration.  Store them as protected environment values; never commit a
+Playwright storage-state file.
+
+| Value | Protection | Purpose |
+| --- | --- | --- |
+| `STAGING_E2E_REQUESTER_STATE_B64` | Secret | OAuth storage state for the disposable request owner |
+| `STAGING_E2E_HELPER_STATE_B64` | Secret | OAuth storage state for the second disposable account |
+| `STAGING_E2E_MAINTAINER_STATE_B64` | Secret | Fresh OAuth state (less than five minutes old when a drill is enabled) for a dedicated staging-only maintenance operator |
+| `STAGING_E2E_EXACT_LATITUDE`, `STAGING_E2E_EXACT_LONGITUDE` | Secret | Disposable approximate discovery point; never a real address |
+| `STAGING_E2E_PRIVATE_MARKER` | Secret | Unique private string used by redaction assertions |
+| `STAGING_ARTIFACT_REDACTION_TERMS` | Secret | Terms the browser-artifact scrubber must reject |
+| `STAGING_E2E_EXERCISE_MAINTENANCE` | Protected variable, default `false` | Enables the declare/resume transition only during an announced isolated drill |
+
+The lifecycle suite creates a group, invitation, group-room conversation, one
+message, and a declined offer under the disposable accounts. It redacts the
+message and closes the group in `finally`; the retained audit trail is expected
+durable test evidence. It does not submit verification evidence, make a real
+verification decision, send email, or register browser push: those require
+separately authorized provider and reviewer exercises. The maintenance
+transition remains disabled unless the protected opt-in is exactly `true`; do
+not enable it while other staging users are active.
+
 Generate the session key with `openssl rand -base64 32`. Generate database and
 service tokens with an approved password manager or secret platform. Never put
 these values in shell history, issue text, screenshots, logs, Playwright state,

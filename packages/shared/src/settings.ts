@@ -4,16 +4,47 @@ import { z } from 'zod';
 // Enumerations
 // ---------------------------------------------------------------------------
 
-export const privacyLevels = ['public', 'community', 'private'] as const;
+/** Canonical, user-facing audience contract. */
+export const privacyLevels = ['public', 'authenticated', 'hidden'] as const;
 export type PrivacyLevel = (typeof privacyLevels)[number];
 
-export const geoSharingPrecisions = [
+/** Location is deliberately independent from audience. */
+export const geoSharingPrecisions = ['approximate', 'hidden'] as const;
+export type GeoSharingPrecision = (typeof geoSharingPrecisions)[number];
+
+const legacyPrivacyLevels = ['public', 'community', 'private'] as const;
+const legacyGeoSharingPrecisions = [
     'exact',
     'neighborhood',
     'city',
     'hidden',
 ] as const;
-export type GeoSharingPrecision = (typeof geoSharingPrecisions)[number];
+
+export const canonicalizePrivacyLevel = (value: unknown): PrivacyLevel => {
+    if (value === 'public' || value === 'authenticated' || value === 'hidden') return value;
+    if (value === 'community') return 'authenticated';
+    return 'hidden';
+};
+
+export const canonicalizeGeoSharingPrecision = (
+    value: unknown,
+    enabled = true,
+): GeoSharingPrecision => {
+    if (!enabled || value === 'hidden') return 'hidden';
+    return 'approximate';
+};
+
+export const privacyExposurePreview = (
+    audience: PrivacyLevel,
+    location: GeoSharingPrecision,
+): string => {
+    const audienceText = audience === 'public'
+        ? 'Visible to anyone'
+        : audience === 'authenticated'
+          ? 'Visible only to signed-in participants'
+          : 'Hidden from discovery';
+    return `${audienceText}. Location: ${location === 'approximate' ? 'approximate area only' : 'hidden'}.`;
+};
 
 export const accountActions = ['deactivate', 'export', 'delete'] as const;
 export type AccountAction = (typeof accountActions)[number];
@@ -58,18 +89,41 @@ export const notificationPreferencesSchema = z.object({
 
 export interface UserSettings {
     privacyLevel: PrivacyLevel;
-    geoSharingEnabled: boolean;
-    geoSharingPrecision: GeoSharingPrecision;
+    locationVisibility: GeoSharingPrecision;
     contactPreferences: ContactPreferences;
     notificationPreferences: NotificationPreferences;
 }
 
-export const userSettingsSchema = z.object({
+const canonicalUserSettingsSchema = z.object({
     privacyLevel: z.enum(privacyLevels),
-    geoSharingEnabled: z.boolean(),
-    geoSharingPrecision: z.enum(geoSharingPrecisions),
+    locationVisibility: z.enum(geoSharingPrecisions),
     contactPreferences: contactPreferencesSchema,
     notificationPreferences: notificationPreferencesSchema,
+});
+
+const legacyUserSettingsSchema = z.object({
+    privacyLevel: z.enum(legacyPrivacyLevels),
+    geoSharingEnabled: z.boolean(),
+    geoSharingPrecision: z.enum(legacyGeoSharingPrecisions),
+    contactPreferences: contactPreferencesSchema,
+    notificationPreferences: notificationPreferencesSchema,
+});
+
+/** Accept legacy settings for one release but always return canonical values. */
+export const userSettingsSchema = z.union([
+    canonicalUserSettingsSchema,
+    legacyUserSettingsSchema,
+]).transform((settings): UserSettings => {
+    if ('locationVisibility' in settings) return settings;
+    return {
+        privacyLevel: canonicalizePrivacyLevel(settings.privacyLevel),
+        locationVisibility: canonicalizeGeoSharingPrecision(
+            settings.geoSharingPrecision,
+            settings.geoSharingEnabled,
+        ),
+        contactPreferences: settings.contactPreferences,
+        notificationPreferences: settings.notificationPreferences,
+    };
 });
 
 // ---------------------------------------------------------------------------
@@ -113,9 +167,8 @@ export const accountActionRequestSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const defaultUserSettings: UserSettings = {
-    privacyLevel: 'community',
-    geoSharingEnabled: true,
-    geoSharingPrecision: 'neighborhood',
+    privacyLevel: 'authenticated',
+    locationVisibility: 'approximate',
     contactPreferences: {
         allowDirectMessages: true,
         showEmail: false,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     DiscoveryIndexStore,
+    validateAidFeedQueryInput,
     validateAidQueryInput,
     validateDirectoryQueryInput,
 } from './discovery.js';
@@ -278,5 +279,22 @@ describe('P3.2/P3.3 discovery indexing + query APIs', () => {
                 urgency: 'high',
             }),
         ).toMatchObject({ category: 'food', urgency: 'high' });
+
+        expect(validateAidFeedQueryInput({ page: 1, pageSize: 20 }))
+            .toMatchObject({ page: 1, pageSize: 20 });
+        expect(() => validateAidFeedQueryInput({ latitude: 40.71 }))
+            .toThrow('latitude, longitude, and radiusKm must be supplied together.');
+        expect(() => validateAidQueryInput({ page: 1 }))
+            .toThrow();
+    });
+
+    it('returns newest-first feed results without inventing a location', () => {
+        const store = buildStore();
+        const feed = store.queryFeed({ page: 1, pageSize: 20 });
+        expect(feed.total).toBeGreaterThan(0);
+        expect(feed.items.every(item => item.distanceKm === undefined)).toBe(true);
+        expect([...feed.items].map(item => item.updatedAt)).toEqual(
+            [...feed.items].map(item => item.updatedAt).sort().reverse(),
+        );
     });
 });

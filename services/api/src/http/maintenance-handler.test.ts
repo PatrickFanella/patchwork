@@ -10,6 +10,7 @@ describe('maintenance HTTP boundary', () => {
     const declare = vi.fn().mockResolvedValue({ active: true });
     const resume = vi.fn().mockResolvedValue({ active: false });
     let role: 'user' | 'moderator' = 'moderator';
+    let authenticatedAt = new Date().toISOString();
     const handler = createMaintenanceHandler({
         service: {
             status: () => ({
@@ -26,6 +27,7 @@ describe('maintenance HTTP boundary', () => {
             session: {
                 did: 'did:plc:session-owner',
                 expiresAt: '2099-01-01T00:00:00.000Z',
+                authenticatedAt,
             },
             principal: {
                 did: 'did:plc:session-owner',
@@ -107,6 +109,35 @@ describe('maintenance HTTP boundary', () => {
         expect(response.status).toBe(403);
     });
 
+    it('requires a fresh AT OAuth login for both maintenance transitions', async () => {
+        role = 'moderator';
+        authenticatedAt = new Date(Date.now() - 5 * 60 * 1000 - 1).toISOString();
+        const stale = await fetch(`${origin}/maintenance/declare`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                reasonCodes: ['integrity'],
+                publicMessage: 'Checking service integrity.',
+            }),
+        });
+        expect(stale.status).toBe(401);
+        await expect(stale.json()).resolves.toMatchObject({
+            error: { code: 'MAINTENANCE_STEP_UP_REQUIRED' },
+        });
+
+        authenticatedAt = new Date().toISOString();
+        const fresh = await fetch(`${origin}/maintenance/resume`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        expect(fresh.status).toBe(200);
+        expect(resume).toHaveBeenCalledWith(
+            'did:plc:session-owner',
+            'idempotency-one',
+        );
+    });
+
     it('classifies every new-submission and exact-exchange write as blocked', () => {
         for (const path of [
             '/at/aid-posts',
@@ -118,6 +149,25 @@ describe('maintenance HTTP boundary', () => {
             '/verification/exact-address/requests',
             '/attachments/uploads',
             '/coordination/offers',
+            '/groups',
+            '/groups/invitations',
+            '/groups/invitation-responses',
+            '/groups/invitation-revocations',
+            '/groups/member-removals',
+            '/groups/role-changes',
+            '/groups/departures',
+            '/groups/ownership-transfers',
+            '/groups/closures',
+            '/groups/rooms',
+            '/groups/room-closures',
+            '/chat/conversations',
+            '/chat/messages',
+            '/chat/read',
+            '/chat/messages/redactions',
+            '/chat/reports',
+            '/location/consent',
+            '/location/signal',
+            '/location/revoke',
         ]) {
             expect(isBlockedByMaintenance(
                 { method: 'POST' } as never,

@@ -101,7 +101,23 @@ export interface SliSnapshot {
     endpointCounts: Map<string, number>;
     /** Per-endpoint error counters (route -> count). */
     endpointErrors: Map<string, number>;
+    /** Bounded route/outcome counters for actionable HTTP alerts. */
+    routeOutcomes: Map<string, number>;
 }
+
+const boundedRoute = (endpoint: string): string => {
+    const pathname = endpoint.split('?')[0] ?? '/';
+    if (pathname.length > 160) return '/__overflow__';
+    return pathname
+        .replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi, ':id')
+        .replace(/\/[A-Za-z0-9_-]{20,}(?=\/|$)/g, '/:id')
+        .replace(/\/attachments\/(content|uploads)\/[^/]+/g, '/attachments/$1/:id');
+};
+
+const outcomeForStatus = (statusCode: number): string =>
+    Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599 ?
+        `${Math.floor(statusCode / 100)}xx`
+    :   'unknown';
 
 export class SliCollector {
     private _requestTotal = 0;
@@ -109,6 +125,7 @@ export class SliCollector {
     private _durationTotalSeconds = 0;
     private readonly _endpointCounts = new Map<string, number>();
     private readonly _endpointErrors = new Map<string, number>();
+    private readonly _routeOutcomes = new Map<string, number>();
 
     recordRequest(endpoint: string, durationMs: number): void {
         this._requestTotal++;
@@ -127,6 +144,20 @@ export class SliCollector {
         );
     }
 
+    recordHttpRequest(endpoint: string, statusCode: number, durationMs: number): void {
+        const route = boundedRoute(endpoint);
+        this.recordRequest(route, durationMs);
+        if (statusCode >= 500) this.recordError(route);
+        this.recordHttpOutcome(route, statusCode);
+    }
+
+    /** Record a bounded route/outcome label after a response has finished. */
+    recordHttpOutcome(endpoint: string, statusCode: number): void {
+        const route = boundedRoute(endpoint);
+        const key = `${route}\u0000${outcomeForStatus(statusCode)}`;
+        this._routeOutcomes.set(key, (this._routeOutcomes.get(key) ?? 0) + 1);
+    }
+
     snapshot(): SliSnapshot {
         return {
             requestTotal: this._requestTotal,
@@ -134,6 +165,7 @@ export class SliCollector {
             durationTotalSeconds: this._durationTotalSeconds,
             endpointCounts: new Map(this._endpointCounts),
             endpointErrors: new Map(this._endpointErrors),
+            routeOutcomes: new Map(this._routeOutcomes),
         };
     }
 
@@ -148,6 +180,22 @@ export class SliCollector {
             '# TYPE patchwork_sli_request_total counter',
             createSliGauge(service, 'request_total', this._requestTotal),
         );
+
+        lines.push(
+            '# HELP patchwork_http_route_request_total Total HTTP requests by bounded route and outcome.',
+            '# TYPE patchwork_http_route_request_total counter',
+        );
+        for (const [key, count] of this._routeOutcomes) {
+            const [endpoint, outcome] = key.split('\u0000');
+            lines.push(
+                `patchwork_http_route_request_total${formatLabels({ service, endpoint }).slice(0, -1)},outcome="${outcome}"} ${count}`,
+            );
+            if (outcome === '5xx') {
+                lines.push(
+                    `patchwork_http_route_error_total${formatLabels({ service, endpoint })} ${count}`,
+                );
+            }
+        }
 
         lines.push(
             '# HELP patchwork_sli_error_total Total errors.',
@@ -218,5 +266,6 @@ export class SliCollector {
         this._durationTotalSeconds = 0;
         this._endpointCounts.clear();
         this._endpointErrors.clear();
+        this._routeOutcomes.clear();
     }
 }

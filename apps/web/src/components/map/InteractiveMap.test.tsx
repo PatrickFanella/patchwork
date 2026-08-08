@@ -6,6 +6,18 @@ import { InteractiveMap } from './InteractiveMap.js';
 
 // Mock matchMedia for reduced motion check
 beforeEach(() => {
+    if (!window.localStorage) {
+        const values = new Map<string, string>();
+        Object.defineProperty(window, 'localStorage', {
+            configurable: true,
+            value: {
+                clear: () => values.clear(),
+                getItem: (key: string) => values.get(key) ?? null,
+                setItem: (key: string, value: string) => values.set(key, value),
+                removeItem: (key: string) => values.delete(key),
+            },
+        });
+    }
     window.localStorage.clear();
     Object.defineProperty(window, 'matchMedia', {
         writable: true,
@@ -97,6 +109,48 @@ describe('InteractiveMap', () => {
         expect(circleArgs).toMatchObject({ className: 'mh-map-circle is-selected' });
         (leafletMock.circleOn.mock.calls as unknown as Array<[string, () => void]>)[0]?.[1]?.();
         expect(onSelectPostId).toHaveBeenCalledWith('card-1');
+        await act(async () => root.unmount());
+    });
+
+    it('requires an explicit map point before confirming an approximate area', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = createRoot(container);
+        const onConfirmArea = vi.fn();
+
+        await act(async () => {
+            root.render(
+                <InteractiveMap
+                    cards={[]}
+                    onSelectPostId={vi.fn()}
+                    onTilesFailed={vi.fn()}
+                    onConfirmArea={onConfirmArea}
+                />,
+            );
+        });
+
+        const confirm = [...container.querySelectorAll('button')].find(
+            button => button.textContent === 'Confirm approximate area',
+        );
+        expect(confirm?.disabled).toBe(true);
+        const clickHandler = (leafletMock.on.mock.calls as unknown as Array<[
+            string,
+            (event: { latlng: { lat: number; lng: number } }) => void,
+        ]>).find(([event]) => event === 'click')?.[1];
+        await act(async () => clickHandler?.({ latlng: { lat: 12.3456, lng: -45.6789 } }));
+        expect(confirm?.disabled).toBe(false);
+        await act(async () => confirm?.click());
+        expect(onConfirmArea).toHaveBeenCalledWith({ lat: 12.3456, lng: -45.6789 });
+        await act(async () => root.unmount());
+    });
+
+    it('does not recreate Leaflet when the area-confirm callback changes', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = createRoot(container);
+        await act(async () => root.render(<InteractiveMap cards={[]} onSelectPostId={vi.fn()} onTilesFailed={vi.fn()} onConfirmArea={vi.fn()} />));
+        await act(async () => root.render(<InteractiveMap cards={[]} onSelectPostId={vi.fn()} onTilesFailed={vi.fn()} onConfirmArea={vi.fn()} />));
+        expect(leafletMock.map).toHaveBeenCalledTimes(1);
         await act(async () => root.unmount());
     });
 

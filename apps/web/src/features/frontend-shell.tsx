@@ -128,8 +128,10 @@ import {
     fetchActivityInboxViaApi,
     fetchCoordinationViaApi,
     fetchCoordinationWindowsViaApi,
-    fetchDirectoryCardsFromApi,
+    fetchDirectoryCardPageFromApi,
+    fetchFeedRecordPageFromApi,
     fetchFeedRecordsFromApi,
+    appendDedupedPage,
     fetchMyOrganizationsViaApi,
     fetchOrganizationMembersViaApi,
     fetchOrganizationsViaApi,
@@ -147,7 +149,7 @@ import {
     fetchVerificationWorkspaceViaApi,
     fetchSettingsAuditFromApi,
     fetchSettingsFromApi,
-    fetchVolunteerProfilesViaApi,
+    fetchVolunteerProfilePageViaApi,
     getAtDirectoryResourceViaApi,
     getAtVolunteerProfileViaApi,
     initiateChatViaApi,
@@ -219,12 +221,10 @@ import {
     type AccountPreferences,
     type UserSettings,
     geoSharingPrecisions,
+    privacyExposurePreview,
     privacyLevels,
 } from '@patchwork/shared';
-import {
-    defaultDiscoveryCenter,
-    type FeedRecordEnvelope,
-} from './discovery-runtime';
+import { type FeedRecordEnvelope } from './discovery-runtime';
 import { useAuth } from '../auth/AuthProvider';
 import { resolveWebDataMode } from './data-mode';
 
@@ -363,8 +363,7 @@ const defaultShellDiscoveryState = applyDiscoveryFilterPatch(
 
 const buildNearbyPatch = (): Partial<DiscoveryFilterState> => ({
     feedTab: 'nearby',
-    center: defaultDiscoveryCenter,
-    radiusMeters: nearbyDefaultRadiusMeters,
+    radiusMeters: undefined,
 });
 
 const toSeverityTone = (
@@ -448,6 +447,12 @@ const readDiscoveryStateFromUrl = (
     return parseDiscoveryFilterState(window.location.search, fallback);
 };
 
+const readPaginationPageFromUrl = (): number => {
+    if (typeof window === 'undefined') return 1;
+    const page = Number.parseInt(new URLSearchParams(window.location.search).get('page') ?? '1', 10);
+    return Number.isInteger(page) && page > 0 ? page : 1;
+};
+
 interface DiscoveryFiltersPanelProps {
     idPrefix: string;
     state: DiscoveryFilterState;
@@ -460,36 +465,71 @@ const DiscoveryFiltersPanel = ({
     onPatch,
 }: DiscoveryFiltersPanelProps) => {
     const { t } = useLocale();
+    const [areaLatitude, setAreaLatitude] = useState('');
+    const [areaLongitude, setAreaLongitude] = useState('');
+    const [areaLabel, setAreaLabel] = useState(state.areaLabel ?? '');
+    const [areaRadius, setAreaRadius] = useState(String(state.radiusMeters ?? nearbyDefaultRadiusMeters));
     const chipModel = useMemo(
         () => buildDiscoveryFilterChipModel(state),
         [state],
     );
 
-    const latValue = state.center?.lat ?? defaultDiscoveryCenter.lat;
-    const lngValue = state.center?.lng ?? defaultDiscoveryCenter.lng;
+    const latValue = state.center ? String(state.center.lat) : areaLatitude;
+    const lngValue = state.center ? String(state.center.lng) : areaLongitude;
 
     return (
         <Panel title={String(t('discovery.title'))}>
             {!state.center ? (
                 <div className='mh-alert mb-4 text-sm' role='status'>
-                    <strong>{t('discovery.demoAreaTitle')}</strong>{' '}
+                    <strong>{t('discovery.areaRequiredTitle')}</strong>{' '}
                     {t('discovery.demoAreaHelp')}
-                    <div className='mt-2'>
-                        <Button
-                            type='button'
-                            variant='neutral'
-                            className='px-3 py-1 text-xs'
-                            onClick={() => onPatch(buildNearbyPatch())}
-                        >
-                            {t('discovery.useDemoArea')}
-                        </Button>
-                    </div>
                 </div>
             ) : (
                 <p className='mb-4 text-sm text-mh-textMuted' role='status'>
                     {t('discovery.selectedAreaHelp')}
                 </p>
             )}
+            {!state.center ? (
+                <div className='mb-4 border-2 border-mh-borderSoft bg-mh-surfaceElev p-3'>
+                    <label
+                        htmlFor={`${idPrefix}-area-label`}
+                        className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
+                    >
+                        {t('discovery.areaLabel')}
+                    </label>
+                    <Input
+                        id={`${idPrefix}-area-label`}
+                        name={`${idPrefix}-area-label`}
+                        autoComplete='off'
+                        placeholder={String(t('discovery.areaLabelPlaceholder'))}
+                        value={areaLabel}
+                        onChange={(event) => setAreaLabel(event.target.value)}
+                    />
+                    <p className='mt-2 text-xs text-mh-textMuted'>
+                        {t('discovery.areaPickerDescription')}
+                    </p>
+                    <div className='mt-3'>
+                        <Suspense fallback={<div className='mh-skeleton h-64 w-full' />}>
+                            <LazyInteractiveMap
+                                cards={[]}
+                                onSelectPostId={() => undefined}
+                                onTilesFailed={() => undefined}
+                                onConfirmArea={(center) => {
+                                    const label = areaLabel.trim();
+                                    if (!label) return;
+                                    onPatch({
+                                        center,
+                                        areaLabel: label,
+                                        radiusMeters: nearbyDefaultRadiusMeters,
+                                        feedTab: 'nearby',
+                                    });
+                                }}
+                                canConfirmArea={areaLabel.trim().length > 0}
+                            />
+                        </Suspense>
+                    </div>
+                </div>
+            ) : null}
             <label
                 htmlFor={`${idPrefix}-search`}
                 className='mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mh-text'
@@ -628,17 +668,9 @@ const DiscoveryFiltersPanel = ({
                             min={300}
                             max={100000}
                             placeholder={String(nearbyDefaultRadiusMeters)}
-                            value={state.radiusMeters ?? ''}
+                            value={areaRadius}
                             onChange={(event) => {
-                                const value = Number.parseInt(
-                                    event.target.value,
-                                    10,
-                                );
-                                onPatch({
-                                    radiusMeters: Number.isNaN(value)
-                                        ? undefined
-                                        : value,
-                                });
+                                setAreaRadius(event.target.value);
                             }}
                         />
                         </div>
@@ -659,18 +691,8 @@ const DiscoveryFiltersPanel = ({
                             max={90}
                             value={latValue}
                             onChange={(event) => {
-                                const value = Number.parseFloat(
-                                    event.target.value,
-                                );
-                                if (Number.isNaN(value)) {
-                                    return;
-                                }
-                                onPatch({
-                                    center: {
-                                        lat: value,
-                                        lng: state.center?.lng ?? lngValue,
-                                    },
-                                });
+                                const value = event.target.value;
+                                setAreaLatitude(value);
                             }}
                         />
                         </div>
@@ -691,22 +713,33 @@ const DiscoveryFiltersPanel = ({
                             max={180}
                             value={lngValue}
                             onChange={(event) => {
-                                const value = Number.parseFloat(
-                                    event.target.value,
-                                );
-                                if (Number.isNaN(value)) {
-                                    return;
-                                }
-                                onPatch({
-                                    center: {
-                                        lat: state.center?.lat ?? latValue,
-                                        lng: value,
-                                    },
-                                });
+                                const value = event.target.value;
+                                setAreaLongitude(value);
                             }}
                         />
                         </div>
                     </div>
+                    <Button
+                        type='button'
+                        className='mt-3 px-3 py-1 text-xs'
+                        disabled={
+                            !areaLabel.trim() ||
+                            Number.isNaN(Number.parseFloat(areaLatitude)) ||
+                            Number.isNaN(Number.parseFloat(areaLongitude)) ||
+                            Number.isNaN(Number.parseInt(areaRadius, 10))
+                        }
+                        onClick={() => onPatch({
+                            center: {
+                                lat: Number.parseFloat(areaLatitude),
+                                lng: Number.parseFloat(areaLongitude),
+                            },
+                            areaLabel: areaLabel.trim(),
+                            radiusMeters: Number.parseInt(areaRadius, 10),
+                            feedTab: 'nearby',
+                        })}
+                    >
+                        {t('discovery.confirmArea')}
+                    </Button>
                 </details>
 
                 <div className='flex flex-wrap items-center justify-between gap-3 border-t-2 border-mh-borderSoft pt-4'>
@@ -721,6 +754,7 @@ const DiscoveryFiltersPanel = ({
                                 status: undefined,
                                 minUrgency: undefined,
                                 center: undefined,
+                                areaLabel: undefined,
                                 radiusMeters: undefined,
                                 since: undefined,
                             });
@@ -1035,6 +1069,9 @@ interface MapRouteProps {
     errorMessage?: string;
     dataOrigin: ApiDataOrigin;
     onRetry: () => void;
+    hasNextPage: boolean;
+    total: number;
+    onLoadMore: () => void;
     onRetryResources: () => void;
     selectedPostId?: string;
     onSelectPost: (id: string | undefined) => void;
@@ -1059,6 +1096,9 @@ const MapRoute = ({
     errorMessage,
     dataOrigin,
     onRetry,
+    hasNextPage,
+    total,
+    onLoadMore,
     onRetryResources,
     selectedPostId,
     onSelectPost,
@@ -1155,7 +1195,11 @@ const MapRoute = ({
                       center: focusedArea.previousCenter,
                       radiusMeters: focusedArea.previousRadiusMeters,
                   }
-                : { center: undefined, radiusMeters: undefined };
+                : {
+                      center: undefined,
+                      areaLabel: undefined,
+                      radiusMeters: undefined,
+                  };
         setFocusedArea(undefined);
         onSelectPost(undefined);
         onPushDiscovery(patch);
@@ -1180,6 +1224,14 @@ const MapRoute = ({
                     <Badge tone={dataOrigin === 'api' ? 'success' : 'info'}>
                         {dataOriginLabel(dataOrigin)}
                     </Badge>
+                    <span className='text-sm text-mh-textMuted' role='status' aria-live='polite'>
+                        {t('discovery.loadedCount', { loaded: feedRecords.length, total })}
+                    </span>
+                    {hasNextPage ? (
+                        <Button type='button' variant='neutral' className='px-3 py-1 text-xs' onClick={onLoadMore} disabled={isLoading}>
+                            {t('discovery.loadMore')}
+                        </Button>
+                    ) : null}
                 </div>
                 {errorMessage || resourceErrorMessage ? (
                     <div
@@ -1291,20 +1343,26 @@ const MapRoute = ({
                         </Button>
                     </div>
                 ) : null}
-                <Suspense
-                    fallback={<div className='mh-skeleton h-96 w-full' />}
-                >
-                    <LazyInteractiveMap
-                        cards={mapView.filteredCards}
-                        resources={mapResourceView.cards}
-                        selectedPostId={selectedPostId}
-                        center={discoveryState.center ?? defaultDiscoveryCenter}
-                        onSelectPostId={onSelectPost}
-                        focusedArea={activeArea}
-                        onFocusArea={focusMapArea}
-                        onTilesFailed={setTileError}
-                    />
-                </Suspense>
+                {discoveryState.center ? (
+                    <Suspense
+                        fallback={<div className='mh-skeleton h-96 w-full' />}
+                    >
+                        <LazyInteractiveMap
+                            cards={mapView.filteredCards}
+                            resources={mapResourceView.cards}
+                            selectedPostId={selectedPostId}
+                            center={discoveryState.center}
+                            onSelectPostId={onSelectPost}
+                            focusedArea={activeArea}
+                            onFocusArea={focusMapArea}
+                            onTilesFailed={setTileError}
+                        />
+                    </Suspense>
+                ) : (
+                    <div className='mh-alert p-4' role='status'>
+                        {t('map.areaRequired')}
+                    </div>
+                )}
             </section>
 
             <div className='grid gap-6 xl:grid-cols-2'>
@@ -1403,6 +1461,10 @@ const MapRoute = ({
                                         <Button
                                             variant='neutral'
                                             className='px-3 py-1 text-xs'
+                                            aria-label={t('map.openTriageDrawerFor', {
+                                                title: card.title,
+                                                id: card.id,
+                                            })}
                                             onClick={() =>
                                                 onSelectPost(card.id)
                                             }
@@ -1596,6 +1658,9 @@ interface FeedRouteProps {
     errorMessage?: string;
     dataOrigin: ApiDataOrigin;
     onRetry: () => void;
+    hasNextPage: boolean;
+    total: number;
+    onLoadMore: () => void;
     publicSyncFailure?: PublicSyncFailure;
     publicSyncRetrying: boolean;
     onRetryPublicSync: () => void;
@@ -1968,6 +2033,9 @@ const FeedRoute = ({
     errorMessage,
     dataOrigin,
     onRetry,
+    hasNextPage,
+    total,
+    onLoadMore,
     publicSyncFailure,
     publicSyncRetrying,
     onRetryPublicSync,
@@ -2335,6 +2403,14 @@ const FeedRoute = ({
                         })}
                     </ul>
                 )}
+                <p className='mt-3 text-sm text-mh-textMuted' role='status' aria-live='polite'>
+                    {t('discovery.loadedCount', { loaded: feedRecords.length, total })}
+                </p>
+                {hasNextPage ? (
+                    <Button className='mt-3' onClick={onLoadMore} disabled={isLoading}>
+                        {t('discovery.loadMore')}
+                    </Button>
+                ) : null}
             </Card>
         </section>
     );
@@ -2376,10 +2452,57 @@ const PostingRoute = ({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
     const [attachmentStatus, setAttachmentStatus] = useState<string>();
+    const [projectionNotice, setProjectionNotice] = useState<string>();
+    const [projectionFailed, setProjectionFailed] = useState(false);
+    const [projectionPostUri, setProjectionPostUri] = useState<string>();
+    const projectionTimerRef = useRef<number | undefined>(undefined);
+
+    useEffect(
+        () => () => {
+            if (projectionTimerRef.current !== undefined) {
+                window.clearTimeout(projectionTimerRef.current);
+            }
+        },
+        [],
+    );
+
+    const pollProjection = async (postUri: string, attempts = 0) => {
+        if (projectionTimerRef.current !== undefined) {
+            window.clearTimeout(projectionTimerRef.current);
+            projectionTimerRef.current = undefined;
+        }
+        const lifecycle = await queryAidPostLifecycleViaApi(postUri);
+        if (!lifecycle.ok || !lifecycle.data.projectionReceipt) {
+            setProjectionNotice('Source accepted. Public discovery is still waiting for projection confirmation.');
+            setProjectionFailed(false);
+            return;
+        }
+        const receipt = lifecycle.data.projectionReceipt;
+        if (receipt.state === 'projected') {
+            setProjectionNotice('Public discovery confirmed this request.');
+            setProjectionFailed(false);
+            return;
+        }
+        if (receipt.state === 'failed') {
+            setProjectionNotice(`Public discovery did not project this request${receipt.failureCode ? ` (${receipt.failureCode})` : ''}. Retry the check or contact support.`);
+            setProjectionFailed(true);
+            return;
+        }
+        setProjectionNotice('Source accepted. Public discovery is pending projection.');
+        setProjectionFailed(false);
+        if (attempts < 4) {
+            const seconds = Math.max(1, Math.min(receipt.retryAfterSeconds ?? 5, 30));
+            projectionTimerRef.current = window.setTimeout(() => {
+                void pollProjection(postUri, attempts + 1);
+            }, seconds * 1000);
+        }
+    };
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setApiError(undefined);
+        setProjectionNotice(undefined);
+        setProjectionFailed(false);
 
         const draft = {
             title,
@@ -2432,6 +2555,8 @@ const PostingRoute = ({
             }
 
             onCreateRecord(createResult.data);
+            setProjectionPostUri(createResult.data.aidPostUri);
+            void pollProjection(createResult.data.aidPostUri);
 
             let uploaded = 0;
             for (const file of attachmentFiles) {
@@ -2784,6 +2909,26 @@ const PostingRoute = ({
                         </p>
                     ) : null}
 
+                    {projectionNotice ? (
+                        <div
+                            className={projectionFailed ? 'mh-alert text-xs font-bold' : 'rounded-none border-2 border-mh-border bg-mh-surfaceElev px-3 py-2 text-xs font-bold'}
+                            role={projectionFailed ? 'alert' : 'status'}
+                            aria-live='polite'
+                        >
+                            <p>{projectionNotice}</p>
+                            {projectionFailed ? (
+                                <Button
+                                    type='button'
+                                    variant='neutral'
+                                    className='mt-2 px-3 py-1 text-xs'
+                                    onClick={() => projectionPostUri && void pollProjection(projectionPostUri)}
+                                >
+                                    {t('discovery.retryProjection')}
+                                </Button>
+                            ) : null}
+                        </div>
+                    ) : null}
+
                     {apiError ? (
                         <p className='mh-alert text-xs font-bold'>
                             {t('posting.unableToPresist', { error: apiError })}
@@ -2852,6 +2997,7 @@ const DirectoryResourceManager = ({
     const [notice, setNotice] = useState<string>();
     const [error, setError] = useState<string>();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isLoadingEdit, setIsLoadingEdit] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
 
     const reset = () => {
@@ -2870,7 +3016,13 @@ const DirectoryResourceManager = ({
 
     useEffect(() => {
         if (!editUri) return undefined;
+        if (editing?.uri === editUri) {
+            setIsOpen(true);
+            onEditHandled();
+            return undefined;
+        }
         let active = true;
+        setIsLoadingEdit(true);
         setError(undefined);
         setNotice(undefined);
         void getAtDirectoryResourceViaApi(editUri)
@@ -2890,7 +3042,10 @@ const DirectoryResourceManager = ({
                 setIsOpen(true);
             })
             .finally(() => {
-                if (active) onEditHandled();
+                if (active) {
+                    setIsLoadingEdit(false);
+                    onEditHandled();
+                }
             });
         return () => {
             active = false;
@@ -2995,7 +3150,11 @@ const DirectoryResourceManager = ({
                             {error}
                         </p>
                     ) : null}
-                    {isOpen ? (
+                    {isLoadingEdit ? (
+                        <p className='mt-5 text-xs font-bold' role='status'>
+                            {t('directoryManager.loading')}
+                        </p>
+                    ) : isOpen ? (
                         <form
                             className='mt-5 space-y-4 border-t-2 border-mh-borderSoft pt-5'
                             onSubmit={submit}
@@ -3388,6 +3547,9 @@ interface ResourceRouteProps {
     errorMessage?: string;
     dataOrigin: ApiDataOrigin;
     onRetry: () => void;
+    hasNextPage: boolean;
+    total: number;
+    onLoadMore: () => void;
     resourceCards: readonly ResourceDirectoryCard[];
     currentUserDid: string;
 }
@@ -3400,6 +3562,9 @@ const ResourceRoute = ({
     errorMessage,
     dataOrigin,
     onRetry,
+    hasNextPage,
+    total,
+    onLoadMore,
     resourceCards,
     currentUserDid,
 }: ResourceRouteProps) => {
@@ -3487,19 +3652,34 @@ const ResourceRoute = ({
                 ) : null}
             </header>
 
-            <DirectoryResourceManager
-                currentUserDid={currentUserDid}
-                center={discoveryState.center ?? defaultDiscoveryCenter}
-                onChanged={onRetry}
-                editUri={manageUri}
-                onEditHandled={() => setManageUri(undefined)}
-            />
+            {discoveryState.center ? (
+                <DirectoryResourceManager
+                    currentUserDid={currentUserDid}
+                    center={discoveryState.center}
+                    onChanged={onRetry}
+                    editUri={manageUri}
+                    onEditHandled={() => setManageUri(undefined)}
+                />
+            ) : (
+                <div className='mh-alert p-4' role='status'>
+                    {t('discovery.demoAreaHelp')}
+                </div>
+            )}
 
             <DiscoveryFiltersPanel
                 idPrefix='resources'
                 state={discoveryState}
                 onPatch={onPatchDiscovery}
             />
+
+            <p className='text-sm text-mh-textMuted' role='status' aria-live='polite'>
+                {t('discovery.loadedCount', { loaded: resourceCards.length, total })}
+            </p>
+            {hasNextPage ? (
+                <Button type='button' variant='neutral' onClick={onLoadMore} disabled={isLoading}>
+                    {t('discovery.loadMore')}
+                </Button>
+            ) : null}
 
             <Card title={String(t('resources.directoryFiltersTitle'))}>
                 <div className='flex flex-wrap gap-2'>
@@ -4220,7 +4400,13 @@ const emptyVolunteerCommand = (): VolunteerProfileCommandInput => ({
     },
 });
 
-const VolunteerRoute = ({ did }: { did: string }) => {
+const VolunteerRoute = ({
+    did,
+    historyVersion,
+}: {
+    did: string;
+    historyVersion: number;
+}) => {
     const { t } = useLocale();
     const [profiles, setProfiles] = useState<VolunteerDiscoveryProfile[]>([]);
     const [discoveryStatus, setDiscoveryStatus] = useState(
@@ -4235,23 +4421,52 @@ const VolunteerRoute = ({ did }: { did: string }) => {
     const [languagesText, setLanguagesText] = useState('en');
     const [windowsText, setWindowsText] = useState('');
     const [formStatus, setFormStatus] = useState<string>();
+    const [volunteerPage, setVolunteerPage] = useState(() => readPaginationPageFromUrl());
+    const volunteerPageRef = useRef(volunteerPage);
+    const restoringVolunteerPageRef = useRef(false);
+    const lastVolunteerRequestKeyRef = useRef<string | undefined>(undefined);
+    const [volunteerHasNextPage, setVolunteerHasNextPage] = useState(false);
+    const [volunteerTotal, setVolunteerTotal] = useState(0);
 
-    const loadProfiles = useCallback(async () => {
+    const loadProfiles = useCallback(async (page = 1, force = false) => {
+        const requestKey = `${page}\u0000${searchText.trim()}`;
+        if (!force && lastVolunteerRequestKeyRef.current === requestKey) return;
+        lastVolunteerRequestKeyRef.current = requestKey;
+        const previousPage = volunteerPageRef.current;
+        if (typeof window !== 'undefined' && page !== previousPage) {
+            const params = new URLSearchParams(window.location.search);
+            if (page > 1) params.set('page', String(page));
+            else params.delete('page');
+            const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+            if (!restoringVolunteerPageRef.current) {
+                window.history.pushState({}, '', next);
+            }
+        }
+        restoringVolunteerPageRef.current = false;
+        volunteerPageRef.current = page;
         setDiscoveryStatus(t('volunteer.loading'));
-        const result = await fetchVolunteerProfilesViaApi({ searchText });
+        const result = await fetchVolunteerProfilePageViaApi({ searchText }, page);
         if (!result.ok) {
+            lastVolunteerRequestKeyRef.current = undefined;
             setDiscoveryStatus(
                 `${t('common.error')}: ${t('common.requestFailed')}`,
             );
             return;
         }
-        setProfiles(result.data);
-        setDiscoveryStatus(
-            result.data.length === 0
-                ? t('volunteer.noneFound')
-                : t('volunteer.results', { count: result.data.length }),
+        setProfiles((current) =>
+            page === 1
+                ? appendDedupedPage([], result.data.items, (profile) => profile.uri)
+                : appendDedupedPage(current, result.data.items, (profile) => profile.uri),
         );
-        const mine = result.data.find((profile) => profile.authorDid === did);
+        setVolunteerPage(page);
+        setVolunteerHasNextPage(result.data.hasNextPage);
+        setVolunteerTotal(result.data.total);
+        setDiscoveryStatus(
+            result.data.items.length === 0 && page === 1
+                ? t('volunteer.noneFound')
+                : t('volunteer.results', { count: result.data.total }),
+        );
+        const mine = result.data.items.find((profile) => profile.authorDid === did);
         if (!mine || !did) return;
         const ownedResult = await getAtVolunteerProfileViaApi(mine.uri);
         if (!ownedResult.ok) return;
@@ -4282,8 +4497,9 @@ const VolunteerRoute = ({ did }: { did: string }) => {
     }, [did, searchText, t]);
 
     useEffect(() => {
-        void loadProfiles();
-    }, [loadProfiles]);
+        if (historyVersion > 0) restoringVolunteerPageRef.current = true;
+        void loadProfiles(readPaginationPageFromUrl());
+    }, [historyVersion, loadProfiles]);
 
     const updateProfile = (
         patch: Partial<VolunteerProfileCommandInput['profile']>,
@@ -4327,7 +4543,7 @@ const VolunteerRoute = ({ did }: { did: string }) => {
         setFormStatus(
             owned ? t('volunteer.updated') : t('volunteer.published'),
         );
-        await loadProfiles();
+        await loadProfiles(1, true);
     };
 
     const remove = async () => {
@@ -4347,7 +4563,7 @@ const VolunteerRoute = ({ did }: { did: string }) => {
         setLanguagesText('en');
         setWindowsText('');
         setFormStatus(t('volunteer.deleted'));
-        await loadProfiles();
+        await loadProfiles(1, true);
     };
 
     return (
@@ -4366,7 +4582,7 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                     className='flex flex-wrap gap-2'
                     onSubmit={(event) => {
                         event.preventDefault();
-                        void loadProfiles();
+                        void loadProfiles(1, true);
                     }}
                 >
                     <label className='grow text-sm font-bold'>
@@ -4389,6 +4605,9 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                     }
                 >
                     {discoveryStatus}
+                </p>
+                <p className='mt-2 text-xs text-mh-textMuted' role='status' aria-live='polite'>
+                    {t('discovery.loadedCount', { loaded: profiles.length, total: volunteerTotal })}
                 </p>
                 <div className='mt-4 grid gap-3 sm:grid-cols-2'>
                     {profiles.map((profile) => (
@@ -4427,6 +4646,16 @@ const VolunteerRoute = ({ did }: { did: string }) => {
                         </Card>
                     ))}
                 </div>
+                {volunteerHasNextPage ? (
+                    <Button
+                        type='button'
+                        variant='neutral'
+                        className='mt-4'
+                        onClick={() => void loadProfiles(volunteerPage + 1)}
+                    >
+                        {t('discovery.loadMore')}
+                    </Button>
+                ) : null}
             </Panel>
 
             {did ? (
@@ -7064,7 +7293,8 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
     const [matches, setMatches] = useState<
         Readonly<Record<string, MatchCandidate[]>>
     >({});
-    const [notes, setNotes] = useState<Readonly<Record<string, string>>>({});
+    const [offerRequestUri, setOfferRequestUri] = useState<string>();
+    const [offerNote, setOfferNote] = useState('');
     const [languages, setLanguages] = useState('en');
     const [accessibility, setAccessibility] = useState('');
     const [outcomes, setOutcomes] = useState<
@@ -7142,6 +7372,11 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
     const availableRequests = requests.filter(
         (request) => request.recipientDid !== did,
     );
+    const offerRequest = offerRequestUri
+        ? availableRequests.find(
+              (request) => request.aidPostUri === offerRequestUri,
+          )
+        : undefined;
 
     return (
         <section className='space-y-6'>
@@ -7190,35 +7425,15 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                         request.card.status,
                                     )}
                                 </p>
-                                <label className='mt-3 block text-sm font-bold'>
-                                    {t('inbox.note')}
-                                    <textarea
-                                        className='mh-input mt-1 min-h-20 w-full px-3 py-2'
-                                        maxLength={1000}
-                                        value={notes[request.aidPostUri] ?? ''}
-                                        onChange={(event) =>
-                                            setNotes((current) => ({
-                                                ...current,
-                                                [request.aidPostUri]:
-                                                    event.target.value,
-                                            }))
-                                        }
-                                    />
-                                </label>
                                 <Button
                                     className='mt-3'
-                                    onClick={() =>
-                                        void finish(
-                                            t('inbox.sendingOffer'),
-                                            createCoordinationOfferViaApi({
-                                                requestUri: request.aidPostUri,
-                                                note:
-                                                    notes[
-                                                        request.aidPostUri
-                                                    ]?.trim() || null,
-                                            }),
-                                        )
-                                    }
+                                    aria-label={t('inbox.offerHelpFor', {
+                                        title: request.card.title,
+                                    })}
+                                    onClick={() => {
+                                        setOfferRequestUri(request.aidPostUri);
+                                        setOfferNote('');
+                                    }}
                                 >
                                     {t('inbox.offerHelp')}
                                 </Button>
@@ -7227,6 +7442,61 @@ const CoordinationInboxRoute = ({ did }: { did: string }) => {
                     </div>
                 )}
             </Panel>
+
+            {offerRequest ? (
+                <div
+                    role='dialog'
+                    aria-modal='true'
+                    aria-labelledby='offer-help-title'
+                    className='fixed inset-0 z-50 grid place-items-center bg-black/60 p-4'
+                >
+                    <section className='mh-card w-full max-w-xl space-y-4 p-5'>
+                        <div>
+                            <h2 id='offer-help-title' className='font-heading text-xl font-bold'>
+                                {t('inbox.offerHelpFor', {
+                                    title: offerRequest.card.title,
+                                })}
+                            </h2>
+                            <p className='mt-1 text-sm text-mh-textMuted'>
+                                {offerRequest.card.description}
+                            </p>
+                        </div>
+                        <label className='block text-sm font-bold'>
+                            {t('inbox.note')}
+                            <textarea
+                                autoFocus
+                                className='mh-input mt-1 min-h-24 w-full px-3 py-2'
+                                maxLength={1000}
+                                value={offerNote}
+                                onChange={(event) => setOfferNote(event.target.value)}
+                            />
+                        </label>
+                        <div className='flex flex-wrap justify-end gap-2'>
+                            <Button
+                                variant='neutral'
+                                onClick={() => setOfferRequestUri(undefined)}
+                            >
+                                {t('inbox.cancel')}
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    const requestUri = offerRequest.aidPostUri;
+                                    setOfferRequestUri(undefined);
+                                    void finish(
+                                        t('inbox.sendingOffer'),
+                                        createCoordinationOfferViaApi({
+                                            requestUri,
+                                            note: offerNote.trim() || null,
+                                        }),
+                                    );
+                                }}
+                            >
+                                {t('inbox.offerHelp')}
+                            </Button>
+                        </div>
+                    </section>
+                </div>
+            ) : null}
 
             <Panel title={String(t('inbox.offers'))}>
                 {offers.length === 0 ? (
@@ -7979,39 +8249,15 @@ const AccountPrivacyRoute = ({ onDeactivated }: AccountPrivacyRouteProps) => {
                     <Card title={String(t('account.preferences'))}>
                         <div className='grid gap-3 sm:grid-cols-2'>
                             <label className='text-sm font-bold'>
-                                {t('account.privacy')}
-                                <select
-                                    className='mh-input mt-1 w-full px-3 py-2'
-                                    value={preferences.privacy}
-                                    onChange={(event) =>
-                                        setPreferences((current) => ({
-                                            ...current,
-                                            privacy: event.target
-                                                .value as AccountPreferences['privacy'],
-                                        }))
-                                    }
-                                >
-                                    <option value='public'>
-                                        {t('account.public')}
-                                    </option>
-                                    <option value='community'>
-                                        {t('account.community')}
-                                    </option>
-                                    <option value='private'>
-                                        {t('account.private')}
-                                    </option>
-                                </select>
-                            </label>
-                            <label className='text-sm font-bold'>
                                 {t('account.visibility')}
                                 <select
                                     className='mh-input mt-1 w-full px-3 py-2'
-                                    value={preferences.visibility}
+                                    value={preferences.audience}
                                     onChange={(event) =>
                                         setPreferences((current) => ({
                                             ...current,
-                                            visibility: event.target
-                                                .value as AccountPreferences['visibility'],
+                                            audience: event.target
+                                                .value as AccountPreferences['audience'],
                                         }))
                                     }
                                 >
@@ -8072,6 +8318,18 @@ const AccountPrivacyRoute = ({ onDeactivated }: AccountPrivacyRouteProps) => {
                                 </select>
                             </label>
                         </div>
+                        <p className='mt-3 rounded-md border border-mh-border p-3 text-sm text-mh-textMuted'>
+                            {t('account.exposurePreview', {
+                                audience:
+                                    preferences.audience === 'authenticated'
+                                        ? t('account.signedIn')
+                                        : t(`account.${preferences.audience}`),
+                                location:
+                                    preferences.location.sharing === 'approximate'
+                                        ? t('account.approximate')
+                                        : t('account.hidden'),
+                            })}
+                        </p>
                         <div className='mt-3 grid gap-2 sm:grid-cols-2'>
                             {(
                                 [
@@ -8510,7 +8768,7 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                     <div className='space-y-4'>
                         <div>
                             <p className='mb-2 text-xs font-bold uppercase tracking-[0.12em] text-mh-text'>
-                                Privacy level
+                                Audience
                             </p>
                             <div className='flex flex-wrap gap-2'>
                                 {privacyLevels.map((level) => (
@@ -8530,40 +8788,22 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                             })
                                         }
                                     >
-                                        {formatCategoryLabel(level)}
+                                        {level === 'authenticated' ? 'Signed-in' : formatCategoryLabel(level)}
                                     </Button>
                                 ))}
                             </div>
                         </div>
 
                         <div>
-                            <label className='inline-flex items-center gap-2 text-sm text-mh-textMuted'>
-                                <input
-                                    type='checkbox'
-                                    className='h-4 w-4'
-                                    checked={settings.geoSharingEnabled}
-                                    onChange={(event) =>
-                                        handlePatch({
-                                            section: 'privacy',
-                                            field: 'geoSharingEnabled',
-                                            value: event.target.checked,
-                                        })
-                                    }
-                                />
-                                Enable geo-sharing
-                            </label>
-                        </div>
-
-                        <div>
                             <p className='mb-2 text-xs font-bold uppercase tracking-[0.12em] text-mh-text'>
-                                Geo-sharing precision
+                                Location
                             </p>
                             <div className='flex flex-wrap gap-2'>
                                 {geoSharingPrecisions.map((precision) => (
                                     <Button
                                         key={precision}
                                         variant={
-                                            settings.geoSharingPrecision ===
+                                            settings.locationVisibility ===
                                             precision
                                                 ? 'secondary'
                                                 : 'neutral'
@@ -8572,16 +8812,22 @@ const SettingsRoute = ({ currentUserDid }: SettingsRouteProps) => {
                                         onClick={() =>
                                             handlePatch({
                                                 section: 'privacy',
-                                                field: 'geoSharingPrecision',
+                                                field: 'locationVisibility',
                                                 value: precision,
                                             })
                                         }
                                     >
-                                        {formatCategoryLabel(precision)}
+                                        {precision === 'approximate' ? 'Approximate area' : 'Hidden'}
                                     </Button>
                                 ))}
                             </div>
                         </div>
+                        <p className='rounded-md border border-mh-border p-3 text-sm text-mh-textMuted'>
+                            {privacyExposurePreview(
+                                settings.privacyLevel,
+                                settings.locationVisibility,
+                            )}
+                        </p>
                     </div>
                 </Panel>
             ) : null}
@@ -9430,6 +9676,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const auth = useAuth();
     const { locale, changeLocale, t } = useLocale();
     const mainContentRef = useRef<HTMLDivElement>(null);
+    const mobileNavToggleRef = useRef<HTMLButtonElement>(null);
     const [currentRoute, setCurrentRoute] = useState<AppRoute>(() =>
         readCurrentRoute(),
     );
@@ -9459,6 +9706,12 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         );
     const [aidReload, setAidReload] = useState(0);
     const [directoryReload, setDirectoryReload] = useState(0);
+    const [aidPage, setAidPage] = useState(() => readPaginationPageFromUrl());
+    const [aidHasNextPage, setAidHasNextPage] = useState(false);
+    const [aidTotal, setAidTotal] = useState(0);
+    const [directoryPage, setDirectoryPage] = useState(() => readPaginationPageFromUrl());
+    const [directoryHasNextPage, setDirectoryHasNextPage] = useState(false);
+    const [directoryTotal, setDirectoryTotal] = useState(0);
     const [selectedMapPostId, setSelectedMapPostId] = useState<string>();
     const [chatIntent, setChatIntent] = useState<ChatInitiationIntent>();
     const [chatState, setChatState] = useState<ChatLaunchState>(
@@ -9476,12 +9729,25 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const [isOnline, setIsOnline] = useState(
         typeof navigator === 'undefined' ? true : navigator.onLine,
     );
+    const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+    const [historyVersion, setHistoryVersion] = useState(0);
 
     const currentUserDid = auth.session?.did ?? '';
 
     useEffect(() => {
         document.title = `${t(routeLabelKeys[currentRoute])} · ${appTitle}`;
     }, [appTitle, currentRoute, locale, t]);
+
+    useEffect(() => {
+        if (!isMobileNavOpen) return undefined;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            setIsMobileNavOpen(false);
+            mobileNavToggleRef.current?.focus();
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [isMobileNavOpen]);
 
     useEffect(() => {
         if (!auth.session || webDataMode === 'fixture') return;
@@ -9562,6 +9828,19 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         [discoveryState],
     );
 
+    const resetDiscoveryKeyRef = useRef(`${currentRoute}:${discoveryQueryString}`);
+    useEffect(() => {
+        const key = `${currentRoute}:${discoveryQueryString}`;
+        if (resetDiscoveryKeyRef.current === key) return;
+        resetDiscoveryKeyRef.current = key;
+        setAidPage(1);
+        setAidHasNextPage(false);
+        setAidTotal(0);
+        setDirectoryPage(1);
+        setDirectoryHasNextPage(false);
+        setDirectoryTotal(0);
+    }, [currentRoute, discoveryQueryString]);
+
     useEffect(() => {
         if (typeof window === 'undefined') {
             return undefined;
@@ -9569,6 +9848,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
 
         const handlePopState = () => {
             setCurrentRoute(readCurrentRoute());
+            setHistoryVersion((version) => version + 1);
+            const page = readPaginationPageFromUrl();
+            setAidPage(page);
+            setDirectoryPage(page);
             setDiscoveryState(
                 readDiscoveryStateFromUrl(defaultShellDiscoveryState),
             );
@@ -9586,13 +9869,18 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             return;
         }
 
-        const nextUrl = `${currentRoute}${discoveryQueryString}`;
+        const page = currentRoute === '/resources' ? directoryPage
+            : currentRoute === '/map' || currentRoute === '/feed' ? aidPage : 1;
+        const pageParams = new URLSearchParams(discoveryQueryString);
+        if (page > 1) pageParams.set('page', String(page));
+        else pageParams.delete('page');
+        const nextUrl = `${currentRoute}${pageParams.toString() ? `?${pageParams.toString()}` : ''}`;
         const currentUrl = `${window.location.pathname}${window.location.search}`;
 
         if (nextUrl !== currentUrl) {
-            window.history.replaceState({}, '', nextUrl);
+            window.history.pushState({}, '', nextUrl);
         }
-    }, [currentRoute, discoveryQueryString]);
+    }, [aidPage, currentRoute, directoryPage, discoveryQueryString]);
 
     useEffect(() => {
         if (currentRoute !== '/map' && currentRoute !== '/feed') {
@@ -9604,9 +9892,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         setIsAidLoading(true);
         setAidErrorMessage(undefined);
 
-        void fetchFeedRecordsFromApi(
+        void fetchFeedRecordPageFromApi(
             discoveryState,
             currentRoute === '/map' ? 'map' : 'feed',
+            aidPage,
             controller.signal,
         )
             .then(async (result) => {
@@ -9616,7 +9905,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
 
                 if (result.ok) {
                     const records = await Promise.all(
-                        result.data.map(async (record) => {
+                        result.data.items.map(async (record) => {
                             if (
                                 !currentUserDid ||
                                 record.recipientDid !== currentUserDid
@@ -9690,7 +9979,13 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                         }),
                     );
                     if (controller.signal.aborted) return;
-                    setFeedRecords(records);
+                    setFeedRecords((current) =>
+                        aidPage === 1
+                            ? appendDedupedPage([], records, (record) => record.aidPostUri)
+                            : appendDedupedPage(current, records, (record) => record.aidPostUri),
+                    );
+                    setAidHasNextPage(result.data.hasNextPage);
+                    setAidTotal(result.data.total);
                     setAidDataOrigin('api');
                     return;
                 }
@@ -9707,7 +10002,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         return () => {
             controller.abort();
         };
-    }, [aidReload, currentRoute, currentUserDid, discoveryState, t]);
+    }, [aidPage, aidReload, currentRoute, currentUserDid, discoveryState, t]);
 
     useEffect(() => {
         if (currentRoute !== '/resources' && currentRoute !== '/map') {
@@ -9719,14 +10014,20 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         setIsDirectoryLoading(true);
         setDirectoryErrorMessage(undefined);
 
-        void fetchDirectoryCardsFromApi(discoveryState, controller.signal)
+        void fetchDirectoryCardPageFromApi(discoveryState, directoryPage, controller.signal)
             .then((result) => {
                 if (controller.signal.aborted) {
                     return;
                 }
 
                 if (result.ok) {
-                    setResourceCards(result.data);
+                    setResourceCards((current) =>
+                        directoryPage === 1
+                            ? appendDedupedPage([], result.data.items, (card) => card.uri)
+                            : appendDedupedPage(current, result.data.items, (card) => card.uri),
+                    );
+                    setDirectoryHasNextPage(result.data.hasNextPage);
+                    setDirectoryTotal(result.data.total);
                     setDirectoryDataOrigin('api');
                     return;
                 }
@@ -9743,7 +10044,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         return () => {
             controller.abort();
         };
-    }, [currentRoute, directoryReload, discoveryState, t]);
+    }, [currentRoute, directoryPage, directoryReload, discoveryState, t]);
 
     const navigate = (route: AppRoute) => {
         if (typeof window !== 'undefined') {
@@ -9764,6 +10065,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         route: AppRoute,
     ) => {
         event.preventDefault();
+        setIsMobileNavOpen(false);
         navigate(route);
     };
 
@@ -9994,6 +10296,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             errorMessage={aidErrorMessage}
             dataOrigin={aidDataOrigin}
             onRetry={() => setAidReload((value) => value + 1)}
+            hasNextPage={aidHasNextPage}
+            total={aidTotal}
+            onLoadMore={() => setAidPage((page) => page + 1)}
             onRetryResources={() => setDirectoryReload((value) => value + 1)}
             selectedPostId={selectedMapPostId}
             onSelectPost={setSelectedMapPostId}
@@ -10027,6 +10332,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             errorMessage={aidErrorMessage}
             dataOrigin={aidDataOrigin}
             onRetry={() => setAidReload((value) => value + 1)}
+            hasNextPage={aidHasNextPage}
+            total={aidTotal}
+            onLoadMore={() => setAidPage((page) => page + 1)}
             publicSyncFailure={publicSyncFailure}
             publicSyncRetrying={publicSyncRetrying}
             onRetryPublicSync={retryPublicSync}
@@ -10106,18 +10414,30 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             currentUserDid={currentUserDid}
         />
     ) : currentRoute === '/posting' ? (
-        <PostingRoute
-            center={discoveryState.center ?? defaultDiscoveryCenter}
-            onCreateRecord={(record) => {
-                setFeedRecords((current) => [record, ...current]);
-                patchDiscoveryState({
-                    text: record.card.title,
-                    feedTab: 'latest',
-                });
-            }}
-            onNavigate={navigate}
-            onCreateViaApi={createAidPostViaApi}
-        />
+        discoveryState.center ? (
+            <PostingRoute
+                center={discoveryState.center}
+                onCreateRecord={(record) => {
+                    setFeedRecords((current) => [record, ...current]);
+                    patchDiscoveryState({
+                        text: record.card.title,
+                        feedTab: 'latest',
+                    });
+                }}
+                onNavigate={navigate}
+                onCreateViaApi={createAidPostViaApi}
+            />
+        ) : (
+            <section className='mh-route-header'>
+                <h1 className='mh-route-title'>{t('posting.heading')}</h1>
+                <p className='mt-2 mh-alert p-4' role='status'>
+                    {t('posting.areaRequired')}
+                </p>
+                <Button className='mt-3' onClick={() => navigate('/map')}>
+                    {t('route.map')}
+                </Button>
+            </section>
+        )
     ) : currentRoute === '/resources' ? (
         <ResourceRoute
             discoveryState={discoveryState}
@@ -10127,6 +10447,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             errorMessage={directoryErrorMessage}
             dataOrigin={directoryDataOrigin}
             onRetry={() => setDirectoryReload((value) => value + 1)}
+            hasNextPage={directoryHasNextPage}
+            total={directoryTotal}
+            onLoadMore={() => setDirectoryPage((page) => page + 1)}
             resourceCards={resourceCards}
             currentUserDid={currentUserDid}
         />
@@ -10134,7 +10457,10 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         webDataMode === 'fixture' ? (
             <LegacyFixtureVolunteerRoute did={currentUserDid} />
         ) : (
-            <VolunteerRoute did={currentUserDid} />
+            <VolunteerRoute
+                did={currentUserDid}
+                historyVersion={historyVersion}
+            />
         )
     ) : currentRoute === '/organizations' ? (
         <OrganizationsRoute did={currentUserDid} />
@@ -10232,6 +10558,20 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                 </header>
 
                 <nav aria-label={t('nav.ariaLabel')} className='mh-primary-nav'>
+                    <button
+                        ref={mobileNavToggleRef}
+                        type='button'
+                        className='mh-mobile-nav-toggle'
+                        aria-expanded={isMobileNavOpen}
+                        aria-controls='primary-navigation-links'
+                        onClick={() => setIsMobileNavOpen((open) => !open)}
+                    >
+                        {t('runtime.more')}
+                    </button>
+                    <div
+                        id='primary-navigation-links'
+                        className={`mh-nav-collapse${isMobileNavOpen ? ' is-open' : ''}`}
+                    >
                     <div className='mh-nav-main'>
                         {primaryRoutes.map((route) => (
                             <a
@@ -10314,6 +10654,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                 </a>
                             )}
                         </div>
+                    </div>
                     </div>
                 </nav>
 

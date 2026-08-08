@@ -4,6 +4,7 @@ import {
     FirehoseConsumer,
     buildPhase3FixtureFirehoseEvents,
     validateAidQueryInput,
+    validateAidFeedQueryInput,
     validateDirectoryQueryInput,
     type ApiQueryAidResponse,
     type ApiQueryDirectoryResponse,
@@ -143,7 +144,7 @@ export class ApiDiscoveryQueryService {
 
     queryFeed(params: URLSearchParams, _viewerDid?: string): ApiRouteResult {
         try {
-            const input = validateAidQueryInput({
+            const input = validateAidFeedQueryInput({
                 latitude: readNumber(params, 'latitude'),
                 longitude: readNumber(params, 'longitude'),
                 radiusKm: readNumber(params, 'radiusKm'),

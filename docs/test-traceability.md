@@ -1,6 +1,6 @@
 # Patchwork layered test traceability
 
-Updated: 2026-07-28
+Updated: 2026-08-07
 
 This document describes what each test layer actually executes. Test counts are reported by layer because fixture-heavy unit coverage is not equivalent to PostgreSQL, HTTP, browser, or live AT Protocol evidence.
 
@@ -20,15 +20,19 @@ This document describes what each test layer actually executes. Test counts are 
 
 ## Current verified baseline
 
+The first six rows are the local remediation run from 2026-08-07. The external
+AT protocol and capacity rows retain earlier controlled-environment evidence
+and must not be read as a fresh staging run of this worktree.
+
 | Layer | Result |
 | --- | --- |
-| Repository unit/contract suite | 897 passed |
-| Direct lifecycle service integration | 9 passed |
-| API suite with PostgreSQL and HTTP boundary enabled | 301 passed |
-| Indexer suite with PostgreSQL projection/reconciliation enabled | 51 passed |
-| Moderation suite with PostgreSQL enabled | 64 passed |
-| Browser Chromium suite | 56 local cases passed; 1 controlled external case passed separately against the prior immutable release |
-| Diagnostic coverage without database suites | 57.49% statements, 46.48% branches, 50.98% functions, 58.60% lines |
+| Repository local aggregate | 1,034 passed; 118 PostgreSQL/provider-dependent tests skipped because their required services were not configured for the local run |
+| Direct lifecycle service integration | 8 passed in the 2026-08-07 remediation run |
+| API suite with PostgreSQL and HTTP boundary enabled | 77 passed in the 2026-08-07 remediation run |
+| Indexer suite with PostgreSQL projection/reconciliation enabled | 52 passed in the 2026-08-07 remediation run |
+| Moderation suite with PostgreSQL enabled | 71 passed in the 2026-08-07 remediation run |
+| Browser Chromium suite | 154 local cases passed; 2 protected non-mocked staging cases skipped because credentials were not supplied |
+| Diagnostic coverage without database suites | 43.03% statements, 34.13% branches, 38.02% functions, 44.22% lines |
 | External AT protocol | Aid two-account OAuth/create/discover/report/block/resolve/close/delete passed in Chromium; directory create/update/discover/delete passed in a controlled browser exercise |
 | Local PostgreSQL capacity probe | 1,150 requests, 0 errors; four modeled read budgets passed over 1,000 generated projections |
 

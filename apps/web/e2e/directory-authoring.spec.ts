@@ -109,7 +109,9 @@ test('authenticated stewards publish, edit, and delete a directory resource', as
         });
     });
 
-    await page.goto('/resources');
+    await page.goto(
+        '/resources?tab=nearby&r=20000&lat=41.88&lng=-87.63&area=Disposable+test+area',
+    );
     await page.getByRole('button', { name: 'Add a resource' }).click();
     await page.getByLabel('Resource name').fill('Northside Community Pantry');
     await page.getByLabel('Public service area').fill('Near North Side');
@@ -136,7 +138,9 @@ test('authenticated stewards publish, edit, and delete a directory resource', as
     await expect(
         page.getByRole('heading', { name: 'Edit directory resource' }),
     ).toBeVisible();
-    await page.getByLabel('Resource name').fill('Northside Mutual Aid Pantry');
+    const resourceName = page.getByLabel('Resource name');
+    await resourceName.fill('Northside Mutual Aid Pantry');
+    await expect(resourceName).toHaveValue('Northside Mutual Aid Pantry');
     await page.getByRole('button', { name: 'Save resource' }).click();
     await expect(page.getByText(/Resource updated/)).toBeVisible();
     expect(record?.['name']).toBe('Northside Mutual Aid Pantry');
@@ -144,5 +148,5 @@ test('authenticated stewards publish, edit, and delete a directory resource', as
     await page.getByRole('button', { name: 'Delete resource' }).click();
     await page.getByRole('button', { name: 'Confirm delete' }).click();
     await expect(page.getByText(/Resource deleted/)).toBeVisible();
-    expect(methods).toEqual(['POST', 'GET', 'PUT', 'DELETE']);
+    expect(methods).toEqual(['POST', 'PUT', 'DELETE']);
 });

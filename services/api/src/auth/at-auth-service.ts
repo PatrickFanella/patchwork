@@ -137,6 +137,7 @@ export class AtAuthService {
     async current(sessionToken: string): Promise<{
         did: string;
         expiresAt: string;
+        authenticatedAt: string;
     }> {
         const session = await this.browserSessions.get(sessionToken);
         if (!session) {
@@ -149,6 +150,7 @@ export class AtAuthService {
         return {
             did: session.did,
             expiresAt: session.expiresAt.toISOString(),
+            authenticatedAt: session.authenticatedAt.toISOString(),
         };
     }
 

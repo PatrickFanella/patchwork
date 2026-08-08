@@ -111,7 +111,13 @@ const mockProductionSession = async (page: Page, language: 'en' | 'es') => {
         }
         if (path === '/inbox') return fulfill({ items: [], unread: 0 });
         if (path === '/outcomes/mine') return fulfill({ feedback: [] });
-        if (path === '/query/feed') return fulfill({ results: [] });
+        if (path === '/query/feed') return fulfill({
+            total: 0,
+            page: 1,
+            pageSize: 20,
+            hasNextPage: false,
+            results: [],
+        });
         if (path === '/coordination/windows') return fulfill({ windows: [] });
         if (path === '/groups') {
             return fulfill({
@@ -197,7 +203,9 @@ test('language switching preserves in-progress production form state', async ({
     page,
 }) => {
     await mockProductionSession(page, 'en');
-    await page.goto('/posting');
+    await page.goto(
+        '/posting?tab=nearby&r=20000&lat=41.88&lng=-87.63&area=Disposable+test+area',
+    );
     await page.getByLabel('Title').fill('Groceries for a neighbor');
     await page.getByLabel('Language').selectOption('es');
     await expect(

@@ -7,9 +7,14 @@ import { defaultLocale, supportedLocales } from './types';
 /**
  * Detects the preferred locale from the browser, falling back to the default.
  */
-const detectBrowserLocale = (): string => {
+export const detectBrowserLocale = (): string => {
     if (typeof window !== 'undefined') {
-        const saved = window.localStorage.getItem('patchwork-locale');
+        let saved: string | null = null;
+        try {
+            saved = window.localStorage?.getItem('patchwork-locale') ?? null;
+        } catch {
+            // Storage can be disabled by browser privacy settings or test hosts.
+        }
         if (saved && supportedLocales.includes(saved as (typeof supportedLocales)[number])) {
             return saved;
         }

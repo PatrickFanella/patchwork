@@ -53,4 +53,16 @@ describe('account onboarding contracts', () => {
             }).success,
         ).toBe(false);
     });
+
+    it('maps the legacy privacy and visibility pair to one canonical audience', () => {
+        expect(
+            accountPreferenceSchema.parse({
+                privacy: 'community',
+                visibility: 'authenticated',
+                notifications: defaultAccountPreferences.notifications,
+                language: 'en',
+                location: defaultAccountPreferences.location,
+            }),
+        ).toMatchObject({ audience: 'authenticated' });
+    });
 });

@@ -17,12 +17,18 @@ export interface AuthenticatedRequest {
     readonly session: Readonly<{
         did: string;
         expiresAt?: string;
+        /** Time the current browser session was created by a completed AT OAuth flow. */
+        authenticatedAt?: string;
     }>;
     readonly principal: AuthenticatedPrincipal;
 }
 
 export interface AuthenticationDependencies {
-    resolveSession(token: string): Promise<{ did: string; expiresAt?: string }>;
+    resolveSession(token: string): Promise<{
+        did: string;
+        expiresAt?: string;
+        authenticatedAt?: string;
+    }>;
     resolveRole(did: string): Promise<PlatformRole>;
 }
 
@@ -81,6 +87,9 @@ export const authenticateOptionalRequest = async (
         session: Object.freeze({
             did: session.did,
             ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
+            ...(session.authenticatedAt ?
+                { authenticatedAt: session.authenticatedAt }
+            :   {}),
         }),
         principal: Object.freeze({
             did: session.did,

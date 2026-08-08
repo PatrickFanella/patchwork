@@ -37,6 +37,8 @@ export interface DiscoveryFilterState {
     status?: AidStatus;
     minUrgency?: 1 | 2 | 3 | 4 | 5;
     center?: DiscoveryCenter;
+    /** User supplied context for a coarse point; it is never geocoded. */
+    areaLabel?: string;
     radiusMeters?: number;
     since?: string;
 }
@@ -189,6 +191,7 @@ export function normalizeDiscoveryFilterState(
     const status = normalizeStatus(state.status);
     const minUrgency = normalizeUrgency(state.minUrgency);
     const center = normalizeCenter(state.center);
+    const areaLabel = normalizeText(state.areaLabel);
     const radiusMeters = normalizeRadius(state.radiusMeters);
     const since = normalizeSince(state.since);
 
@@ -199,6 +202,7 @@ export function normalizeDiscoveryFilterState(
         ...(status ? { status } : {}),
         ...(minUrgency ? { minUrgency } : {}),
         ...(center ? { center } : {}),
+        ...(areaLabel ? { areaLabel } : {}),
         ...(radiusMeters ? { radiusMeters } : {}),
         ...(since ? { since } : {}),
     };
@@ -289,6 +293,9 @@ export function serializeDiscoveryFilterState(
         params.set('lat', String(state.center.lat));
         params.set('lng', String(state.center.lng));
     }
+    if (state.areaLabel) {
+        params.set('area', state.areaLabel);
+    }
     if (state.since) {
         params.set('since', state.since);
     }
@@ -331,6 +338,7 @@ export function parseDiscoveryFilterState(
             params.has('lat') || params.has('lng') ?
                 parsedCenter
             :   fallback.center,
+        areaLabel: params.get('area') ?? fallback.areaLabel,
         since: params.get('since') ?? fallback.since,
     });
 }

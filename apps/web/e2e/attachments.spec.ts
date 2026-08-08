@@ -128,14 +128,23 @@ test('posting binds private bytes to the created aid-post without exposing stora
         );
     });
 
-    await page.goto('/posting', { waitUntil: 'networkidle' });
+    await page.goto(
+        '/posting?tab=nearby&r=20000&lat=41.88&lng=-87.63&area=Disposable+test+area',
+        { waitUntil: 'networkidle' },
+    );
     await expect(page.getByText(ownerDid)).toBeVisible();
+    await page.getByLabel('Title').fill('Disposable attachment request');
+    await page
+        .getByLabel('Description')
+        .fill('Exercises the private attachment boundary in a disposable test.');
     await page.getByLabel('Private attachments (optional)').setInputFiles({
         name: 'handoff.png',
         mimeType: 'image/png',
         buffer: Buffer.from('private-handoff-bytes'),
     });
-    await expect(page.getByRole('listitem')).toHaveText('handoff.png · 1 KB');
+    await expect(
+        page.getByText('handoff.png · 1 KB', { exact: true }),
+    ).toBeVisible();
     await page.getByRole('button', { name: 'Publish request' }).click();
 
     await expect(

@@ -219,3 +219,41 @@ jobs:
                     exit 1
                   fi
                   npm run test:e2e:redact
+
+            - name: Non-mocked staging release lifecycle
+              env:
+                  PATCHWORK_E2E_BASE_URL: ${{ vars.STAGING_PUBLIC_ORIGIN }}
+                  PATCHWORK_E2E_STAGING_LIFECYCLE: 'true'
+                  PATCHWORK_E2E_EXERCISE_MAINTENANCE: ${{ vars.STAGING_E2E_EXERCISE_MAINTENANCE }}
+                  PATCHWORK_E2E_DISCOVERY_LATITUDE: ${{ secrets.STAGING_E2E_EXACT_LATITUDE }}
+                  PATCHWORK_E2E_DISCOVERY_LONGITUDE: ${{ secrets.STAGING_E2E_EXACT_LONGITUDE }}
+                  PATCHWORK_E2E_REQUESTER_STATE_B64: ${{ secrets.STAGING_E2E_REQUESTER_STATE_B64 }}
+                  PATCHWORK_E2E_HELPER_STATE_B64: ${{ secrets.STAGING_E2E_HELPER_STATE_B64 }}
+                  PATCHWORK_E2E_MAINTAINER_STATE_B64: ${{ secrets.STAGING_E2E_MAINTAINER_STATE_B64 }}
+                  PATCHWORK_ARTIFACT_REDACTION_TERMS: ${{ secrets.STAGING_ARTIFACT_REDACTION_TERMS }}
+              run: |
+                  set -euo pipefail
+                  for required in \
+                    PATCHWORK_E2E_BASE_URL \
+                    PATCHWORK_E2E_DISCOVERY_LATITUDE \
+                    PATCHWORK_E2E_DISCOVERY_LONGITUDE \
+                    PATCHWORK_E2E_REQUESTER_STATE_B64 \
+                    PATCHWORK_E2E_HELPER_STATE_B64 \
+                    PATCHWORK_E2E_MAINTAINER_STATE_B64; do
+                    if [ -z "${!required}" ]; then
+                      echo "::error::Missing protected staging lifecycle input: ${required}"
+                      exit 1
+                    fi
+                  done
+                  umask 077
+                  printf '%s' "$PATCHWORK_E2E_REQUESTER_STATE_B64" | base64 -d > requester-state.json
+                  printf '%s' "$PATCHWORK_E2E_HELPER_STATE_B64" | base64 -d > helper-state.json
+                  printf '%s' "$PATCHWORK_E2E_MAINTAINER_STATE_B64" | base64 -d > maintainer-state.json
+                  export PATCHWORK_E2E_REQUESTER_STATE="$PWD/requester-state.json"
+                  export PATCHWORK_E2E_HELPER_STATE="$PWD/helper-state.json"
+                  export PATCHWORK_E2E_MAINTAINER_STATE="$PWD/maintainer-state.json"
+                  if ! npm run test:e2e -w @patchwork/web -- e2e/staging-release-lifecycle.spec.ts; then
+                    npm run test:e2e:redact
+                    exit 1
+                  fi
+                  npm run test:e2e:redact

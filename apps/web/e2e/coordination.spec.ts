@@ -112,6 +112,10 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
             }
             if (path === '/query/feed') {
                 await fulfill({
+                    total: 1,
+                    page: 1,
+                    pageSize: 20,
+                    hasNextPage: false,
                     results: [
                         {
                             uri: requestUri,
@@ -338,9 +342,13 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
 
     await openInbox(helperPage);
     await helperPage
+        .getByRole('button', { name: /Offer help for Groceries for Tuesday/ })
+        .click();
+    const offerDialog = helperPage.getByRole('dialog');
+    await offerDialog
         .getByLabel('Optional coordination note')
         .fill('I can deliver Tuesday afternoon.');
-    await helperPage.getByRole('button', { name: 'Offer help' }).click();
+    await offerDialog.getByRole('button', { name: 'Offer help' }).click();
     await expect(helperPage.getByText('Sent offer')).toBeVisible();
 
     await openInbox(requesterPage);
@@ -356,9 +364,15 @@ test('two accounts offer, accept, hand off, and record an outcome without fixtur
 
     await refreshWorkspace(helperPage);
     await helperPage
+        .getByRole('button', { name: /Offer help for Groceries for Tuesday/ })
+        .click();
+    const renewedOfferDialog = helperPage.getByRole('dialog');
+    await renewedOfferDialog
         .getByLabel('Optional coordination note')
         .fill('I remain available for this request.');
-    await helperPage.getByRole('button', { name: 'Offer help' }).click();
+    await renewedOfferDialog
+        .getByRole('button', { name: 'Offer help' })
+        .click();
     await refreshWorkspace(requesterPage);
     const pendingOffer = requesterPage
         .getByRole('article', { name: 'Received offer' })

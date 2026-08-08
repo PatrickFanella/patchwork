@@ -682,6 +682,22 @@ if (postgresPool) {
             }
         },
     });
+    healthChecks.push({
+        name: 'chat',
+        check: async () => {
+            try {
+                // Read the durable table, not merely its catalog entry, so a
+                // broken chat dependency is visible to readiness probes.
+                await postgresPool.query('SELECT 1 FROM chat_conversations LIMIT 1');
+                return { status: 'ok' as const };
+            } catch {
+                return {
+                    status: 'not_ready' as const,
+                    message: 'Durable chat storage is unavailable',
+                };
+            }
+        },
+    });
 }
 
 const buildHealthPayload = async (): Promise<{
@@ -1857,6 +1873,7 @@ export const createApiServer = () => {
             if (response.statusCode >= 500) {
                 sliCollector.recordError(requestUrl.pathname);
             }
+            sliCollector.recordHttpOutcome(requestUrl.pathname, response.statusCode);
         });
 
         // --- CORS headers on every response ---

@@ -4,10 +4,10 @@ The repository quality baseline is organized around the current alpha rather tha
 
 ## Local commands
 
-- `npm run check` — lint, typecheck, and the 754-test core alpha suite
+- `npm run check` — lint, typecheck, the 1,034-test local core suite, map and exact-location checks, and operational traceability checks
 - `npm run test:integration:postgres -w @patchwork/api` — PostgreSQL and HTTP boundaries
 - `npm run test:integration:service -w @patchwork/web` — direct lifecycle service integration
-- `npm run test:e2e -w @patchwork/web` — Chromium browser accessibility
+- `npm run test:e2e -w @patchwork/web` — Chromium browser behavior and accessibility; protected non-mocked staging cases require credentials and are reported separately
 - `npm run test:coverage` — diagnostic V8 coverage
 - `npm run build`
 

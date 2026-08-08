@@ -61,7 +61,13 @@ test('two connected accounts exchange an exact location only over an authenticat
                 return;
             }
             if (path === '/query/feed') {
-                await fulfill({ results: [] });
+                await fulfill({
+                    total: 0,
+                    page: 1,
+                    pageSize: 20,
+                    hasNextPage: false,
+                    results: [],
+                });
                 return;
             }
             if (path === '/coordination/mine') {

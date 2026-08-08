@@ -83,6 +83,16 @@ export interface LifecycleQuerySuccessResponse {
     publicSyncState?: 'pending' | 'synced' | 'failed';
     publicSyncErrorCode?: string;
     publicSyncAttemptedAt?: string;
+    /** Durable write-to-projection receipt; source state is never inferred from the UI. */
+    projectionReceipt?: {
+        sourceUri: string;
+        sourceCid?: string;
+        state: 'pending' | 'projected' | 'failed';
+        projectedAt?: string;
+        lagSeconds?: number;
+        retryAfterSeconds?: number;
+        failureCode?: string;
+    };
 }
 
 export interface AssignmentResult {
@@ -494,6 +504,27 @@ export class LifecycleService {
                 ...(record.publicSyncAttemptedAt
                     ? { publicSyncAttemptedAt: record.publicSyncAttemptedAt }
                     : {}),
+                ...(record.publicSyncState ? {
+                    projectionReceipt: {
+                        sourceUri: record.postUri,
+                        ...(record.publicCid ? { sourceCid: record.publicCid } : {}),
+                        state:
+                            record.publicSyncState === 'synced' ?
+                                'projected'
+                            :   record.publicSyncState,
+                        ...(record.publicSyncedAt ?
+                            {
+                                projectedAt: record.publicSyncedAt,
+                            }
+                        :   {}),
+                        ...(record.publicSyncState === 'pending' ?
+                            { retryAfterSeconds: 30 }
+                        :   {}),
+                        ...(record.publicSyncErrorCode ?
+                            { failureCode: record.publicSyncErrorCode }
+                        :   {}),
+                    },
+                } : {}),
             },
         };
     }

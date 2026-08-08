@@ -280,6 +280,10 @@ test('authenticated verification, appeal, renewal, and exact-address approval re
                     item['confidentialFacility'] === false,
             );
             await fulfill({
+                total: 1,
+                page: 1,
+                pageSize: 20,
+                hasNextPage: false,
                 results: [
                     {
                         uri: resourceUri,
@@ -390,7 +394,9 @@ test('authenticated verification, appeal, renewal, and exact-address approval re
         .getByRole('button', { name: 'Approve public address' })
         .click();
 
-    await page.goto('/resources');
+    await page.goto(
+        '/resources?tab=nearby&r=20000&lat=41.88&lng=-87.63&area=Disposable+test+area',
+    );
     await page.getByRole('button', { name: 'Open details' }).click();
     await expect(page.getByText('123 Public Pantry Way')).toBeVisible();
     await expect(page.getByText('private evidence detail')).toHaveCount(0);

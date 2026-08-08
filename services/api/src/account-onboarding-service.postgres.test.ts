@@ -78,7 +78,7 @@ describePostgres('durable account onboarding', () => {
         );
         const next = {
             ...defaultAccountPreferences,
-            privacy: 'private' as const,
+            audience: 'hidden' as const,
             language: 'es' as const,
             location: {
                 sharing: 'hidden' as const,

@@ -23,6 +23,14 @@ interface ScopeOption {
     label: string;
 }
 
+type WorkspaceResource = 'conversations' | 'coordination' | 'groups';
+
+const workspaceResourceKeys: Record<WorkspaceResource, string> = {
+    conversations: 'chat.conversations',
+    coordination: 'chat.coordination',
+    groups: 'chat.groups',
+};
+
 export const ProductionChat = ({ currentUserDid }: { currentUserDid: string }) => {
     const { t, fmt } = useLocale();
     const [conversations, setConversations] = useState<ProductionChatConversation[]>([]);
@@ -36,6 +44,9 @@ export const ProductionChat = ({ currentUserDid }: { currentUserDid: string }) =
     const [retryId, setRetryId] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [workspaceErrors, setWorkspaceErrors] = useState<
+        Partial<Record<WorkspaceResource, string>>
+    >({});
     const [status, setStatus] = useState('');
     const [online, setOnline] = useState(() => navigator.onLine);
 
@@ -51,21 +62,42 @@ export const ProductionChat = ({ currentUserDid }: { currentUserDid: string }) =
             }))),
     ], [connections, groups, t]);
 
-    const loadWorkspace = useCallback(async () => {
+    const loadWorkspace = useCallback(async (only?: WorkspaceResource) => {
         setBusy(true);
         setError('');
-        const [chat, coordination, groupResult] = await Promise.all([
-            fetchChatConversationsViaApi(), fetchCoordinationViaApi(), fetchGroupsViaApi(),
-        ]);
-        if (!chat.ok || !coordination.ok || !groupResult.ok) {
-            setError(t('chat.loadError'));
-        } else {
-            setConversations(chat.data.conversations);
-            setConnections(coordination.data.connections);
-            setGroups(groupResult.data.groups);
-            setSelectedId((current) => current || chat.data.conversations[0]?.id || '');
-            setStatus(t('chat.loaded'));
+        const resources = only ? [only] : (['conversations', 'coordination', 'groups'] as const);
+        const results = await Promise.all(resources.map(async (resource) => {
+            if (resource === 'conversations') return [resource, await fetchChatConversationsViaApi()] as const;
+            if (resource === 'coordination') return [resource, await fetchCoordinationViaApi()] as const;
+            return [resource, await fetchGroupsViaApi()] as const;
+        }));
+        let loaded = 0;
+        const failures: Partial<Record<WorkspaceResource, string>> = {};
+        for (const [resource, result] of results) {
+            if (!result.ok) {
+                failures[resource] = result.error;
+                continue;
+            }
+            loaded += 1;
+            if (resource === 'conversations') {
+                setConversations(result.data.conversations);
+                setSelectedId((current) => current || result.data.conversations[0]?.id || '');
+            } else if (resource === 'coordination') {
+                setConnections(result.data.connections);
+            } else {
+                setGroups(result.data.groups);
+            }
         }
+        setWorkspaceErrors((current) => {
+            const next = only ? { ...current } : {};
+            for (const resource of resources) {
+                if (failures[resource]) next[resource] = failures[resource];
+                else delete next[resource];
+            }
+            return next;
+        });
+        if (loaded > 0) setStatus(t('chat.loaded'));
+        if (loaded === 0) setError(t('chat.loadError'));
         setBusy(false);
     }, [t]);
 
@@ -157,6 +189,18 @@ export const ProductionChat = ({ currentUserDid }: { currentUserDid: string }) =
         {!online && <p role='alert' className='rounded-md bg-mh-warning/20 p-3'>{t('chat.offline')}</p>}
         <div role='status' aria-live='polite'>{busy ? t('chat.loading') : status}</div>
         {error && <p role='alert' className='text-mh-danger'>{error}</p>}
+        {Object.entries(workspaceErrors).map(([resource, message]) => (
+            <div key={resource} role='alert' className='flex flex-wrap items-center gap-2 rounded-md border border-mh-danger p-3 text-sm'>
+                <span>{t('chat.workspaceResourceUnavailable', {
+                    resource: t(workspaceResourceKeys[resource as WorkspaceResource]),
+                    message,
+                })}</span>
+                <button type='button' className='mh-button px-2 py-1 text-sm' disabled={busy}
+                    onClick={() => void loadWorkspace(resource as WorkspaceResource)}>
+                    {t('chat.retryResource', { resource: t(workspaceResourceKeys[resource as WorkspaceResource]) })}
+                </button>
+            </div>
+        ))}
 
         <section className='mh-card grid gap-3 p-4' aria-labelledby='new-chat-heading'>
             <h2 id='new-chat-heading' className='font-heading text-xl font-bold'>{t('chat.newConversation')}</h2>

@@ -21,6 +21,28 @@ const routes = new Map<string, readonly string[]>([
     ['/maintenance/resume', ['POST']],
 ]);
 
+/** A maintenance transition is destructive enough to require a recent OAuth callback. */
+export const MAINTENANCE_STEP_UP_WINDOW_MS = 5 * 60 * 1_000;
+
+const requireFreshAtOAuth = (
+    authenticated: AuthenticatedRequest,
+    now = Date.now(),
+): void => {
+    const authenticatedAt = authenticated.session.authenticatedAt;
+    const timestamp = authenticatedAt ? Date.parse(authenticatedAt) : Number.NaN;
+    if (
+        !Number.isFinite(timestamp) ||
+        timestamp > now ||
+        now - timestamp > MAINTENANCE_STEP_UP_WINDOW_MS
+    ) {
+        throw new PublicHttpError(
+            401,
+            'MAINTENANCE_STEP_UP_REQUIRED',
+            'A fresh AT Protocol sign-in is required to change maintenance mode.',
+        );
+    }
+};
+
 export const isMaintenanceRoute = (
     request: IncomingMessage,
     url: URL,
@@ -64,6 +86,7 @@ export const createMaintenanceHandler = (dependencies: {
                 });
                 return;
             }
+            requireFreshAtOAuth(authenticated);
             const body = await readJsonBody(request);
             const result = await dependencies.executeIdempotent(
                 request,
@@ -140,6 +163,25 @@ const blockedSubmissionRoutes = new Set([
     '/verification/exact-address/requests',
     '/attachments/uploads',
     '/coordination/offers',
+    '/groups',
+    '/groups/invitations',
+    '/groups/invitation-responses',
+    '/groups/invitation-revocations',
+    '/groups/member-removals',
+    '/groups/role-changes',
+    '/groups/departures',
+    '/groups/ownership-transfers',
+    '/groups/closures',
+    '/groups/rooms',
+    '/groups/room-closures',
+    '/chat/conversations',
+    '/chat/messages',
+    '/chat/read',
+    '/chat/messages/redactions',
+    '/chat/reports',
+    '/location/consent',
+    '/location/signal',
+    '/location/revoke',
 ]);
 
 export const isBlockedByMaintenance = (

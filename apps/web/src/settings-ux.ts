@@ -111,10 +111,9 @@ export const defaultSettingsViewModel: SettingsViewModel = {
 
 export type SettingsPatch =
     | { section: 'privacy'; field: 'privacyLevel'; value: PrivacyLevel }
-    | { section: 'privacy'; field: 'geoSharingEnabled'; value: boolean }
     | {
           section: 'privacy';
-          field: 'geoSharingPrecision';
+          field: 'locationVisibility';
           value: GeoSharingPrecision;
       }
     | {
@@ -138,10 +137,8 @@ export const applySettingsPatch = (
         case 'privacy':
             if (patch.field === 'privacyLevel') {
                 next.privacyLevel = patch.value;
-            } else if (patch.field === 'geoSharingEnabled') {
-                next.geoSharingEnabled = patch.value;
-            } else if (patch.field === 'geoSharingPrecision') {
-                next.geoSharingPrecision = patch.value;
+            } else if (patch.field === 'locationVisibility') {
+                next.locationVisibility = patch.value;
             }
             break;
         case 'contact':

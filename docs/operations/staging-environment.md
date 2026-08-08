@@ -90,6 +90,29 @@ make staging-smoke
 
 Failed smoke checks block promotion to production.
 
+## Credentialed lifecycle gate
+
+After a successful digest deployment, `deploy-staging.yml` runs two browser
+checks against the deployed public origin:
+
+1. `at-record-lifecycle.spec.ts` creates, projects, discovers, reports, blocks,
+   closes, and deletes a disposable AT record with two real OAuth sessions.
+2. `staging-release-lifecycle.spec.ts` uses those same isolated accounts to
+   verify projection visibility, decline a real offer, create/invite/close a
+   group, create/redact a group chat message, and make authenticated durable
+   reads for verification and notifications. It reads the maintenance boundary;
+   it only declares and resumes maintenance when the protected explicit drill
+   variable is enabled.
+
+Both suites use no `page.route` interception. Missing protected fixture values
+fail the deploy job rather than producing a skipped green result. Their cleanup
+is limited to disposable staging identities and test-labelled group/chat data.
+Browser state and artifacts are redacted before the job finishes.
+
+This is staging evidence only. It does not prove that production has the same
+revision, that a provider delivered email/push, or that an independent reviewer
+approved legal, privacy, accessibility, translation, or security material.
+
 ## Promotion Gate
 
 The `evaluatePromotionGate()` function in `packages/shared/src/staging.ts`

@@ -29,7 +29,11 @@ const browserSessions = (): BrowserSessionRepository => {
     const sessions = new Map<string, BrowserSession>();
     return {
         create: vi.fn(async (did, expiresAt) => {
-            sessions.set('browser-token', { did, expiresAt });
+            sessions.set('browser-token', {
+                did,
+                expiresAt,
+                authenticatedAt: new Date(),
+            });
             return 'browser-token';
         }),
         get: vi.fn(async token => sessions.get(token)),

@@ -20,7 +20,8 @@ export interface InteractiveMapProps {
     cards: readonly MapAidCard[];
     resources?: readonly ResourceDirectoryCard[];
     selectedPostId?: string;
-    center: { lat: number; lng: number };
+    /** Omit the center only while choosing an approximate discovery area. */
+    center?: { lat: number; lng: number };
     onSelectPostId: (postId: string | undefined) => void;
     onFocusArea?: (area: {
         center: { lat: number; lng: number };
@@ -32,6 +33,9 @@ export interface InteractiveMapProps {
         radiusMeters: number;
     };
     onTilesFailed: (message: string) => void;
+    /** Uses this Leaflet surface as a deliberate, coarse area picker. */
+    onConfirmArea?: (center: { lat: number; lng: number }) => void;
+    canConfirmArea?: boolean;
 }
 
 type CircleStyle = 'filled' | 'outline' | 'contrast';
@@ -66,6 +70,8 @@ export const InteractiveMap = ({
     onFocusArea,
     focusedArea,
     onTilesFailed,
+    onConfirmArea,
+    canConfirmArea = true,
 }: InteractiveMapProps) => {
     const { t } = useLocale();
     const mapRef = useRef<HTMLDivElement | null>(null);
@@ -73,9 +79,15 @@ export const InteractiveMap = ({
     const onTilesFailedRef = useRef(onTilesFailed);
     const onSelectPostIdRef = useRef(onSelectPostId);
     const onFocusAreaRef = useRef(onFocusArea);
+    const onConfirmAreaRef = useRef(onConfirmArea);
+    const initialCenterRef = useRef(center ?? { lat: 0, lng: 0 });
     const [zoom, setZoom] = useState(9);
     const [circleStyle, setCircleStyle] =
         useState<CircleStyle>(readCircleStyle);
+    const [areaCandidate, setAreaCandidate] = useState<{
+        lat: number;
+        lng: number;
+    }>();
     const mapId = useId();
     const instructionsId = `map-instructions-${mapId.replace(/:/g, '')}`;
 
@@ -96,6 +108,9 @@ export const InteractiveMap = ({
     useEffect(() => {
         onFocusAreaRef.current = onFocusArea;
     }, [onFocusArea]);
+    useEffect(() => {
+        onConfirmAreaRef.current = onConfirmArea;
+    }, [onConfirmArea]);
 
     const markers = useMemo(
         () =>
@@ -106,13 +121,14 @@ export const InteractiveMap = ({
                 ),
         [cards],
     );
+    const mapCenter = center ?? { lat: 0, lng: 0 };
     const clusters = useMemo(
         () =>
             clusterMapCards(
                 cards,
-                clusterDistanceMetersForZoom(zoom, center.lat),
+                clusterDistanceMetersForZoom(zoom, mapCenter.lat),
             ),
-        [cards, center.lat, zoom],
+        [cards, mapCenter.lat, zoom],
     );
     const clusteredPostIds = useMemo(
         () =>
@@ -142,9 +158,25 @@ export const InteractiveMap = ({
             zoomControl: true,
             zoomAnimation: !prefersReducedMotion.current,
             fadeAnimation: !prefersReducedMotion.current,
-        }).setView([center.lat, center.lng], 9);
+        }).setView(
+            [initialCenterRef.current.lat, initialCenterRef.current.lng],
+            center ? 9 : 2,
+        );
         const onZoomEnd = () => setZoom(map.getZoom());
         map.on('zoomend', onZoomEnd);
+        const selectMapPoint = (event: L.LeafletMouseEvent) => {
+            if (!onConfirmAreaRef.current) return;
+            setAreaCandidate({ lat: event.latlng.lat, lng: event.latlng.lng });
+        };
+        map.on('click', selectMapPoint);
+        const container = map.getContainer();
+        const selectKeyboardPoint = (event: KeyboardEvent) => {
+            if (!onConfirmAreaRef.current || (event.key !== 'Enter' && event.key !== ' ')) return;
+            event.preventDefault();
+            const current = map.getCenter();
+            setAreaCandidate({ lat: current.lat, lng: current.lng });
+        };
+        container.addEventListener('keydown', selectKeyboardPoint);
         const layer = leafletLayer({
             url: tileUrl,
             flavor: 'light',
@@ -162,18 +194,20 @@ export const InteractiveMap = ({
         mapInstance.current = map;
         return () => {
             map.off('zoomend', onZoomEnd);
+            map.off('click', selectMapPoint);
+            container.removeEventListener('keydown', selectKeyboardPoint);
             mapInstance.current = null;
             map.remove();
         };
     }, [tileUrl]);
 
     useEffect(() => {
-        if (!mapInstance.current) return;
+        if (!mapInstance.current || !center) return;
         mapInstance.current.setView(
             [center.lat, center.lng],
             mapInstance.current.getZoom(),
         );
-    }, [center.lat, center.lng]);
+    }, [center?.lat, center?.lng]);
 
     useEffect(() => {
         if (!mapInstance.current) return;
@@ -328,6 +362,27 @@ export const InteractiveMap = ({
                     {t('map.instructions')}
                 </p>
             )}
+            {onConfirmArea ? (
+                <div className='mh-map-area-confirm' role='status' aria-live='polite'>
+                    <p>
+                        {areaCandidate
+                            ? t('discovery.areaPointSelected', {
+                                  lat: areaCandidate.lat.toFixed(3),
+                                  lng: areaCandidate.lng.toFixed(3),
+                              })
+                            : t('discovery.areaPickerHelp')}
+                    </p>
+                    {areaCandidate ? <p>{t('discovery.areaRadiusPreview')}</p> : null}
+                    <button
+                        type='button'
+                        className='mh-button mh-button-secondary'
+                        disabled={!areaCandidate || !canConfirmArea}
+                        onClick={() => areaCandidate && onConfirmAreaRef.current?.(areaCandidate)}
+                    >
+                        {t('discovery.confirmArea')}
+                    </button>
+                </div>
+            ) : null}
             <div
                 ref={mapRef}
                 className='mh-interactive-map'

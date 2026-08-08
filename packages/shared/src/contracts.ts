@@ -60,7 +60,8 @@ export interface AidRecordSummary {
         longitude: number;
         precisionKm: number;
     };
-    distanceKm: number;
+    /** Omitted for the global Latest feed until the visitor selects an area. */
+    distanceKm?: number;
     ranking: {
         distanceBandScore: number;
         recencyScore: number;

@@ -12,7 +12,6 @@ import type {
     ResourceDirectoryCard,
 } from '../resource-directory-ux';
 import {
-    defaultDiscoveryCenter,
     type FeedRecordEnvelope,
 } from './discovery-runtime';
 import type {
@@ -57,6 +56,15 @@ export interface ApiClientFailure {
 }
 
 export type ApiClientResult<TData> = ApiClientSuccess<TData> | ApiClientFailure;
+
+export interface PagedResult<T> {
+    items: T[];
+    page: number;
+    pageSize: number;
+    total: number;
+    hasNextPage: boolean;
+    projectionFreshness?: unknown;
+}
 
 export type AidPostReportReason = 'spam' | 'abuse' | 'fraud' | 'other';
 
@@ -212,25 +220,28 @@ const toRadiusKm = (radiusMeters: number): number => {
 const buildAidQueryParams = (
     state: DiscoveryFilterState,
     scope: AidQueryScope,
+    page = 1,
 ): URLSearchParams => {
     const fallbackRadiusKm =
         scope === 'feed' && state.feedTab === 'latest' ?
             DEFAULT_FEED_RADIUS_KM
         :   DEFAULT_NEARBY_RADIUS_KM;
 
-    const center = state.center ?? defaultDiscoveryCenter;
+    const center = state.center;
     const radiusKm =
         state.radiusMeters !== undefined ?
             toRadiusKm(state.radiusMeters)
         :   fallbackRadiusKm;
 
     const params = new URLSearchParams({
-        latitude: center.lat.toFixed(6),
-        longitude: center.lng.toFixed(6),
-        radiusKm: String(radiusKm),
-        page: '1',
+        page: String(page),
         pageSize: String(DEFAULT_DISCOVERY_PAGE_SIZE),
     });
+    if (center) {
+        params.set('latitude', center.lat.toFixed(6));
+        params.set('longitude', center.lng.toFixed(6));
+        params.set('radiusKm', String(radiusKm));
+    }
 
     if (state.category) {
         params.set('category', state.category);
@@ -259,20 +270,23 @@ const buildAidQueryParams = (
 
 const buildDirectoryQueryParams = (
     state: DiscoveryFilterState,
+    page = 1,
 ): URLSearchParams => {
-    const center = state.center ?? defaultDiscoveryCenter;
+    const center = state.center;
     const radiusKm =
         state.radiusMeters !== undefined ?
             toRadiusKm(state.radiusMeters)
         :   DEFAULT_NEARBY_RADIUS_KM;
 
     const params = new URLSearchParams({
-        latitude: center.lat.toFixed(6),
-        longitude: center.lng.toFixed(6),
-        radiusKm: String(radiusKm),
-        page: '1',
+        page: String(page),
         pageSize: String(DEFAULT_DISCOVERY_PAGE_SIZE),
     });
+    if (center) {
+        params.set('latitude', center.lat.toFixed(6));
+        params.set('longitude', center.lng.toFixed(6));
+        params.set('radiusKm', String(radiusKm));
+    }
 
     if (state.text) {
         params.set('searchText', state.text);
@@ -389,6 +403,14 @@ const invalidResponseFailure = (message: string): ApiClientFailure => ({
     ok: false,
     error: message,
     code: 'INVALID_API_RESPONSE',
+    kind: 'validation',
+    retryable: false,
+});
+
+const areaRequiredFailure = (): ApiClientFailure => ({
+    ok: false,
+    error: 'Choose an approximate area before loading nearby or map results.',
+    code: 'AREA_REQUIRED',
     kind: 'validation',
     retryable: false,
 });
@@ -989,17 +1011,18 @@ export interface VolunteerDiscoveryProfile {
     recordOrigin?: 'synthetic' | 'sourced-public' | 'visitor-created';
 }
 
-export const fetchVolunteerProfilesViaApi = async (
+export const fetchVolunteerProfilePageViaApi = async (
     filters: {
         searchText?: string;
         capability?: string;
         language?: string;
         availability?: string;
     } = {},
+    page = 1,
     signal?: AbortSignal,
-): Promise<ApiClientResult<VolunteerDiscoveryProfile[]>> => {
+): Promise<ApiClientResult<PagedResult<VolunteerDiscoveryProfile>>> => {
     const params = new URLSearchParams({
-        page: '1',
+        page: String(page),
         pageSize: String(DEFAULT_DISCOVERY_PAGE_SIZE),
     });
     for (const [key, value] of Object.entries(filters)) {
@@ -1012,10 +1035,23 @@ export const fetchVolunteerProfilesViaApi = async (
             'Volunteer discovery response was malformed.',
         );
     }
-    return {
-        ok: true,
-        data: result.data['results'] as VolunteerDiscoveryProfile[],
-    };
+    const items = result.data['results'] as VolunteerDiscoveryProfile[];
+    const envelope = pageEnvelope(result.data, items);
+    return envelope ? { ok: true, data: envelope }
+        : invalidResponseFailure('Volunteer discovery response was malformed.');
+};
+
+export const fetchVolunteerProfilesViaApi = async (
+    filters: {
+        searchText?: string;
+        capability?: string;
+        language?: string;
+        availability?: string;
+    } = {},
+    signal?: AbortSignal,
+): Promise<ApiClientResult<VolunteerDiscoveryProfile[]>> => {
+    const result = await fetchVolunteerProfilePageViaApi(filters, 1, signal);
+    return result.ok ? { ok: true, data: result.data.items } : result;
 };
 
 export type OrganizationRole = 'owner' | 'admin' | 'steward' | 'member';
@@ -2258,43 +2294,91 @@ const mapDirectoryPayloadToCards = (
     }, []);
 };
 
+const pageEnvelope = <T>(
+    payload: unknown,
+    items: T[] | undefined,
+): PagedResult<T> | undefined => {
+    if (!isRecord(payload) || !items) return undefined;
+    const page = readNumber(payload, 'page');
+    const pageSize = readNumber(payload, 'pageSize');
+    const total = readNumber(payload, 'total');
+    if (!page || !pageSize || total === undefined || typeof payload.hasNextPage !== 'boolean') {
+        return undefined;
+    }
+    return {
+        items,
+        page,
+        pageSize,
+        total,
+        hasNextPage: payload.hasNextPage,
+        ...(payload.projectionFreshness !== undefined
+            ? { projectionFreshness: payload.projectionFreshness }
+            : {}),
+    };
+};
+
+export const appendDedupedPage = <T>(
+    current: readonly T[],
+    page: readonly T[],
+    key: (item: T) => string,
+): T[] => {
+    const seen = new Set(current.map(key));
+    const appended: T[] = [];
+    for (const item of page) {
+        const itemKey = key(item);
+        if (seen.has(itemKey)) continue;
+        seen.add(itemKey);
+        appended.push(item);
+    }
+    return [...current, ...appended];
+};
+
+export const fetchFeedRecordPageFromApi = async (
+    state: DiscoveryFilterState,
+    scope: AidQueryScope,
+    page = 1,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<PagedResult<FeedRecordEnvelope>>> => {
+    if ((scope === 'map' || state.feedTab === 'nearby') && !state.center) return areaRequiredFailure();
+    const result = await requestJson(
+        scope === 'map' ? '/query/map' : '/query/feed',
+        buildAidQueryParams(state, scope, page),
+        signal,
+    );
+    if (!result.ok) return result;
+    const envelope = pageEnvelope(result.data, mapAidPayloadToRecords(result.data));
+    return envelope ? { ok: true, data: envelope }
+        : invalidResponseFailure('Discovery response was malformed.');
+};
+
 export const fetchFeedRecordsFromApi = async (
     state: DiscoveryFilterState,
     scope: AidQueryScope,
     signal?: AbortSignal,
 ): Promise<ApiClientResult<FeedRecordEnvelope[]>> => {
-    const result = await requestJson(
-        scope === 'map' ? '/query/map' : '/query/feed',
-        buildAidQueryParams(state, scope),
-        signal,
-    );
+    const result = await fetchFeedRecordPageFromApi(state, scope, 1, signal);
+    return result.ok ? { ok: true, data: result.data.items } : result;
+};
 
-    if (!result.ok) {
-        return result;
-    }
-
-    const records = mapAidPayloadToRecords(result.data);
-    return records ? { ok: true, data: records }
-    : invalidResponseFailure('Discovery response was malformed.');
+export const fetchDirectoryCardPageFromApi = async (
+    state: DiscoveryFilterState,
+    page = 1,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<PagedResult<ResourceDirectoryCard>>> => {
+    if (!state.center) return areaRequiredFailure();
+    const result = await requestJson('/query/directory', buildDirectoryQueryParams(state, page), signal);
+    if (!result.ok) return result;
+    const envelope = pageEnvelope(result.data, mapDirectoryPayloadToCards(result.data));
+    return envelope ? { ok: true, data: envelope }
+        : invalidResponseFailure('Directory response was malformed.');
 };
 
 export const fetchDirectoryCardsFromApi = async (
     state: DiscoveryFilterState,
     signal?: AbortSignal,
 ): Promise<ApiClientResult<ResourceDirectoryCard[]>> => {
-    const result = await requestJson(
-        '/query/directory',
-        buildDirectoryQueryParams(state),
-        signal,
-    );
-
-    if (!result.ok) {
-        return result;
-    }
-
-    const cards = mapDirectoryPayloadToCards(result.data);
-    return cards ? { ok: true, data: cards }
-    : invalidResponseFailure('Directory response was malformed.');
+    const result = await fetchDirectoryCardPageFromApi(state, 1, signal);
+    return result.ok ? { ok: true, data: result.data.items } : result;
 };
 
 export const reportAidPostViaApi = async (
@@ -3413,7 +3497,34 @@ export interface LifecycleQueryApiResult {
     }>;
     validTransitions: string[];
     updatedAt: string;
+    projectionReceipt?: ProjectionReceipt;
 }
+
+export interface ProjectionReceipt {
+    sourceUri: string;
+    sourceCid?: string;
+    state: 'pending' | 'projected' | 'failed';
+    projectedAt?: string;
+    lagSeconds?: number;
+    retryAfterSeconds?: number;
+    failureCode?: string;
+}
+
+const parseProjectionReceipt = (value: unknown): ProjectionReceipt | undefined => {
+    if (!isRecord(value)) return undefined;
+    const sourceUri = readString(value, 'sourceUri');
+    const state = readString(value, 'state');
+    if (!sourceUri || (state !== 'pending' && state !== 'projected' && state !== 'failed')) return undefined;
+    return {
+        sourceUri,
+        state,
+        ...(readString(value, 'sourceCid') ? { sourceCid: readString(value, 'sourceCid') } : {}),
+        ...(readString(value, 'projectedAt') ? { projectedAt: readString(value, 'projectedAt') } : {}),
+        ...(readNumber(value, 'lagSeconds') !== undefined ? { lagSeconds: readNumber(value, 'lagSeconds') } : {}),
+        ...(readNumber(value, 'retryAfterSeconds') !== undefined ? { retryAfterSeconds: readNumber(value, 'retryAfterSeconds') } : {}),
+        ...(readString(value, 'failureCode') ? { failureCode: readString(value, 'failureCode') } : {}),
+    };
+};
 
 export const transitionAidPostViaApi = async (
     input: LifecycleTransitionApiInput,
@@ -3466,9 +3577,13 @@ export const queryAidPostLifecycleViaApi = async (
         return invalidResponseFailure('Lifecycle query response was malformed.');
     }
 
+    const projectionReceipt = parseProjectionReceipt(result.data['projectionReceipt']);
     return {
         ok: true,
-        data: result.data as unknown as LifecycleQueryApiResult,
+        data: {
+            ...(result.data as unknown as LifecycleQueryApiResult),
+            ...(projectionReceipt ? { projectionReceipt } : {}),
+        },
     };
 };
 

@@ -110,6 +110,8 @@ const withAccountLock = async <T>(
 export interface BrowserSession {
     did: string;
     expiresAt: Date;
+    /** Browser-session creation follows a successful AT OAuth callback. */
+    authenticatedAt: Date;
 }
 
 export interface BrowserSessionRepository {
@@ -123,6 +125,7 @@ export interface BrowserSessionRepository {
 interface BrowserSessionRow {
     did: string;
     expires_at: Date | string;
+    created_at: Date | string;
 }
 
 export class PostgresBrowserSessionRepository
@@ -149,7 +152,7 @@ export class PostgresBrowserSessionRepository
             await client.query('BEGIN');
             const lookupKey = hashLookupKey(sessionToken);
             const candidate = await client.query<BrowserSessionRow>(
-                `SELECT did, expires_at FROM patchwork_browser_sessions
+                `SELECT did, expires_at, created_at FROM patchwork_browser_sessions
                  WHERE session_id_hash = $1`,
                 [lookupKey],
             );
@@ -164,7 +167,7 @@ export class PostgresBrowserSessionRepository
                 [didHash],
             );
             const result = await client.query<BrowserSessionRow>(
-                `SELECT did, expires_at
+                `SELECT did, expires_at, created_at
                  FROM patchwork_browser_sessions
                  WHERE session_id_hash = $1
                    AND revoked_at IS NULL
@@ -178,7 +181,11 @@ export class PostgresBrowserSessionRepository
             await client.query('COMMIT');
             const row = result.rows[0];
             return row ?
-                    { did: row.did, expiresAt: new Date(row.expires_at) }
+                    {
+                        did: row.did,
+                        expiresAt: new Date(row.expires_at),
+                        authenticatedAt: new Date(row.created_at),
+                    }
                 :   undefined;
         } catch (error) {
             await client.query('ROLLBACK');

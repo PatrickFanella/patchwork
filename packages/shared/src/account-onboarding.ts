@@ -10,9 +10,9 @@ export const requiredPolicyDocuments = [
     'location-sharing-consent',
 ] as const;
 
-export const accountPreferenceSchema = z
+const canonicalAccountPreferenceSchema = z
     .object({
-        privacy: z.enum(['public', 'community', 'private']),
+        audience: z.enum(['public', 'authenticated', 'hidden']),
         notifications: z
             .object({
                 inApp: z.boolean(),
@@ -20,7 +20,6 @@ export const accountPreferenceSchema = z
                 push: z.boolean(),
             })
             .strict(),
-        visibility: z.enum(['public', 'authenticated', 'hidden']),
         language: z.enum(['en', 'es']),
         location: z
             .object({
@@ -31,16 +30,37 @@ export const accountPreferenceSchema = z
     })
     .strict();
 
+const legacyAccountPreferenceSchema = z.object({
+    privacy: z.enum(['public', 'community', 'private']),
+    notifications: canonicalAccountPreferenceSchema.shape.notifications,
+    visibility: z.enum(['public', 'authenticated', 'hidden']),
+    language: z.enum(['en', 'es']),
+    location: canonicalAccountPreferenceSchema.shape.location,
+}).strict();
+
+/** Accept legacy overlapping fields for one release, return one audience. */
+export const accountPreferenceSchema = z.union([
+    canonicalAccountPreferenceSchema,
+    legacyAccountPreferenceSchema,
+]).transform((value) => {
+    if ('audience' in value) return value;
+    return {
+        audience: value.visibility,
+        notifications: value.notifications,
+        language: value.language,
+        location: value.location,
+    };
+});
+
 export type AccountPreferences = z.infer<typeof accountPreferenceSchema>;
 
 export const defaultAccountPreferences: AccountPreferences = {
-    privacy: 'community',
+    audience: 'authenticated',
     notifications: {
         inApp: true,
         email: true,
         push: false,
     },
-    visibility: 'authenticated',
     language: 'en',
     location: {
         sharing: 'approximate',

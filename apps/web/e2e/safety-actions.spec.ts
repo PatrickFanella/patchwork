@@ -46,6 +46,10 @@ test.beforeEach(async ({ page, baseURL }) => {
                 status: 200,
                 contentType: 'application/json',
                 body: JSON.stringify({
+                    total: 1,
+                    page: 1,
+                    pageSize: 20,
+                    hasNextPage: false,
                     results: [
                         {
                             uri: subjectUri,
@@ -172,6 +176,10 @@ test('record owner closes with compare-and-swap then deletes the AT record', asy
                 status: 200,
                 contentType: 'application/json',
                 body: JSON.stringify({
+                    total: 1,
+                    page: 1,
+                    pageSize: 20,
+                    hasNextPage: false,
                     results: [
                         {
                             uri: 'at://did:plc:viewer/app.patchwork.aid.post/owned-1',
@@ -286,6 +294,10 @@ test('owner can recover when private lifecycle transition outpaces public AT syn
                 status: 200,
                 contentType: 'application/json',
                 body: JSON.stringify({
+                    total: 1,
+                    page: 1,
+                    pageSize: 20,
+                    hasNextPage: false,
                     results: [
                         {
                             uri: postUri,
