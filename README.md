@@ -1,8 +1,16 @@
 # Patchwork
 
-Prototype for an intended AT Protocol-native mutual aid platform with a web client, query API, ingestion/indexing pipeline, and moderation worker.
+Patchwork is a pre-alpha AT Protocol mutual-aid platform exploring map-based discovery without requiring people to publish exact locations. It separates the React client, query API, Bluesky ingestion pipeline, and moderation worker so identity, discovery, and safety boundaries can be tested independently.
 
-This monorepo is designed for fast local development with deterministic fixtures, strong type contracts, and CI quality gates.
+**Portfolio evidence:** [public pre-alpha](https://patchwork.subcult.tv) · [current architecture](docs/architecture/current-state-matrix.md) · [verification gates](docs/quality-gates.md) · [GPL-3.0-or-later license](LICENSE)
+
+## What it demonstrates
+
+- AT Protocol OAuth and repository adapters with durable private session state.
+- Location minimization before persistence and public record publication.
+- Independently testable API, ingestion, moderation, and React application workspaces.
+- Browser coverage for core record lifecycle, accessibility, authorization, privacy, and production-data failure modes.
+- Exact-digest staging, rollback, restore, and operational evidence without presenting home staging as production approval.
 
 ## Current maturity
 
@@ -224,3 +232,8 @@ Monitoring:
 - Keep cross-service contracts in `packages/shared`.
 - Prefer deterministic fixtures in tests.
 - Treat geoprivacy/moderation regressions as release blockers.
+
+## License
+
+Copyright (C) 2025 Patrick Fanella. Patchwork is licensed under
+[GPL-3.0-or-later](LICENSE). The SPDX identifier is `GPL-3.0-or-later`.
