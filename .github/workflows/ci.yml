@@ -41,7 +41,7 @@ jobs:
 
             - name: Upload coverage report
               uses: actions/upload-artifact@v4
-              if: always()
+              if: ${{ always() && github.server_url == 'https://github.com' }}
               with:
                   name: test-coverage
                   path: coverage/
@@ -114,27 +114,29 @@ jobs:
                     -t patchwork-web:ci .
 
             - name: Trivy container scan — API
-              uses: aquasecurity/trivy-action@v0.36.0
-              with:
-                  image-ref: patchwork-api:ci
-                  format: table
-                  exit-code: '1'
-                  severity: HIGH,CRITICAL
-                  output: trivy-api-report.txt
+              run: |
+                  docker run --rm \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v "$PWD:/workspace" \
+                    -w /workspace \
+                    aquasec/trivy:0.70.0 image \
+                    --format table --exit-code 1 --severity HIGH,CRITICAL \
+                    --output trivy-api-report.txt patchwork-api:ci
 
             - name: Trivy container scan — Web
-              uses: aquasecurity/trivy-action@v0.36.0
               if: success() || failure()
-              with:
-                  image-ref: patchwork-web:ci
-                  format: table
-                  exit-code: '1'
-                  severity: HIGH,CRITICAL
-                  output: trivy-web-report.txt
+              run: |
+                  docker run --rm \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v "$PWD:/workspace" \
+                    -w /workspace \
+                    aquasec/trivy:0.70.0 image \
+                    --format table --exit-code 1 --severity HIGH,CRITICAL \
+                    --output trivy-web-report.txt patchwork-web:ci
 
             - name: Upload security scan reports
               uses: actions/upload-artifact@v4
-              if: always()
+              if: ${{ always() && github.server_url == 'https://github.com' }}
               with:
                   name: security-reports
                   path: |
