@@ -238,7 +238,9 @@ const dataOriginLabel = (origin: ApiDataOrigin): string =>
         ? 'DB-backed API'
         : origin === 'fixture'
           ? 'Local fixture demo'
-          : 'API unavailable';
+          : origin === 'idle'
+            ? 'Awaiting area selection'
+            : 'API unavailable';
 
 const appRoutes = [
     '/',
@@ -9698,11 +9700,11 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
     const [directoryErrorMessage, setDirectoryErrorMessage] =
         useState<string>();
     const [aidDataOrigin, setAidDataOrigin] = useState<ApiDataOrigin>(
-        webDataMode === 'fixture' ? 'fixture' : 'unavailable',
+        webDataMode === 'fixture' ? 'fixture' : 'idle',
     );
     const [directoryDataOrigin, setDirectoryDataOrigin] =
         useState<ApiDataOrigin>(
-            webDataMode === 'fixture' ? 'fixture' : 'unavailable',
+            webDataMode === 'fixture' ? 'fixture' : 'idle',
         );
     const [aidReload, setAidReload] = useState(0);
     const [directoryReload, setDirectoryReload] = useState(0);
@@ -9887,6 +9889,18 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             return undefined;
         }
         if (webDataMode === 'fixture') return undefined;
+        if (
+            !discoveryState.center &&
+            (currentRoute === '/map' || discoveryState.feedTab === 'nearby')
+        ) {
+            setFeedRecords([]);
+            setAidHasNextPage(false);
+            setAidTotal(0);
+            setAidDataOrigin('idle');
+            setAidErrorMessage(undefined);
+            setIsAidLoading(false);
+            return undefined;
+        }
 
         const controller = new AbortController();
         setIsAidLoading(true);
@@ -10009,6 +10023,15 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
             return undefined;
         }
         if (webDataMode === 'fixture') return undefined;
+        if (!discoveryState.center) {
+            setResourceCards([]);
+            setDirectoryHasNextPage(false);
+            setDirectoryTotal(0);
+            setDirectoryDataOrigin('idle');
+            setDirectoryErrorMessage(undefined);
+            setIsDirectoryLoading(false);
+            return undefined;
+        }
 
         const controller = new AbortController();
         setIsDirectoryLoading(true);

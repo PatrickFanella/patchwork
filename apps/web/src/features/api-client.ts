@@ -40,7 +40,7 @@ import {
     requiredPolicyDocuments,
 } from '@patchwork/shared';
 
-export type ApiDataOrigin = 'api' | 'fixture' | 'unavailable';
+export type ApiDataOrigin = 'api' | 'fixture' | 'idle' | 'unavailable';
 
 export interface ApiClientSuccess<TData> {
     ok: true;

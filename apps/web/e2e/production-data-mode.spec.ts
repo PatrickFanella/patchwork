@@ -121,6 +121,54 @@ test('API failure stays visible and never substitutes fixture discovery data', a
     await expect.poll(() => discoveryRequests).toBeGreaterThan(1);
 });
 
+test('map awaiting an area does not report an API failure', async ({ page }) => {
+    let discoveryRequests = 0;
+    await page.route('**/api/**', async route => {
+        const requestUrl = new URL(route.request().url());
+        const path = requestUrl.pathname.replace(/^\/api/, '');
+        if (path.startsWith('/query/')) {
+            discoveryRequests += 1;
+        }
+        if (path === '/status') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    maintenance: {
+                        active: false,
+                        reasonCodes: [],
+                        publicMessage: '',
+                        environmentOverride: false,
+                        declaredAt: null,
+                        declaredBy: null,
+                    },
+                }),
+            });
+            return;
+        }
+        await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                error: {
+                    code: 'AUTHENTICATION_REQUIRED',
+                    message: 'Authentication required.',
+                },
+            }),
+        });
+    });
+
+    await page.goto('/map');
+
+    await expect(
+        page.getByText('Choose an approximate area.', { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText('API unavailable')).toHaveCount(0);
+    await expect(page.getByText(/^API sync issue:/)).toHaveCount(0);
+    await expect(page.getByText(/^Public-place sync issue:/)).toHaveCount(0);
+    expect(discoveryRequests).toBe(0);
+});
+
 test('public home advertises only implemented alpha capabilities', async ({
     page,
 }) => {
