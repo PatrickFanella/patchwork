@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { resourceMapResponseSchema, type ResourceMapViewport } from '@patchwork/shared';
 import { resourceProfileSchema } from '@patchwork/shared';
 import type { DiscoveryMapAggregates } from '@patchwork/shared';
@@ -4173,3 +4174,130 @@ export const dismissSourceRefreshCandidateViaApi = (input: {candidateId: string;
     requestJsonPost('/admin/source-refresh/candidates/dismiss', input);
 export const applySourceRefreshContactViaApi = (candidateId: string) =>
     requestJsonPost('/admin/source-refresh/candidates/apply-contact', { candidateId });
+
+// ---------------------------------------------------------------------------
+// Giving: general fund (donations plan step 2)
+// ---------------------------------------------------------------------------
+
+const supportTierSchema = z.object({
+    key: z.string(),
+    version: z.number().int(),
+    nameKey: z.string(),
+    descriptionKey: z.string(),
+    amountMinor: z.number().int(),
+    currency: z.literal('usd'),
+});
+
+const supportOptionsSchema = z.object({
+    paymentsEnabled: z.boolean(),
+    mode: z.enum(['off', 'test', 'live']),
+    currency: z.literal('usd'),
+    receipt: z.object({
+        mode: z.enum(['non-deductible', 'charitable']),
+        legalName: z.string().optional(),
+        ein: z.string().optional(),
+    }),
+    oneTime: z.object({
+        minMinor: z.number().int(),
+        maxMinor: z.number().int(),
+        suggestedMinor: z.array(z.number().int()),
+    }),
+    tiers: z.array(supportTierSchema),
+});
+
+const supportCheckoutStatusSchema = z.object({
+    checkoutId: z.string(),
+    mode: z.enum(['one-time', 'monthly']),
+    amountMinor: z.number().int(),
+    currency: z.literal('usd'),
+    recipientName: z.string(),
+    status: z.enum(['creating', 'open', 'complete', 'expired', 'failed']),
+    paymentStatus: z.string().nullable(),
+});
+
+const accountSupportSchema = z.object({
+    donations: z.array(z.object({
+        donationId: z.string(),
+        recipientName: z.string(),
+        amountMinor: z.number().int(),
+        currency: z.literal('usd'),
+        status: z.string(),
+        createdAt: z.string(),
+    })),
+    subscriptions: z.array(z.object({
+        subscriptionId: z.string(),
+        recipientName: z.string(),
+        tierKey: z.string(),
+        nameKey: z.string(),
+        amountMinor: z.number().int(),
+        currency: z.literal('usd'),
+        status: z.string(),
+        currentPeriodEnd: z.string().nullable(),
+        cancelAtPeriodEnd: z.boolean(),
+    })),
+    canManage: z.boolean(),
+});
+
+export type SupportTier = z.infer<typeof supportTierSchema>;
+export type SupportOptions = z.infer<typeof supportOptionsSchema>;
+export type SupportCheckoutStatus = z.infer<typeof supportCheckoutStatusSchema>;
+export type AccountSupport = z.infer<typeof accountSupportSchema>;
+export type SupportCheckoutRequest =
+    | { recipient: 'general-fund'; mode: 'one-time'; amountMinor: number }
+    | { recipient: 'general-fund'; mode: 'monthly'; tierKey: string };
+
+const parseWith = <T>(
+    schema: z.ZodType<T>,
+    result: ApiClientResult<unknown>,
+    message: string,
+): ApiClientResult<T> => {
+    if (!result.ok) return result;
+    const parsed = schema.safeParse(result.data);
+    return parsed.success ? { ok: true, data: parsed.data } : invalidResponseFailure(message);
+};
+
+export const fetchSupportOptionsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<SupportOptions>> =>
+    parseWith(
+        supportOptionsSchema,
+        await requestJson('/support/tiers', new URLSearchParams(), signal),
+        'Giving options response was malformed.',
+    );
+
+/** Reuse one idempotency key per attempt so a double click opens one Checkout. */
+export const createSupportCheckoutViaApi = async (
+    request: SupportCheckoutRequest,
+    idempotencyKey: string,
+): Promise<ApiClientResult<{ checkoutId: string; url: string }>> =>
+    parseWith(
+        z.object({ checkoutId: z.string(), url: z.string().url().startsWith('https://') }),
+        await requestJsonPost('/support/checkout', request, undefined, idempotencyKey),
+        'Checkout response was malformed.',
+    );
+
+export const fetchSupportCheckoutViaApi = async (
+    checkoutId: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<SupportCheckoutStatus>> =>
+    parseWith(
+        supportCheckoutStatusSchema,
+        await requestJson('/support/checkout', new URLSearchParams({ checkout: checkoutId }), signal),
+        'Checkout status response was malformed.',
+    );
+
+export const openSupportPortalViaApi = async (): Promise<ApiClientResult<{ url: string }>> =>
+    parseWith(
+        z.object({ url: z.string().url().startsWith('https://') }),
+        await requestJsonPost('/support/portal', {}),
+        'Portal response was malformed.',
+    );
+
+export const fetchAccountSupportViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AccountSupport>> =>
+    parseWith(
+        accountSupportSchema,
+        await requestJson('/account/support', new URLSearchParams(), signal),
+        'Giving history response was malformed.',
+    );

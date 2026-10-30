@@ -6,6 +6,7 @@ export const publicPageMeta: Record<string, { title: string; description: string
     '/resources': { title: 'Community resource directory | Patchwork', description: 'Browse community organizations and resource listings in Patchwork’s pre-alpha preview.' },
     '/volunteer': { title: 'Volunteer opportunities | Patchwork', description: 'Explore ways to offer support through Patchwork’s pre-alpha community preview.' },
     '/organizations': { title: 'Community organizations | Patchwork', description: 'Explore community organization listings and participation in Patchwork’s pre-alpha preview.' },
+    '/support': { title: 'Support Patchwork | Patchwork', description: 'Give once or monthly to the Patchwork general fund. Giving does not arrange help or change what you can do on Patchwork.' },
     '/legal/terms': { title: 'Terms of use | Patchwork', description: 'Read the terms for using the Patchwork pre-alpha preview.' },
     '/legal/privacy': { title: 'Privacy and location handling | Patchwork', description: 'Read how Patchwork handles account information, messages and approximate location.' },
     '/legal/community-guidelines': { title: 'Community guidelines | Patchwork', description: 'Read the community guidelines for requests, offers and participation on Patchwork.' },

@@ -49,7 +49,7 @@ describe('PaymentWebhookService', () => {
         if (found instanceof Error) throw found;
         return found;
     });
-    const gateway: StripeGateway = { retrieveEvent };
+    const gateway: Pick<StripeGateway, 'retrieveEvent'> = { retrieveEvent };
     const at = (iso: string) => new Date(iso);
 
     const deliver = async (

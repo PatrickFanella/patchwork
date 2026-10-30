@@ -136,7 +136,10 @@
         "requestDetails": "Request details",
         "myRequests": "My requests",
         "login": "Sign in",
-        "signup": "Create account"
+        "signup": "Create account",
+        "support": "Support Patchwork",
+        "supportThanks": "Thank you",
+        "supportCancelled": "Checkout cancelled"
     },
     "runtime": {
         "signInRequired": "Sign in required",
@@ -1997,5 +2000,100 @@
         "save": "Set pickup capacity",
         "close": "Close pickup",
         "request": "Your pickup"
+    },
+    "support": {
+        "eyebrow": "Support Patchwork",
+        "title": "Give to the Patchwork general fund",
+        "intro": "Your gift pays for running Patchwork: hosting, maps, moderation and development. Subcult decides how the general fund is spent.",
+        "boundary": "Giving does not arrange help, move a request up, or change what you can do on Patchwork. Everything stays free to use.",
+        "unavailable": "Giving through Patchwork is not available right now.",
+        "loadFailed": "Giving options could not be loaded. Check your connection and try again.",
+        "testMode": "Test mode: Stripe will not charge a real card. Use a Stripe test card.",
+        "receipt": {
+            "nonDeductible": "Patchwork is not a registered charity, so gifts to the general fund are not tax-deductible. Stripe emails you a payment receipt.",
+            "charitable": "{{legalName}} (EIN {{ein}}) receives gifts to the general fund. No goods or services are provided in return. Stripe emails you a receipt."
+        },
+        "mode": {
+            "label": "How often",
+            "oneTime": "One time",
+            "monthly": "Monthly"
+        },
+        "oneTime": {
+            "title": "Give once",
+            "amountLabel": "Amount in US dollars",
+            "amountHint": "Between {{min}} and {{max}}.",
+            "custom": "Other amount",
+            "invalidAmount": "Enter an amount between {{min}} and {{max}}, in dollars and cents.",
+            "submit": "Give {{amount}}"
+        },
+        "monthly": {
+            "title": "Give monthly",
+            "perMonth": "{{amount}} a month",
+            "choose": "Choose {{name}}",
+            "recognition": "Monthly supporters can later show a supporter badge if they choose. Amounts are never shown.",
+            "cancelAnytime": "You can cancel or change your plan any time in Settings."
+        },
+        "tiers": {
+            "tier1": {
+                "name": "Neighbor",
+                "description": "Helps keep the map and directory online."
+            },
+            "tier2": {
+                "name": "Block",
+                "description": "Covers a share of moderation and safety work."
+            },
+            "tier3": {
+                "name": "Patch",
+                "description": "Supports new features and keeping Patchwork running long term."
+            }
+        },
+        "redirecting": "Opening Stripe Checkout…",
+        "checkoutFailed": "Stripe could not be reached. Nothing was charged. Try again in a moment.",
+        "stripeNotice": "Payment happens on Stripe's secure page. Patchwork never sees your card details.",
+        "thanks": {
+            "title": "Thank you",
+            "checking": "Checking with Stripe…",
+            "confirmedOneTime": "Your gift of {{amount}} to {{recipient}} went through.",
+            "confirmedMonthly": "Your monthly gift of {{amount}} to {{recipient}} has started.",
+            "pending": "Stripe has your payment but has not confirmed it yet. Some payment methods take a few days. Stripe will email you when it clears.",
+            "waiting": "Stripe has not confirmed this yet. If you finished paying, you will get an email receipt from Stripe. You can check again in a minute.",
+            "failed": "This payment did not go through. Nothing was charged.",
+            "missing": "We could not find that checkout.",
+            "checkAgain": "Check again",
+            "manage": "See your giving in Settings"
+        },
+        "cancelled": {
+            "title": "Checkout cancelled",
+            "body": "Nothing was charged.",
+            "tryAgain": "Back to giving"
+        },
+        "account": {
+            "title": "Supporting Patchwork",
+            "empty": "You have not given through Patchwork while signed in.",
+            "give": "Give to Patchwork",
+            "gifts": "Gifts",
+            "subscriptions": "Monthly giving",
+            "renews": "Renews {{date}}",
+            "ends": "Ends {{date}}",
+            "manage": "Manage in Stripe",
+            "manageHelp": "Change your card, switch plans, cancel, or download receipts on Stripe.",
+            "portalFailed": "Stripe could not be reached. Try again in a moment.",
+            "loadFailed": "Your giving history could not be loaded.",
+            "status": {
+                "pending": "Pending",
+                "succeeded": "Received",
+                "failed": "Failed",
+                "refunded": "Refunded",
+                "disputed": "Disputed",
+                "incomplete": "Waiting for payment",
+                "incomplete_expired": "Not started",
+                "trialing": "Trial",
+                "active": "Active",
+                "past_due": "Payment overdue",
+                "canceled": "Cancelled",
+                "unpaid": "Unpaid",
+                "paused": "Paused"
+            }
+        }
     }
 }

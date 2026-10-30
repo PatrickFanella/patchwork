@@ -11,6 +11,7 @@ import { useLocale } from '../i18n';
 import { defaultAccountPreferences, type AccountPreferences } from '@patchwork/shared';
 import { Surface } from '../components/Surface';
 import { PageHeader } from '../components/PageHeader';
+import { SupportingSection } from './support';
 
 interface AccountPrivacyRouteProps {
     onDeactivated: () => Promise<void>;
@@ -251,6 +252,8 @@ export const AccountPrivacyRoute = ({ onDeactivated }: AccountPrivacyRouteProps)
                             ) : null}
                         </div>
                     </Surface>
+                    <SupportingSection />
+
                     <Surface as='article' tone='quiet' title={String(t('account.export'))}>
                         <p className='text-sm text-mh-textMuted'>
                             {t('account.exportHelp')}

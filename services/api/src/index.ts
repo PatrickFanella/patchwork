@@ -120,6 +120,11 @@ import {
 } from './http/payment-webhook-handler.js';
 import { PaymentWebhookService } from './payments/payment-webhook-service.js';
 import { HttpStripeGateway } from './payments/stripe-gateway.js';
+import { SupportService } from './payments/support-service.js';
+import {
+    createSupportHandler,
+    isSupportRoute,
+} from './http/support-handler.js';
 import {
     createExactLocationSignalHandler,
     isExactLocationSignalRoute,
@@ -377,15 +382,34 @@ const notificationService =
 // Webhook intake runs whenever Stripe credentials exist, including
 // PATCHWORK_PAYMENTS_MODE=off, so renewals, refunds and disputes on existing
 // subscriptions are still recorded during a rollback.
-const paymentWebhookService =
+const stripeGateway =
     postgresPool &&
     config.STRIPE_SECRET_KEY &&
     config.STRIPE_WEBHOOK_SECRET &&
     config.STRIPE_CONNECT_WEBHOOK_SECRET ?
-        new PaymentWebhookService(
-            postgresPool,
-            new HttpStripeGateway(config.STRIPE_SECRET_KEY),
-        )
+        new HttpStripeGateway(config.STRIPE_SECRET_KEY)
+    :   undefined;
+const supportService =
+    postgresPool && stripeGateway ?
+        new SupportService(postgresPool, stripeGateway, {
+            paymentsMode: config.PATCHWORK_PAYMENTS_MODE,
+            publicWebOrigin: config.API_PUBLIC_ORIGIN.replace(/\/$/, ''),
+            receipt: {
+                mode: config.PATCHWORK_GENERAL_FUND_RECEIPT_MODE,
+                ...(config.PATCHWORK_GENERAL_FUND_RECEIPT_MODE === 'charitable' ?
+                    {
+                        legalName: config.PATCHWORK_GENERAL_FUND_LEGAL_NAME,
+                        ein: config.PATCHWORK_GENERAL_FUND_EIN,
+                    }
+                :   {}),
+            },
+        })
+    :   undefined;
+const paymentWebhookService =
+    postgresPool && stripeGateway && supportService ?
+        new PaymentWebhookService(postgresPool, stripeGateway, {
+            processors: supportService.processors(),
+        })
     :   undefined;
 const authenticateApiRequest =
     authenticateSessionRequest ?
@@ -854,6 +878,15 @@ const runPaymentWebhookSweep = async (): Promise<void> => {
         paymentWebhookSweepRunning = false;
     }
 };
+
+const supportHandler =
+    supportService && authenticateApiRequest ?
+        createSupportHandler({
+            service: supportService,
+            authenticate: authenticateApiRequest,
+            authenticateOptional: authenticateOptionalApiRequest,
+        })
+    :   undefined;
 
 const paymentWebhookHandler =
     paymentWebhookService &&
@@ -1980,6 +2013,10 @@ const contractRoutes = [
     '/notifications/email/confirm',
     '/notifications/push',
     '/internal/notifications/provider-feedback',
+    '/support/tiers',
+    '/support/checkout',
+    '/support/portal',
+    '/account/support',
     '/internal/payments/stripe/webhook',
     '/internal/payments/stripe/connect-webhook',
     '/status',
@@ -2282,6 +2319,18 @@ export const createApiServer = () => {
             return;
         }
         if (paymentWebhookHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (supportHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isSupportRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'PAYMENTS_UNAVAILABLE',
+                    message: 'Giving through Patchwork is not available right now.',
+                },
+            });
             return;
         }
         if (isPaymentWebhookRoute(request, requestUrl)) {

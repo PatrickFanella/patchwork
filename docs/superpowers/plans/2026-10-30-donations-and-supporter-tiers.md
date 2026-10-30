@@ -142,3 +142,11 @@ The webhook endpoints, signature check, Stripe REST adapter, idempotent event ta
 
 Local verification on 2026-10-30: `npm run check` passed, with 1,099 unit tests and the operations checks. `npm run test:integration` passed all 211 PostgreSQL tests against a disposable PostgreSQL 16 with a clean replay of all migrations. The new PostgreSQL tests cover duplicate delivery, creation-order application, Connect account fetches, mismatched fetched events, processor rollback and backoff, Stripe outages, missing events, retry exhaustion, requeue, restart replay, abandoned-lock recovery and concurrent sweeps. No real Stripe account was contacted; step 6 covers that.
 
+## Step 2 record
+
+Step 2 adds general-fund giving. Migration `0041_general_fund_checkout.sql` adds checkout tracking and seeds the placeholder tiers. The support service creates one-time and monthly Checkout Sessions, creates each tier's monthly Price on first use, opens the Customer Portal and lists an account's own giving. Its webhook processors apply Checkout completion, delayed payment results, expiry, subscription and invoice changes, full refunds and disputes. The Stripe adapter now pins API version `2025-03-31.basil`. Because stored events keep the version they were created with, the parsers also accept the older field locations: the subscription-level billing period and `invoice.subscription`.
+
+The web app adds `/support`, `/support/thanks`, `/support/cancelled` and a Supporting section in Settings, in English and Spanish. The thanks page reads status from the API and polls six times, two seconds apart. These pages are reachable only through links and Stripe redirects; they are not in the navigation menus. The footer still links to the external `subcult.tv/support` studio page. Choosing between the two entry points is an owner decision.
+
+Payments still default to off. Event processors apply only events received after they are deployed. Subscription renewals do not create per-invoice payment records; the subscription row reflects the current Stripe state. Patchwork sends no receipts or failed-payment notices yet (step 5); Stripe's own emails cover receipts once enabled in the dashboard.
+

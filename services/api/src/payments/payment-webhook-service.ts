@@ -73,7 +73,7 @@ export class PaymentWebhookService {
 
     constructor(
         private readonly pool: Pool,
-        private readonly gateway: StripeGateway,
+        private readonly gateway: Pick<StripeGateway, 'retrieveEvent'>,
         options: {
             processors?: ReadonlyMap<string, PaymentEventProcessor>;
             maxAttempts?: number;

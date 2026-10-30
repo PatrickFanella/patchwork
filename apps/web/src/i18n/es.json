@@ -136,7 +136,10 @@
         "requestDetails": "Detalles de la solicitud",
         "myRequests": "Mis solicitudes",
         "login": "Iniciar sesión",
-        "signup": "Crear cuenta"
+        "signup": "Crear cuenta",
+        "support": "Apoya a Patchwork",
+        "supportThanks": "Gracias",
+        "supportCancelled": "Pago cancelado"
     },
     "runtime": {
         "signInRequired": "Se requiere iniciar sesión",
@@ -1997,5 +2000,100 @@
         "save": "Establecer capacidad",
         "close": "Cerrar recogida",
         "request": "Tu recogida"
+    },
+    "support": {
+        "eyebrow": "Apoya a Patchwork",
+        "title": "Dona al fondo general de Patchwork",
+        "intro": "Tu donación paga el funcionamiento de Patchwork: alojamiento, mapas, moderación y desarrollo. Subcult decide cómo se usa el fondo general.",
+        "boundary": "Donar no organiza ayuda, no adelanta una solicitud ni cambia lo que puedes hacer en Patchwork. Todo sigue siendo gratuito.",
+        "unavailable": "Por ahora no se puede donar a través de Patchwork.",
+        "loadFailed": "No se pudieron cargar las opciones para donar. Revisa tu conexión e inténtalo de nuevo.",
+        "testMode": "Modo de prueba: Stripe no cobrará a una tarjeta real. Usa una tarjeta de prueba de Stripe.",
+        "receipt": {
+            "nonDeductible": "Patchwork no es una organización benéfica registrada, así que las donaciones al fondo general no son deducibles de impuestos. Stripe te enviará un recibo de pago por correo.",
+            "charitable": "{{legalName}} (EIN {{ein}}) recibe las donaciones al fondo general. No se entregan bienes ni servicios a cambio. Stripe te enviará un recibo por correo."
+        },
+        "mode": {
+            "label": "Con qué frecuencia",
+            "oneTime": "Una vez",
+            "monthly": "Cada mes"
+        },
+        "oneTime": {
+            "title": "Donar una vez",
+            "amountLabel": "Cantidad en dólares estadounidenses",
+            "amountHint": "Entre {{min}} y {{max}}.",
+            "custom": "Otra cantidad",
+            "invalidAmount": "Escribe una cantidad entre {{min}} y {{max}}, en dólares y centavos.",
+            "submit": "Donar {{amount}}"
+        },
+        "monthly": {
+            "title": "Donar cada mes",
+            "perMonth": "{{amount}} al mes",
+            "choose": "Elegir {{name}}",
+            "recognition": "Más adelante, quienes donan cada mes podrán mostrar una insignia de apoyo si lo desean. Las cantidades nunca se muestran.",
+            "cancelAnytime": "Puedes cancelar o cambiar tu plan en cualquier momento desde Configuración."
+        },
+        "tiers": {
+            "tier1": {
+                "name": "Vecino",
+                "description": "Ayuda a mantener en línea el mapa y el directorio."
+            },
+            "tier2": {
+                "name": "Cuadra",
+                "description": "Cubre parte del trabajo de moderación y seguridad."
+            },
+            "tier3": {
+                "name": "Retazo",
+                "description": "Apoya nuevas funciones y el funcionamiento de Patchwork a largo plazo."
+            }
+        },
+        "redirecting": "Abriendo Stripe Checkout…",
+        "checkoutFailed": "No se pudo conectar con Stripe. No se cobró nada. Inténtalo de nuevo en un momento.",
+        "stripeNotice": "El pago se hace en la página segura de Stripe. Patchwork nunca ve los datos de tu tarjeta.",
+        "thanks": {
+            "title": "Gracias",
+            "checking": "Consultando con Stripe…",
+            "confirmedOneTime": "Tu donación de {{amount}} a {{recipient}} se realizó.",
+            "confirmedMonthly": "Tu donación mensual de {{amount}} a {{recipient}} comenzó.",
+            "pending": "Stripe recibió tu pago pero aún no lo confirma. Algunos métodos de pago tardan unos días. Stripe te avisará por correo cuando se complete.",
+            "waiting": "Stripe todavía no lo confirma. Si terminaste de pagar, recibirás un recibo de Stripe por correo. Puedes volver a consultar en un minuto.",
+            "failed": "Este pago no se realizó. No se cobró nada.",
+            "missing": "No encontramos ese pago.",
+            "checkAgain": "Volver a consultar",
+            "manage": "Ver tus donaciones en Configuración"
+        },
+        "cancelled": {
+            "title": "Pago cancelado",
+            "body": "No se cobró nada.",
+            "tryAgain": "Volver a donar"
+        },
+        "account": {
+            "title": "Tu apoyo a Patchwork",
+            "empty": "No has donado a través de Patchwork con tu sesión iniciada.",
+            "give": "Donar a Patchwork",
+            "gifts": "Donaciones",
+            "subscriptions": "Donaciones mensuales",
+            "renews": "Se renueva el {{date}}",
+            "ends": "Termina el {{date}}",
+            "manage": "Administrar en Stripe",
+            "manageHelp": "Cambia tu tarjeta o tu plan, cancela o descarga recibos en Stripe.",
+            "portalFailed": "No se pudo conectar con Stripe. Inténtalo de nuevo en un momento.",
+            "loadFailed": "No se pudo cargar tu historial de donaciones.",
+            "status": {
+                "pending": "Pendiente",
+                "succeeded": "Recibida",
+                "failed": "Fallida",
+                "refunded": "Reembolsada",
+                "disputed": "En disputa",
+                "incomplete": "Esperando el pago",
+                "incomplete_expired": "No iniciada",
+                "trialing": "Prueba",
+                "active": "Activa",
+                "past_due": "Pago vencido",
+                "canceled": "Cancelada",
+                "unpaid": "Sin pagar",
+                "paused": "En pausa"
+            }
+        }
     }
 }
