@@ -133,3 +133,12 @@ To roll back, set `PATCHWORK_PAYMENTS_MODE=off`. This hides every Donate entry p
 - Whether paused organization subscriptions resume automatically when eligibility returns.
 - Whether to allow custom recurring amounts besides the tier ladder.
 - Whether currencies other than USD are needed.
+
+## Step 1 record
+
+Step 1 adds migration `0040_donations_and_supporter_tiers.sql` with every table in the data model, plus a seeded general-fund recipient. Organization and donor references are nullable and never cascade. Owner deactivation can delete an organization, so recipients keep a display-name snapshot and move to `closed`. Payment configuration is validated as a set: test and live modes require a key of the matching kind, and live mode requires `NODE_ENV=production`. Charitable receipts require a legal name and EIN.
+
+The webhook endpoints, signature check, Stripe REST adapter, idempotent event table, re-fetching sweep, metrics, alerts and runbook entry are in place. No Stripe SDK was added. The adapter does not pin a Stripe API version, so fetched events use the account default; step 2 should pin one before parsing Checkout and subscription objects. No event processors exist yet, so recorded events are marked `ignored`. Step 2 adds processors, which only apply events received after they are deployed. Before step 2 is enabled, requeue or ignore any events received earlier.
+
+Local verification on 2026-10-30: `npm run check` passed, with 1,099 unit tests and the operations checks. `npm run test:integration` passed all 211 PostgreSQL tests against a disposable PostgreSQL 16 with a clean replay of all migrations. The new PostgreSQL tests cover duplicate delivery, creation-order application, Connect account fetches, mismatched fetched events, processor rollback and backoff, Stripe outages, missing events, retry exhaustion, requeue, restart replay, abandoned-lock recovery and concurrent sweeps. No real Stripe account was contacted; step 6 covers that.
+

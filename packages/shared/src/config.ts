@@ -42,6 +42,13 @@ const optionalSecretField = z
     )
     .optional();
 
+const blankAsDefault = <T extends z.ZodTypeAny>(schema: T) =>
+    z.preprocess(
+        (value: unknown) =>
+            typeof value === 'string' && value.trim() === '' ? undefined : value,
+        schema,
+    );
+
 const apiSchema = baseSchema.merge(atprotoSchema).extend({
     API_HOST: z.string().min(1).default('0.0.0.0'),
     API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
@@ -111,7 +118,40 @@ const apiSchema = baseSchema.merge(atprotoSchema).extend({
     ATPROTO_OAUTH_CLIENT_ID: optionalUrlField,
     ATPROTO_OAUTH_REDIRECT_URI: optionalUrlField,
     ATPROTO_SESSION_ENCRYPTION_KEY: optionalSecretField,
+    PATCHWORK_PAYMENTS_MODE: blankAsDefault(
+        z.enum(['off', 'test', 'live']).default('off'),
+    ),
+    STRIPE_SECRET_KEY: optionalSecretField,
+    STRIPE_WEBHOOK_SECRET: optionalSecretField,
+    STRIPE_CONNECT_WEBHOOK_SECRET: optionalSecretField,
+    API_PAYMENT_WEBHOOK_INTERVAL_SECONDS: z.coerce
+        .number()
+        .int()
+        .min(5)
+        .max(3_600)
+        .default(30),
+    PATCHWORK_GENERAL_FUND_RECEIPT_MODE: blankAsDefault(
+        z.enum(['non-deductible', 'charitable']).default('non-deductible'),
+    ),
+    PATCHWORK_GENERAL_FUND_LEGAL_NAME: optionalSecretField,
+    PATCHWORK_GENERAL_FUND_EIN: z
+        .preprocess(
+            (value: unknown) =>
+                typeof value === 'string' && value.trim() === '' ?
+                    undefined
+                :   value,
+            z
+                .string()
+                .regex(/^\d{2}-\d{7}$/u, 'PATCHWORK_GENERAL_FUND_EIN must use the NN-NNNNNNN form.')
+                .optional(),
+        )
+        .optional(),
 });
+
+const stripeKeyMode = (key: string): 'test' | 'live' | undefined =>
+    /^(sk|rk)_test_/u.test(key) ? 'test'
+    : /^(sk|rk)_live_/u.test(key) ? 'live'
+    : undefined;
 
 const apiSchemaWithRefinements = apiSchema.superRefine((value, context) => {
     if (
@@ -162,6 +202,74 @@ const apiSchemaWithRefinements = apiSchema.superRefine((value, context) => {
             code: z.ZodIssueCode.custom,
             path: ['NOTIFICATION_EMAIL_PROVIDER_URL'],
             message: 'Brevo delivery requires its official SMTP email API URL.',
+        });
+    }
+    const stripeFields = [
+        'STRIPE_SECRET_KEY',
+        'STRIPE_WEBHOOK_SECRET',
+        'STRIPE_CONNECT_WEBHOOK_SECRET',
+    ] as const;
+    const configuredStripe = stripeFields.filter(field => Boolean(value[field]));
+    if (
+        (configuredStripe.length > 0 || value.PATCHWORK_PAYMENTS_MODE !== 'off') &&
+        configuredStripe.length !== stripeFields.length
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['STRIPE_SECRET_KEY'],
+            message: `Stripe payments require ${stripeFields.filter(field => !value[field]).join(', ')}.`,
+        });
+    }
+    if (value.STRIPE_SECRET_KEY) {
+        const keyMode = stripeKeyMode(value.STRIPE_SECRET_KEY);
+        if (!keyMode) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['STRIPE_SECRET_KEY'],
+                message: 'STRIPE_SECRET_KEY must be a Stripe secret or restricted key.',
+            });
+        } else if (
+            value.PATCHWORK_PAYMENTS_MODE !== 'off' &&
+            keyMode !== value.PATCHWORK_PAYMENTS_MODE
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['STRIPE_SECRET_KEY'],
+                message: `PATCHWORK_PAYMENTS_MODE=${value.PATCHWORK_PAYMENTS_MODE} requires a ${value.PATCHWORK_PAYMENTS_MODE}-mode Stripe key.`,
+            });
+        }
+    }
+    for (const field of ['STRIPE_WEBHOOK_SECRET', 'STRIPE_CONNECT_WEBHOOK_SECRET'] as const) {
+        if (value[field] && !value[field].startsWith('whsec_')) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: [field],
+                message: `${field} must be a Stripe webhook signing secret.`,
+            });
+        }
+    }
+    if (configuredStripe.length > 0 && value.API_DATA_SOURCE !== 'postgres') {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['API_DATA_SOURCE'],
+            message: 'Stripe payments require API_DATA_SOURCE=postgres.',
+        });
+    }
+    if (value.PATCHWORK_PAYMENTS_MODE === 'live' && value.NODE_ENV !== 'production') {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['PATCHWORK_PAYMENTS_MODE'],
+            message: 'PATCHWORK_PAYMENTS_MODE=live is only allowed when NODE_ENV=production.',
+        });
+    }
+    if (
+        value.PATCHWORK_GENERAL_FUND_RECEIPT_MODE === 'charitable' &&
+        (!value.PATCHWORK_GENERAL_FUND_LEGAL_NAME || !value.PATCHWORK_GENERAL_FUND_EIN)
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['PATCHWORK_GENERAL_FUND_RECEIPT_MODE'],
+            message: 'Charitable receipts require PATCHWORK_GENERAL_FUND_LEGAL_NAME and PATCHWORK_GENERAL_FUND_EIN.',
         });
     }
     const notificationChannels = [

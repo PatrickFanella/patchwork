@@ -201,6 +201,22 @@ endpoints, subscription keys, notification bodies, exact locations, private
 evidence, moderation notes, or provider credentials in incident notes.
 Provider feedback uses its dedicated bearer-token boundary.
 
+### Payment webhooks
+
+Stripe deliveries are recorded by event ID only, then applied by a sweep that
+re-fetches each event from Stripe. A dead letter means the fetched event was
+missing (Stripe keeps events for 30 days), disagreed with the signed delivery,
+or exhausted its retries. Check the pending, retrying, dead-letter,
+oldest-pending, sweep-failure and signature-failure metrics and the bounded
+`last_error_code`. `STRIPE_UNAUTHORIZED` means the API key was rotated or lacks
+scope; fix the key and the queued events retry on their own. A burst of
+signature failures usually means a rotated webhook secret; if the secret is
+current, treat it as forged traffic. After fixing a cause, requeue specific
+dead letters with `PaymentWebhookService.requeue`; do not edit attempt counts
+or insert events by hand. Setting `PATCHWORK_PAYMENTS_MODE=off` does not stop
+webhook intake. Never put donor emails, card details, Stripe customer IDs or
+API keys in incident notes.
+
 ### Source refresh
 
 Check `systemctl status patchwork-source-refresh.service` and the latest journal

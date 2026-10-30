@@ -96,6 +96,78 @@ describe('config schema', () => {
         } finally { vi.unstubAllEnvs(); }
     });
 
+    it('keeps payments off by default and validates Stripe credentials as a set', () => {
+        const testStripe = {
+            STRIPE_SECRET_KEY: 'sk_test_patchwork',
+            STRIPE_WEBHOOK_SECRET: 'whsec_platform',
+            STRIPE_CONNECT_WEBHOOK_SECRET: 'whsec_connect',
+        };
+        try {
+            vi.stubEnv('ATPROTO_SERVICE_DID', 'did:web:patchwork-test.example.com');
+            vi.stubEnv('API_DATA_SOURCE', 'postgres');
+            vi.stubEnv('API_DATABASE_URL', 'postgresql://patchwork@localhost:5432/patchwork');
+            for (const key of [...Object.keys(testStripe), 'PATCHWORK_PAYMENTS_MODE', 'PATCHWORK_GENERAL_FUND_RECEIPT_MODE', 'PATCHWORK_GENERAL_FUND_LEGAL_NAME', 'PATCHWORK_GENERAL_FUND_EIN']) vi.stubEnv(key, '');
+            expect(loadApiConfig()).toMatchObject({
+                PATCHWORK_PAYMENTS_MODE: 'off',
+                PATCHWORK_GENERAL_FUND_RECEIPT_MODE: 'non-deductible',
+            });
+
+            vi.stubEnv('PATCHWORK_PAYMENTS_MODE', 'test');
+            expect(() => loadApiConfig()).toThrow(/STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_WEBHOOK_SECRET/);
+            for (const [key, value] of Object.entries(testStripe)) vi.stubEnv(key, value);
+            expect(loadApiConfig().PATCHWORK_PAYMENTS_MODE).toBe('test');
+
+            vi.stubEnv('STRIPE_CONNECT_WEBHOOK_SECRET', '');
+            vi.stubEnv('PATCHWORK_PAYMENTS_MODE', 'off');
+            expect(() => loadApiConfig()).toThrow(/STRIPE_CONNECT_WEBHOOK_SECRET/);
+            vi.stubEnv('STRIPE_CONNECT_WEBHOOK_SECRET', 'connect-secret');
+            expect(() => loadApiConfig()).toThrow(/webhook signing secret/);
+            vi.stubEnv('STRIPE_CONNECT_WEBHOOK_SECRET', 'whsec_connect');
+            vi.stubEnv('STRIPE_SECRET_KEY', 'pk_test_publishable');
+            expect(() => loadApiConfig()).toThrow(/secret or restricted key/);
+
+            vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_patchwork');
+            vi.stubEnv('API_DATA_SOURCE', 'fixture');
+            expect(() => loadApiConfig()).toThrow(/API_DATA_SOURCE=postgres/);
+        } finally { vi.unstubAllEnvs(); }
+    });
+
+    it('allows live payments only in production with a live key', () => {
+        try {
+            vi.stubEnv('ATPROTO_SERVICE_DID', 'did:web:patchwork-test.example.com');
+            vi.stubEnv('API_DATA_SOURCE', 'postgres');
+            vi.stubEnv('API_DATABASE_URL', 'postgresql://patchwork@localhost:5432/patchwork');
+            vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_platform');
+            vi.stubEnv('STRIPE_CONNECT_WEBHOOK_SECRET', 'whsec_connect');
+            vi.stubEnv('PATCHWORK_PAYMENTS_MODE', 'live');
+            vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_patchwork');
+            vi.stubEnv('NODE_ENV', 'production');
+            expect(() => loadApiConfig()).toThrow(/live-mode Stripe key/);
+            vi.stubEnv('STRIPE_SECRET_KEY', 'rk_live_patchwork');
+            expect(loadApiConfig().PATCHWORK_PAYMENTS_MODE).toBe('live');
+            vi.stubEnv('NODE_ENV', 'development');
+            expect(() => loadApiConfig()).toThrow(/only allowed when NODE_ENV=production/);
+            vi.stubEnv('PATCHWORK_PAYMENTS_MODE', 'test');
+            expect(() => loadApiConfig()).toThrow(/test-mode Stripe key/);
+        } finally { vi.unstubAllEnvs(); }
+    });
+
+    it('requires a legal name and EIN before issuing charitable receipts', () => {
+        try {
+            vi.stubEnv('ATPROTO_SERVICE_DID', 'did:web:patchwork-test.example.com');
+            vi.stubEnv('API_DATA_SOURCE', 'fixture');
+            vi.stubEnv('PATCHWORK_GENERAL_FUND_RECEIPT_MODE', 'charitable');
+            vi.stubEnv('PATCHWORK_GENERAL_FUND_LEGAL_NAME', '');
+            vi.stubEnv('PATCHWORK_GENERAL_FUND_EIN', '');
+            expect(() => loadApiConfig()).toThrow(/LEGAL_NAME and PATCHWORK_GENERAL_FUND_EIN/);
+            vi.stubEnv('PATCHWORK_GENERAL_FUND_LEGAL_NAME', 'Subcult Example Fund');
+            vi.stubEnv('PATCHWORK_GENERAL_FUND_EIN', '123456789');
+            expect(() => loadApiConfig()).toThrow(/NN-NNNNNNN/);
+            vi.stubEnv('PATCHWORK_GENERAL_FUND_EIN', '12-3456789');
+            expect(loadApiConfig().PATCHWORK_GENERAL_FUND_EIN).toBe('12-3456789');
+        } finally { vi.unstubAllEnvs(); }
+    });
+
     it('requires an API key only for Jetstream v2 replay', () => {
         const previousVersion = process.env.INDEXER_JETSTREAM_VERSION;
         const previousKey = process.env.JETSTREAM_API_KEY;

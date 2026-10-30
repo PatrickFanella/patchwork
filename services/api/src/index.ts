@@ -115,6 +115,12 @@ import {
     isNotificationRoute,
 } from './http/notification-handler.js';
 import {
+    createPaymentWebhookHandler,
+    isPaymentWebhookRoute,
+} from './http/payment-webhook-handler.js';
+import { PaymentWebhookService } from './payments/payment-webhook-service.js';
+import { HttpStripeGateway } from './payments/stripe-gateway.js';
+import {
     createExactLocationSignalHandler,
     isExactLocationSignalRoute,
 } from './http/exact-location-signal-handler.js';
@@ -195,6 +201,7 @@ if (postgresPool) {
         maintenance_table: string | null;
         group_table: string | null;
         chat_table: string | null;
+        payment_table: string | null;
     }>(
         `SELECT
             to_regclass('indexer_aid_post_projections')::TEXT AS projection_table,
@@ -215,7 +222,8 @@ if (postgresPool) {
             to_regclass('platform_maintenance_state')::TEXT
                 AS maintenance_table,
             to_regclass('groups')::TEXT AS group_table,
-            to_regclass('chat_messages')::TEXT AS chat_table`,
+            to_regclass('chat_messages')::TEXT AS chat_table,
+            to_regclass('payment_webhook_events')::TEXT AS payment_table`,
     );
     if (
         !projectionSchema.rows[0]?.projection_table ||
@@ -229,6 +237,7 @@ if (postgresPool) {
         !projectionSchema.rows[0]?.maintenance_table ||
         !projectionSchema.rows[0]?.group_table ||
         !projectionSchema.rows[0]?.chat_table ||
+        !projectionSchema.rows[0]?.payment_table ||
         !projectionSchema.rows[0]?.state_table
     ) {
         await postgresPool.end();
@@ -363,6 +372,19 @@ const notificationService =
             postgresPool,
             notificationProviders,
             { publicWebOrigin: config.API_PUBLIC_ORIGIN.replace(/\/$/, '') },
+        )
+    :   undefined;
+// Webhook intake runs whenever Stripe credentials exist, including
+// PATCHWORK_PAYMENTS_MODE=off, so renewals, refunds and disputes on existing
+// subscriptions are still recorded during a rollback.
+const paymentWebhookService =
+    postgresPool &&
+    config.STRIPE_SECRET_KEY &&
+    config.STRIPE_WEBHOOK_SECRET &&
+    config.STRIPE_CONNECT_WEBHOOK_SECRET ?
+        new PaymentWebhookService(
+            postgresPool,
+            new HttpStripeGateway(config.STRIPE_SECRET_KEY),
         )
     :   undefined;
 const authenticateApiRequest =
@@ -795,6 +817,67 @@ let notificationDeliveryRetrying = 0;
 let notificationDeliveryDeadLetters = 0;
 let notificationDeliveryOldestPendingSeconds = 0;
 let notificationDeliverySweepFailuresTotal = 0;
+let paymentWebhookPending = 0;
+let paymentWebhookRetrying = 0;
+let paymentWebhookDeadLetters = 0;
+let paymentWebhookOldestPendingSeconds = 0;
+let paymentWebhookSweepFailuresTotal = 0;
+const paymentWebhookSignatureFailuresTotal = { platform: 0, connect: 0 };
+let paymentWebhookSweepRunning = false;
+
+const runPaymentWebhookSweep = async (): Promise<void> => {
+    if (!paymentWebhookService || paymentWebhookSweepRunning) return;
+    paymentWebhookSweepRunning = true;
+    try {
+        const result = await paymentWebhookService.runSweep();
+        const metrics = await paymentWebhookService.getOperatorMetrics();
+        paymentWebhookPending = metrics.pending;
+        paymentWebhookRetrying = metrics.retrying;
+        paymentWebhookDeadLetters = metrics.deadLetter;
+        paymentWebhookOldestPendingSeconds = metrics.oldestPendingSeconds;
+        if (result.claimed > 0) {
+            const event = {
+                level: result.deadLettered > 0 ? 'warn' : 'info',
+                event: 'payment_webhook_sweep_completed',
+                result,
+                metrics,
+            };
+            if (result.deadLettered > 0) console.warn(JSON.stringify(event));
+            else console.log(JSON.stringify(event));
+        }
+    } catch {
+        paymentWebhookSweepFailuresTotal += 1;
+        console.error(
+            JSON.stringify({ level: 'error', event: 'payment_webhook_sweep_failed' }),
+        );
+    } finally {
+        paymentWebhookSweepRunning = false;
+    }
+};
+
+const paymentWebhookHandler =
+    paymentWebhookService &&
+    config.STRIPE_SECRET_KEY &&
+    config.STRIPE_WEBHOOK_SECRET &&
+    config.STRIPE_CONNECT_WEBHOOK_SECRET ?
+        createPaymentWebhookHandler({
+            service: paymentWebhookService,
+            platformSecret: config.STRIPE_WEBHOOK_SECRET,
+            connectSecret: config.STRIPE_CONNECT_WEBHOOK_SECRET,
+            expectedLivemode: /^(sk|rk)_live_/u.test(config.STRIPE_SECRET_KEY),
+            onSignatureFailure: source => {
+                paymentWebhookSignatureFailuresTotal[source] += 1;
+                console.warn(
+                    JSON.stringify({
+                        level: 'warn',
+                        event: 'payment_webhook_signature_rejected',
+                        source,
+                    }),
+                );
+            },
+            onRecorded: () => void runPaymentWebhookSweep(),
+        })
+    :   undefined;
 
 const renderPrometheusMetrics = (): string => {
     const uptimeSeconds = Math.floor(process.uptime());
@@ -846,7 +929,31 @@ const renderPrometheusMetrics = (): string => {
         `patchwork_maintenance_mode_active{project="patchwork",service="api",component="stitch"} ${maintenanceModeService?.isActive() ? 1 : 0}`,
     ].join('\n');
 
-    return `${baseMetrics}\n${sliMetrics}\n${retentionMetrics.renderPrometheus()}\n${attachmentMetrics}\n${notificationMetrics}\n${maintenanceMetrics}`;
+    const paymentLabels = 'project="patchwork",service="api",component="stitch"';
+    const paymentMetrics = [
+        '# HELP patchwork_payment_webhook_pending Verified Stripe events waiting to be applied.',
+        '# TYPE patchwork_payment_webhook_pending gauge',
+        `patchwork_payment_webhook_pending{${paymentLabels}} ${paymentWebhookPending}`,
+        '# HELP patchwork_payment_webhook_retrying Stripe events waiting for a retry after a failed attempt.',
+        '# TYPE patchwork_payment_webhook_retrying gauge',
+        `patchwork_payment_webhook_retrying{${paymentLabels}} ${paymentWebhookRetrying}`,
+        '# HELP patchwork_payment_webhook_dead_letters Stripe events that could not be applied and need an operator.',
+        '# TYPE patchwork_payment_webhook_dead_letters gauge',
+        `patchwork_payment_webhook_dead_letters{${paymentLabels}} ${paymentWebhookDeadLetters}`,
+        '# HELP patchwork_payment_webhook_oldest_pending_seconds Age of the oldest unapplied Stripe event.',
+        '# TYPE patchwork_payment_webhook_oldest_pending_seconds gauge',
+        `patchwork_payment_webhook_oldest_pending_seconds{${paymentLabels}} ${paymentWebhookOldestPendingSeconds}`,
+        '# HELP patchwork_payment_webhook_sweep_failures_total Payment webhook sweeps that failed.',
+        '# TYPE patchwork_payment_webhook_sweep_failures_total counter',
+        `patchwork_payment_webhook_sweep_failures_total{${paymentLabels}} ${paymentWebhookSweepFailuresTotal}`,
+        '# HELP patchwork_payment_webhook_signature_failures_total Stripe webhook deliveries rejected by signature checks.',
+        '# TYPE patchwork_payment_webhook_signature_failures_total counter',
+        ...(['platform', 'connect'] as const).map(source =>
+            `patchwork_payment_webhook_signature_failures_total{${paymentLabels},source="${source}"} ${paymentWebhookSignatureFailuresTotal[source]}`,
+        ),
+    ].join('\n');
+
+    return `${baseMetrics}\n${sliMetrics}\n${retentionMetrics.renderPrometheus()}\n${attachmentMetrics}\n${notificationMetrics}\n${maintenanceMetrics}\n${paymentMetrics}`;
 };
 
 const renderSourceRefreshMetrics = async (): Promise<string> => {
@@ -1873,6 +1980,8 @@ const contractRoutes = [
     '/notifications/email/confirm',
     '/notifications/push',
     '/internal/notifications/provider-feedback',
+    '/internal/payments/stripe/webhook',
+    '/internal/payments/stripe/connect-webhook',
     '/status',
     '/maintenance',
     '/maintenance/declare',
@@ -2170,6 +2279,18 @@ export const createApiServer = () => {
             return;
         }
         if (attachmentHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (paymentWebhookHandler?.(request, response, requestUrl)) {
+            return;
+        }
+        if (isPaymentWebhookRoute(request, requestUrl)) {
+            writeJson(response, 503, {
+                error: {
+                    code: 'PAYMENTS_UNAVAILABLE',
+                    message: 'Payment webhooks are not configured.',
+                },
+            });
             return;
         }
         if (notificationHandler?.(request, response, requestUrl)) {
@@ -2506,6 +2627,7 @@ export const startApiServer = () => {
     let exactLocationScheduler: RetentionScheduler | undefined;
     let attachmentScheduler: RetentionScheduler | undefined;
     let notificationScheduler: RetentionScheduler | undefined;
+    let paymentWebhookScheduler: RetentionScheduler | undefined;
     if (postgresPool) {
         const retention = new PostgresRetentionService(postgresPool);
         retentionScheduler = startRetentionScheduler({
@@ -2701,6 +2823,14 @@ export const startApiServer = () => {
                 },
             });
         }
+        if (paymentWebhookService) {
+            paymentWebhookScheduler = startRetentionScheduler({
+                intervalMs: config.API_PAYMENT_WEBHOOK_INTERVAL_SECONDS * 1_000,
+                // runPaymentWebhookSweep records its own failures.
+                enforce: runPaymentWebhookSweep,
+                onError: () => undefined,
+            });
+        }
         if (notificationService) {
             notificationScheduler = startRetentionScheduler({
                 intervalMs:
@@ -2761,6 +2891,7 @@ export const startApiServer = () => {
         exactLocationScheduler?.stop();
         attachmentScheduler?.stop();
         notificationScheduler?.stop();
+        paymentWebhookScheduler?.stop();
     });
     return server;
 };

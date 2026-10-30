@@ -8,6 +8,7 @@ import {
     mutationLimiter,
     reportLimiter,
     moderationLimiter,
+    providerWebhookLimiter,
 } from './rate-limiter.js';
 
 describe('RateLimiter', () => {
@@ -118,6 +119,13 @@ describe('selectLimiter', () => {
         expect(selectLimiter('POST', '/moderation/policy/apply')).toBe(
             moderationLimiter,
         );
+    });
+
+    it('gives signed Stripe webhooks their own burst budget', () => {
+        expect(selectLimiter('POST', '/internal/payments/stripe/webhook')).toBe(providerWebhookLimiter);
+        expect(selectLimiter('POST', '/internal/payments/stripe/connect-webhook')).toBe(providerWebhookLimiter);
+        expect(selectLimiter('GET', '/internal/payments/stripe/webhook')).toBe(generalLimiter);
+        expect(selectLimiter('POST', '/internal/payments/other')).toBe(mutationLimiter);
     });
 
     it('returns generalLimiter for all other paths', () => {
