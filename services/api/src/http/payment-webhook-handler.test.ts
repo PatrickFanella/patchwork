@@ -152,13 +152,12 @@ describe('Stripe webhook HTTP boundary', () => {
         expect(onSignatureFailure).toHaveBeenCalledTimes(3);
     });
 
-    it('rejects an event from the other Stripe mode', async () => {
+    it('acknowledges but never records a signed event from the other Stripe mode', async () => {
+        // Stripe sends connected accounts' test events to a live Connect endpoint.
         const body = JSON.stringify(event({ livemode: true }));
         const response = await post('/internal/payments/stripe/webhook', body, platformSecret);
-        expect(response.status).toBe(400);
-        await expect(response.json()).resolves.toMatchObject({
-            error: { code: 'STRIPE_MODE_MISMATCH' },
-        });
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toEqual({ received: false, ignored: 'other-mode' });
         expect(receive).not.toHaveBeenCalled();
     });
 

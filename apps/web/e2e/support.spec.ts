@@ -30,8 +30,11 @@ const mockApi = async (
         supportOptions?: Record<string, unknown>;
         checkoutStatuses?: Array<Record<string, unknown>>;
         accountSupport?: Record<string, unknown>;
+        /** Checkout responses to return, in order, before succeeding. */
+        checkoutFailures?: Array<{ status: number; code: string }>;
     },
 ): Promise<Recorded> => {
+    const failures = [...(input.checkoutFailures ?? [])];
     const recorded: Recorded = { checkoutBodies: [], checkoutKeys: [], portalRequests: 0 };
     const statuses = [...(input.checkoutStatuses ?? [])];
     await page.route('https://checkout.stripe.test/**', (route) =>
@@ -66,6 +69,8 @@ const mockApi = async (
         if (path === '/support/checkout' && request.method() === 'POST') {
             recorded.checkoutBodies.push(request.postDataJSON() as Record<string, unknown>);
             recorded.checkoutKeys.push(request.headers()['idempotency-key'] ?? '');
+            const failure = failures.shift();
+            if (failure) return fulfill({ error: { code: failure.code, message: 'Scripted failure.' } }, failure.status);
             return fulfill({ checkoutId, url: `https://checkout.stripe.test/c/${checkoutId}` }, 201);
         }
         if (path === '/support/checkout') {
@@ -117,6 +122,27 @@ test('a signed-out visitor gives once and sees the confirmed gift', async ({ pag
 
     await page.goto(`/support/thanks?checkout=${checkoutId}`);
     await expect(page.getByRole('status').filter({ hasText: 'Your gift of $30.50 to Patchwork general fund went through.' })).toBeVisible({ timeout: 10_000 });
+});
+
+test('checkout keeps its key across retryable failures and starts over when the key is spent', async ({ page }) => {
+    const recorded = await mockApi(page, {
+        checkoutFailures: [
+            { status: 503, code: 'CHECKOUT_UNAVAILABLE' },
+            // The retried key now belongs to a finished Checkout.
+            { status: 409, code: 'CHECKOUT_CLOSED' },
+        ],
+    });
+    await page.goto('/support');
+    await page.getByLabel('Amount in US dollars').fill('20');
+    await page.getByRole('button', { name: 'Give $20.00' }).click();
+    await expect(page.getByText('Error:', { exact: false }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Give $20.00' }).click();
+    await page.waitForURL(`https://checkout.stripe.test/c/${checkoutId}`);
+    const [first, retried, fresh] = recorded.checkoutKeys;
+    expect(recorded.checkoutKeys).toHaveLength(3);
+    // A Stripe outage retries with the same key; a spent key gets a new one automatically.
+    expect(retried).toBe(first);
+    expect(fresh).not.toBe(first);
 });
 
 test('a signed-in supporter starts monthly giving and manages it from Settings in Spanish', async ({ page }) => {

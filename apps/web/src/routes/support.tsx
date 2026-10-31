@@ -61,8 +61,17 @@ const useCheckout = () => {
         }
         setPending(true);
         setError(undefined);
-        const result = await createSupportCheckoutViaApi(request, attempt.current.key);
+        let result = await createSupportCheckoutViaApi(request, attempt.current.key);
+        // The key belongs to a Checkout that already finished (for example after
+        // returning with the back button) or to a different signed-in state.
+        // Start a new attempt once instead of failing every retry.
+        if (!result.ok && (result.code === 'CHECKOUT_CLOSED' || result.code === 'IDEMPOTENCY_KEY_REUSED')) {
+            attempt.current = { request: serialized, key: globalThis.crypto.randomUUID() };
+            result = await createSupportCheckoutViaApi(request, attempt.current.key);
+        }
         if (!result.ok) {
+            // Keep the key only when retrying it can still reach the same Checkout.
+            if (!result.retryable) attempt.current = undefined;
             setPending(false);
             setError(`${t('common.error')}: ${t('support.checkoutFailed')}`);
             return;

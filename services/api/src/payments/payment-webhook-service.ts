@@ -156,8 +156,23 @@ export class PaymentWebhookService {
                 row.stripe_account_id ?? undefined,
             );
         } catch (error) {
-            const retryable = !(error instanceof StripeApiError) || error.retryable;
-            return this.fail(row, now, errorCodeOf(error), retryable);
+            const lostAccess = error instanceof StripeApiError
+                && (error.code === 'UNAUTHORIZED' || error.code === 'NOT_FOUND');
+            if (!(lostAccess && row.event_type === 'account.application.deauthorized' && row.stripe_account_id)) {
+                const retryable = !(error instanceof StripeApiError) || error.retryable;
+                return this.fail(row, now, errorCodeOf(error), retryable);
+            }
+            // A disconnected account's events can no longer be fetched. The
+            // stored receipt came from a signature-verified delivery, and this
+            // event needs nothing beyond its type and account.
+            event = {
+                id: row.stripe_event_id,
+                type: row.event_type,
+                livemode: row.livemode,
+                created: Math.floor(new Date(row.stripe_created_at).getTime() / 1_000),
+                account: row.stripe_account_id,
+                data: { object: {} },
+            };
         }
         if (
             event.id !== row.stripe_event_id ||

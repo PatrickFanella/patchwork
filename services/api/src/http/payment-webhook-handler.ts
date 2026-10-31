@@ -120,11 +120,11 @@ export const createPaymentWebhookHandler = (dependencies: {
             }
             const receipt = parseReceipt(payload, source);
             if (receipt.livemode !== dependencies.expectedLivemode) {
-                throw new PublicHttpError(
-                    400,
-                    'STRIPE_MODE_MISMATCH',
-                    'The webhook event mode does not match this deployment.',
-                );
+                // A live Connect endpoint also receives connected accounts' test
+                // events. Acknowledge them so Stripe does not retry for days
+                // and disable the endpoint, but never record them.
+                writeJsonResponse(response, 200, { received: false, ignored: 'other-mode' });
+                return;
             }
             const recorded = await dependencies.service.receive(receipt);
             if (recorded) dependencies.onRecorded?.();

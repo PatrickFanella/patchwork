@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrganizationPaymentsService } from './organization-payments-service.js';
 import { PaymentWebhookService } from './payment-webhook-service.js';
 import type { StripeEvent, StripeSubscription } from './stripe-gateway.js';
@@ -110,7 +110,7 @@ describe('organization payments', () => {
 
     beforeEach(async () => {
         await pool.query(
-            `TRUNCATE payment_webhook_events, payment_charge_states, donations, supporter_subscriptions, donor_accounts,
+            `TRUNCATE payment_webhook_events, payment_charge_states, notification_intents, donations, supporter_subscriptions, donor_accounts,
                       supporter_tier_prices, payment_checkout_sessions, payment_audit_events CASCADE`,
         );
         await pool.query(`DELETE FROM payment_recipients WHERE kind = 'organization'`);
@@ -332,6 +332,100 @@ describe('organization payments', () => {
         await expect(organizations.getStatus(owner, organizationId)).resolves.toMatchObject({
             activeMonthlySupporters: 0, eligible: false,
         });
+    });
+
+    it('pauses again after the organization resumes collection in its Dashboard', async () => {
+        const { organizationId, accountId } = await onboardedOrganization();
+        const checkout = await support.createCheckout({
+            body: { recipient: { organizationId }, mode: 'monthly', tierKey: 'tier-1' },
+            clientKey: randomUUID(),
+            donorDid: donor,
+        });
+        const subscription: StripeSubscription = {
+            id: 'sub_1Resumed', status: 'active', livemode: false, customer: 'cus_1Resumed', cancelAtPeriodEnd: false,
+            collectionPaused: false, metadata: { patchwork_checkout_id: checkout.checkoutId },
+        };
+        stripe.setSubscription(subscription, { accountId });
+        await deliver('customer.subscription.created', { id: subscription.id }, accountId);
+        await pool.query(`UPDATE verification_applications SET status = 'revoked' WHERE organization_id = $1`, [organizationId]);
+        // The pause's own webhook is applied before the sweep records the pause,
+        // so the gift is briefly recorded as paused by 'donor'.
+        const pause = stripe.pauseSubscriptionCollection.bind(stripe);
+        vi.spyOn(stripe, 'pauseSubscriptionCollection').mockImplementationOnce(async (...args) => {
+            const paused = await pause(...args);
+            await deliver('customer.subscription.updated', { id: subscription.id }, accountId);
+            return paused;
+        });
+        expect(await organizations.runEligibilitySweep()).toEqual({ paused: 1, failed: 0 });
+        expect((await pool.query('SELECT paused_reason FROM supporter_subscriptions')).rows)
+            .toEqual([{ paused_reason: 'recipient-ineligible' }]);
+        // The organization resumes collection in its Dashboard.
+        stripe.setSubscription({ ...stripe['find']<StripeSubscription>('subscription', subscription.id, { accountId }), collectionPaused: false }, { accountId });
+        await deliver('customer.subscription.updated', { id: subscription.id }, accountId);
+        expect((await pool.query('SELECT paused_reason FROM supporter_subscriptions')).rows)
+            .toEqual([{ paused_reason: null }]);
+        expect(await organizations.runEligibilitySweep()).toEqual({ paused: 1, failed: 0 });
+        const keys = stripe.pauseCalls.map(call => call.idempotencyKey);
+        expect(new Set(keys).size).toBe(keys.length);
+        await expect(stripe.retrieveSubscription(subscription.id, { accountId })).resolves.toMatchObject({ collectionPaused: true });
+        const notices = await pool.query(`SELECT notification_type, deduplication_key FROM notification_intents WHERE recipient_did = $1 ORDER BY created_at`, [donor]);
+        expect(notices.rows.map(row => row.notification_type)).toEqual(['support_recipient_paused']);
+    });
+
+    it('moves gifts that keep failing behind the rest of the sweep', async () => {
+        const { organizationId, accountId } = await onboardedOrganization();
+        const ids: string[] = [];
+        for (const suffix of ['A', 'B', 'C']) {
+            const checkout = await support.createCheckout({
+                body: { recipient: { organizationId }, mode: 'monthly', tierKey: 'tier-1' },
+                clientKey: randomUUID(),
+            });
+            const id = `sub_1Rotate${suffix}`;
+            ids.push(id);
+            stripe.setSubscription({
+                id, status: 'active', livemode: false, cancelAtPeriodEnd: false, collectionPaused: false,
+                metadata: { patchwork_checkout_id: checkout.checkoutId },
+            }, { accountId });
+            await deliver('customer.subscription.created', { id }, accountId);
+        }
+        await pool.query(`UPDATE verification_applications SET status = 'revoked' WHERE organization_id = $1`, [organizationId]);
+        // The oldest gift is gone from Stripe, so pausing it always fails.
+        await pool.query(`UPDATE supporter_subscriptions SET updated_at = NOW() - INTERVAL '1 day' WHERE stripe_subscription_id = $1`, [ids[0]]);
+        stripe['objects'].delete(`${accountId}:subscription:${ids[0]}`);
+        expect(await organizations.runEligibilitySweep(1)).toEqual({ paused: 0, failed: 1 });
+        expect(await organizations.runEligibilitySweep(1)).toEqual({ paused: 1, failed: 0 });
+        expect(await organizations.runEligibilitySweep(1)).toEqual({ paused: 1, failed: 0 });
+    });
+
+    it('stops treating an organization as eligible when it disconnects its Stripe account', async () => {
+        const { organizationId, accountId } = await onboardedOrganization();
+        const checkout = await support.createCheckout({
+            body: { recipient: { organizationId }, mode: 'monthly', tierKey: 'tier-1' },
+            clientKey: randomUUID(),
+        });
+        stripe.setSubscription({
+            id: 'sub_1Disconnected', status: 'active', livemode: false, cancelAtPeriodEnd: false, collectionPaused: false,
+            metadata: { patchwork_checkout_id: checkout.checkoutId },
+        }, { accountId });
+        await deliver('customer.subscription.created', { id: 'sub_1Disconnected' }, accountId);
+
+        // After disconnecting, the account's events can no longer be fetched.
+        await webhooks.receive({
+            eventId: 'evt_1Deauthorized', source: 'connect', accountId,
+            type: 'account.application.deauthorized', livemode: false, created: 1_793_500_000,
+        });
+        await expect(webhooks.runSweep(25, new Date(Date.now() + 1_000))).resolves.toMatchObject({ processed: 1, deadLettered: 0 });
+        await expect(support.listEligibleOrganizations([organizationId])).resolves.toEqual([]);
+        const pausesBefore = stripe.pauseCalls.length;
+        expect(await organizations.runEligibilitySweep()).toEqual({ paused: 0, failed: 0 });
+        expect(stripe.pauseCalls.length).toBe(pausesBefore);
+        await expect(support.createCheckout({
+            body: { recipient: { organizationId }, mode: 'one-time', amountMinor: 500 }, clientKey: randomUUID(),
+        })).rejects.toMatchObject({ code: 'RECIPIENT_UNAVAILABLE' });
+
+        // A later account.updated means access is back.
+        await deliver('account.updated', { id: accountId }, accountId);
+        await expect(support.listEligibleOrganizations([organizationId])).resolves.toEqual([organizationId]);
     });
 
     it('keeps payment history and pauses gifts when the organization is deleted', async () => {

@@ -121,6 +121,12 @@ export interface StripeGateway {
         idempotencyKey: string,
         scope: Required<StripeAccountScope>,
     ): Promise<StripeSubscription>;
+    /**
+     * Whether a stored customer or Price can still be used for a new Checkout.
+     * Organizations have the full Dashboard, so they can delete customers and
+     * archive the Prices Patchwork created on their account.
+     */
+    isReusable(kind: 'customer' | 'price', id: string, scope?: StripeAccountScope): Promise<boolean>;
     /** Let the paid period finish, then end the subscription. */
     cancelSubscriptionAtPeriodEnd(
         subscriptionId: string,
@@ -425,6 +431,19 @@ export class HttpStripeGateway implements StripeGateway {
             idempotencyKey,
             accountId: this.scoped(scope),
         }));
+    }
+
+    async isReusable(kind: 'customer' | 'price', id: string, scope: StripeAccountScope = {}): Promise<boolean> {
+        this.requireId(id, kind === 'customer' ? stripeIdPatterns.customer : stripeIdPatterns.price);
+        try {
+            const body = asRecord(await this.request(
+                'GET', `/v1/${kind === 'customer' ? 'customers' : 'prices'}/${id}`, { accountId: this.scoped(scope) },
+            ));
+            return kind === 'customer' ? body?.['deleted'] !== true : body?.['active'] === true;
+        } catch (error) {
+            if (error instanceof StripeApiError && error.code === 'NOT_FOUND') return false;
+            throw error;
+        }
     }
 
     async cancelSubscriptionAtPeriodEnd(

@@ -31,7 +31,11 @@ export class FakeStripe implements StripeGateway {
     accountCalls: Array<{ businessName: string; idempotencyKey: string }> = [];
     linkCalls: Array<{ accountId: string; refreshUrl: string; returnUrl: string }> = [];
     failNextCheckout = false;
+    /** Customer and Price IDs deleted or archived in the Dashboard. */
+    unusable = new Set<string>();
+    /** Checkouts that name an unusable customer or Price fail like Stripe's 400. */
     failPauses = false;
+    private readonly pauseResponses = new Map<string, StripeSubscription>();
     private sequence = 0;
 
     private key(kind: string, id: string, scope: StripeAccountScope = {}): string {
@@ -93,6 +97,10 @@ export class FakeStripe implements StripeGateway {
             this.failNextCheckout = false;
             throw new StripeApiError('UNAVAILABLE', true);
         }
+        const lineItems = params['line_items'] as Array<Record<string, StripeFormValue>> | undefined;
+        if (this.unusable.has(String(params['customer'])) || this.unusable.has(String(lineItems?.[0]?.['price']))) {
+            throw new StripeApiError('INVALID_REQUEST', false);
+        }
         const id = `cs_test_${idempotencyKey.replace(/[^A-Za-z0-9]/gu, '')}`;
         const existing = this.objects.get(this.key('session', id, scope));
         if (existing) return existing as StripeCheckoutSession;
@@ -140,10 +148,18 @@ export class FakeStripe implements StripeGateway {
     ): Promise<StripeSubscription> {
         this.pauseCalls.push({ subscriptionId, idempotencyKey, accountId: scope.accountId });
         if (this.failPauses) throw new StripeApiError('UNAVAILABLE', true);
+        // Like Stripe, a reused key replays the first response without acting.
+        const replayed = this.pauseResponses.get(idempotencyKey);
+        if (replayed) return replayed;
         const subscription = this.find<StripeSubscription>('subscription', subscriptionId, scope);
         const paused = { ...subscription, collectionPaused: true };
         this.setSubscription(paused, scope);
+        this.pauseResponses.set(idempotencyKey, paused);
         return paused;
+    }
+
+    async isReusable(_kind: 'customer' | 'price', id: string): Promise<boolean> {
+        return !this.unusable.has(id);
     }
 
     async cancelSubscriptionAtPeriodEnd(

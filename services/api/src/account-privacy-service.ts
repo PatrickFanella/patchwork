@@ -526,7 +526,8 @@ export class AccountPrivacyService {
                 [did, now],
             );
             await client.query(
-                `UPDATE payment_checkout_sessions SET donor_did = NULL, updated_at = $2
+                `UPDATE payment_checkout_sessions
+                    SET donor_did = NULL, donor_deactivated = TRUE, updated_at = $2
                   WHERE donor_did = $1`,
                 [did, now],
             );
