@@ -2093,7 +2093,33 @@
                 "canceled": "Cancelled",
                 "unpaid": "Unpaid",
                 "paused": "Paused"
-            }
+            },
+            "manageFor": "Manage {{name}} in Stripe"
+        },
+        "organization": {
+            "donate": "Donate",
+            "close": "Close donation form",
+            "label": "Donate to {{name}}",
+            "direct": "Your gift goes directly to {{name}} through its own Stripe account. Patchwork takes no fee and does not decide whether your gift is tax-deductible; {{name}} sends any receipt."
+        },
+        "payments": {
+            "title": "Donations",
+            "help": "Verified organizations can accept donations through their own Stripe account. Gifts settle to you directly; Patchwork takes no fee. Refunds, payouts and receipts are managed in your Stripe Dashboard.",
+            "loadFailed": "Donation settings could not be loaded.",
+            "needsVerification": "Verify this organization before setting up donations.",
+            "notStarted": "Donations are not set up yet.",
+            "onboarding": "Stripe setup is not finished. Continue to provide the details Stripe asks for.",
+            "active": "Donors can give to this organization now.",
+            "unavailable": "Donations to this organization are not available right now.",
+            "suspended": "Donations to this organization are suspended. Contact Patchwork moderators for details.",
+            "payoutsPending": "Stripe has not enabled payouts yet. Gifts wait in your Stripe balance until it does.",
+            "start": "Set up donations with Stripe",
+            "continue": "Continue Stripe setup",
+            "dashboard": "Open Stripe Dashboard",
+            "stripeFailed": "Stripe could not be reached. Try again in a moment.",
+            "monthly": "Monthly supporters: {{count}} ({{amount}} a month).",
+            "month": "{{month}}: {{amount}} in one-time gifts ({{count}}).",
+            "noGifts": "No one-time gifts in the last 12 months."
         }
     }
 }

@@ -2093,7 +2093,33 @@
                 "canceled": "Cancelada",
                 "unpaid": "Sin pagar",
                 "paused": "En pausa"
-            }
+            },
+            "manageFor": "Administrar {{name}} en Stripe"
+        },
+        "organization": {
+            "donate": "Donar",
+            "close": "Cerrar el formulario de donación",
+            "label": "Donar a {{name}}",
+            "direct": "Tu donación va directamente a {{name}} a través de su propia cuenta de Stripe. Patchwork no cobra comisión ni decide si tu donación es deducible de impuestos; {{name}} envía cualquier recibo."
+        },
+        "payments": {
+            "title": "Donaciones",
+            "help": "Las organizaciones verificadas pueden recibir donaciones a través de su propia cuenta de Stripe. Las donaciones te llegan directamente; Patchwork no cobra comisión. Los reembolsos, pagos y recibos se administran en tu panel de Stripe.",
+            "loadFailed": "No se pudo cargar la configuración de donaciones.",
+            "needsVerification": "Verifica esta organización antes de configurar las donaciones.",
+            "notStarted": "Las donaciones aún no están configuradas.",
+            "onboarding": "La configuración de Stripe no está terminada. Continúa para dar los datos que pide Stripe.",
+            "active": "Ya se puede donar a esta organización.",
+            "unavailable": "Por ahora no se puede donar a esta organización.",
+            "suspended": "Las donaciones a esta organización están suspendidas. Comunícate con los moderadores de Patchwork para más información.",
+            "payoutsPending": "Stripe aún no activa los pagos. Las donaciones esperan en tu saldo de Stripe hasta entonces.",
+            "start": "Configurar donaciones con Stripe",
+            "continue": "Continuar la configuración de Stripe",
+            "dashboard": "Abrir el panel de Stripe",
+            "stripeFailed": "No se pudo conectar con Stripe. Inténtalo de nuevo en un momento.",
+            "monthly": "Donantes mensuales: {{count}} ({{amount}} al mes).",
+            "month": "{{month}}: {{amount}} en donaciones únicas ({{count}}).",
+            "noGifts": "No hubo donaciones únicas en los últimos 12 meses."
         }
     }
 }

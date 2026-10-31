@@ -4235,16 +4235,36 @@ const accountSupportSchema = z.object({
         currentPeriodEnd: z.string().nullable(),
         cancelAtPeriodEnd: z.boolean(),
     })),
-    canManage: z.boolean(),
+    manageable: z.array(z.object({ recipientId: z.string(), recipientName: z.string() })),
+});
+
+const organizationPaymentsSchema = z.object({
+    organizationId: z.string(),
+    status: z.enum(['not-started', 'onboarding', 'active', 'suspended']),
+    verified: z.boolean(),
+    chargesEnabled: z.boolean(),
+    payoutsEnabled: z.boolean(),
+    detailsSubmitted: z.boolean(),
+    eligible: z.boolean(),
+    dashboardUrl: z.string().nullable(),
+    activeMonthlySupporters: z.number().int(),
+    monthlyRecurringMinor: z.number().int(),
+    months: z.array(z.object({
+        month: z.string(),
+        giftCount: z.number().int(),
+        giftTotalMinor: z.number().int(),
+    })),
 });
 
 export type SupportTier = z.infer<typeof supportTierSchema>;
 export type SupportOptions = z.infer<typeof supportOptionsSchema>;
 export type SupportCheckoutStatus = z.infer<typeof supportCheckoutStatusSchema>;
 export type AccountSupport = z.infer<typeof accountSupportSchema>;
+export type OrganizationPayments = z.infer<typeof organizationPaymentsSchema>;
+export type SupportRecipient = 'general-fund' | { organizationId: string };
 export type SupportCheckoutRequest =
-    | { recipient: 'general-fund'; mode: 'one-time'; amountMinor: number }
-    | { recipient: 'general-fund'; mode: 'monthly'; tierKey: string };
+    | { recipient: SupportRecipient; mode: 'one-time'; amountMinor: number }
+    | { recipient: SupportRecipient; mode: 'monthly'; tierKey: string };
 
 const parseWith = <T>(
     schema: z.ZodType<T>,
@@ -4286,11 +4306,46 @@ export const fetchSupportCheckoutViaApi = async (
         'Checkout status response was malformed.',
     );
 
-export const openSupportPortalViaApi = async (): Promise<ApiClientResult<{ url: string }>> =>
+export const openSupportPortalViaApi = async (
+    recipientId?: string,
+): Promise<ApiClientResult<{ url: string }>> =>
     parseWith(
         z.object({ url: z.string().url().startsWith('https://') }),
-        await requestJsonPost('/support/portal', {}),
+        await requestJsonPost('/support/portal', recipientId ? { recipientId } : {}),
         'Portal response was malformed.',
+    );
+
+export const fetchEligibleOrganizationsViaApi = async (
+    organizationIds: readonly string[],
+    signal?: AbortSignal,
+): Promise<ApiClientResult<string[]>> => {
+    const params = new URLSearchParams();
+    for (const id of organizationIds.slice(0, 100)) params.append('organization', id);
+    const result = parseWith(
+        z.object({ eligibleOrganizationIds: z.array(z.string()) }),
+        await requestJson('/support/recipients', params, signal),
+        'Recipient response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.eligibleOrganizationIds } : result;
+};
+
+export const fetchOrganizationPaymentsViaApi = async (
+    organizationId: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<OrganizationPayments>> =>
+    parseWith(
+        organizationPaymentsSchema,
+        await requestJson('/organizations/payments', new URLSearchParams({ organization: organizationId }), signal),
+        'Organization payments response was malformed.',
+    );
+
+export const startOrganizationOnboardingViaApi = async (
+    organizationId: string,
+): Promise<ApiClientResult<{ url: string }>> =>
+    parseWith(
+        z.object({ url: z.string().url().startsWith('https://') }),
+        await requestJsonPost('/organizations/payments/onboarding', { organizationId }),
+        'Onboarding response was malformed.',
     );
 
 export const fetchAccountSupportViaApi = async (

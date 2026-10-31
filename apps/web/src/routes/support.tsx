@@ -8,11 +8,15 @@ import { Surface } from '../components/Surface';
 import {
     createSupportCheckoutViaApi,
     fetchAccountSupportViaApi,
+    fetchOrganizationPaymentsViaApi,
     fetchSupportCheckoutViaApi,
     fetchSupportOptionsViaApi,
     openSupportPortalViaApi,
+    startOrganizationOnboardingViaApi,
     type AccountSupport,
+    type OrganizationPayments,
     type SupportCheckoutRequest,
+    type SupportRecipient,
     type SupportCheckoutStatus,
     type SupportOptions,
 } from '../features/api-client';
@@ -71,16 +75,10 @@ const ReceiptNotice = ({ options }: { options: SupportOptions }) => {
     );
 };
 
-export const SupportRoute = () => {
-    const { t } = useLocale();
-    const money = useMoney();
+/** Load giving options once; undefined while loading, null when unavailable. */
+export const useSupportOptions = (): { options: SupportOptions | undefined; loadFailed: boolean } => {
     const [options, setOptions] = useState<SupportOptions>();
     const [loadFailed, setLoadFailed] = useState(false);
-    const [mode, setMode] = useState<'one-time' | 'monthly'>('one-time');
-    const [amountText, setAmountText] = useState('25');
-    const [amountError, setAmountError] = useState<string>();
-    const checkout = useCheckout();
-
     useEffect(() => {
         const controller = new AbortController();
         void fetchSupportOptionsViaApi(controller.signal).then((result) => {
@@ -90,6 +88,140 @@ export const SupportRoute = () => {
         });
         return () => controller.abort();
     }, []);
+    return { options, loadFailed };
+};
+
+/** One-time or monthly gift to a single recipient, ending in Stripe Checkout. */
+const GivingForm = ({
+    options,
+    recipient,
+    idPrefix,
+}: {
+    options: SupportOptions;
+    recipient: SupportRecipient;
+    idPrefix: string;
+}) => {
+    const { t } = useLocale();
+    const money = useMoney();
+    const [mode, setMode] = useState<'one-time' | 'monthly'>('one-time');
+    const [amountText, setAmountText] = useState('25');
+    const [amountError, setAmountError] = useState<string>();
+    const checkout = useCheckout();
+
+    const limits = { min: money(options.oneTime.minMinor), max: money(options.oneTime.maxMinor) };
+    const amountMinor = parseDollarsToMinor(amountText);
+    const amountValid =
+        amountMinor !== undefined &&
+        amountMinor >= options.oneTime.minMinor &&
+        amountMinor <= options.oneTime.maxMinor;
+    const amountId = `${idPrefix}-amount`;
+
+    const submitOneTime = () => {
+        if (!amountValid) {
+            setAmountError(String(t('support.oneTime.invalidAmount', limits)));
+            return;
+        }
+        setAmountError(undefined);
+        void checkout.start({ recipient, mode: 'one-time', amountMinor: amountMinor! });
+    };
+
+    return (
+        <div className='space-y-4'>
+            {options.mode === 'test' ? <Banner tone='warning'>{t('support.testMode')}</Banner> : null}
+            <SegmentedControl
+                label={String(t('support.mode.label'))}
+                value={mode}
+                onChange={setMode}
+                options={[
+                    { value: 'one-time', label: t('support.mode.oneTime') },
+                    { value: 'monthly', label: t('support.mode.monthly') },
+                ]}
+            />
+            {mode === 'one-time' ? (
+                <form
+                    className='space-y-3'
+                    aria-label={String(t('support.oneTime.title'))}
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        submitOneTime();
+                    }}
+                >
+                    <div className='flex flex-wrap gap-2'>
+                        {options.oneTime.suggestedMinor.map((suggested) => (
+                            <Button
+                                key={suggested}
+                                variant={amountMinor === suggested ? 'primary' : 'secondary'}
+                                size='sm'
+                                aria-pressed={amountMinor === suggested}
+                                onClick={() => {
+                                    setAmountText(String(suggested / 100));
+                                    setAmountError(undefined);
+                                }}
+                            >
+                                {money(suggested)}
+                            </Button>
+                        ))}
+                    </div>
+                    <label className='block text-sm font-bold' htmlFor={amountId}>
+                        {t('support.oneTime.amountLabel')}
+                    </label>
+                    <input
+                        id={amountId}
+                        className='mh-input w-full max-w-xs px-3 py-2'
+                        inputMode='decimal'
+                        autoComplete='off'
+                        value={amountText}
+                        aria-describedby={`${amountId}-hint`}
+                        aria-invalid={amountError ? true : undefined}
+                        onChange={(event) => setAmountText(event.target.value)}
+                    />
+                    <p id={`${amountId}-hint`} className='text-xs text-mh-textMuted'>
+                        {t('support.oneTime.amountHint', limits)}
+                    </p>
+                    {amountError ? <StatusMessage message={`${t('common.error')}: ${amountError}`} /> : null}
+                    <Button type='submit' disabled={checkout.pending}>
+                        {checkout.pending ?
+                            t('support.redirecting')
+                        :   t('support.oneTime.submit', {
+                                amount: amountValid ? money(amountMinor!) : '',
+                            })}
+                    </Button>
+                </form>
+            ) : (
+                <div className='space-y-3'>
+                    <ul className='grid gap-3 sm:grid-cols-3' aria-label={String(t('support.monthly.title'))}>
+                        {options.tiers.map((tier) => (
+                            <li key={tier.key}>
+                                <Surface as='article' tone='plain' title={t(tier.nameKey)} headingLevel='h3'>
+                                    <p className='text-lg font-bold'>
+                                        {t('support.monthly.perMonth', { amount: money(tier.amountMinor) })}
+                                    </p>
+                                    <p className='mt-1 text-sm text-mh-textMuted'>{t(tier.descriptionKey)}</p>
+                                    <Button
+                                        className='mt-3'
+                                        size='sm'
+                                        disabled={checkout.pending}
+                                        onClick={() => void checkout.start({ recipient, mode: 'monthly', tierKey: tier.key })}
+                                    >
+                                        {t('support.monthly.choose', { name: t(tier.nameKey) })}
+                                    </Button>
+                                </Surface>
+                            </li>
+                        ))}
+                    </ul>
+                    <p className='text-sm text-mh-textMuted'>{t('support.monthly.recognition')}</p>
+                    <p className='text-sm text-mh-textMuted'>{t('support.monthly.cancelAnytime')}</p>
+                </div>
+            )}
+            {checkout.error ? <StatusMessage message={checkout.error} /> : null}
+            <p className='text-sm text-mh-textMuted'>{t('support.stripeNotice')}</p>
+        </div>
+    );
+};
+
+export const SupportRoute = () => {
+    const { t } = useLocale();
+    const { options, loadFailed } = useSupportOptions();
 
     const header = (
         <PageHeader
@@ -120,123 +252,153 @@ export const SupportRoute = () => {
         );
     }
 
-    const limits = { min: money(options.oneTime.minMinor), max: money(options.oneTime.maxMinor) };
-    const amountMinor = parseDollarsToMinor(amountText);
-    const amountValid =
-        amountMinor !== undefined &&
-        amountMinor >= options.oneTime.minMinor &&
-        amountMinor <= options.oneTime.maxMinor;
-
-    const submitOneTime = () => {
-        if (!amountValid) {
-            setAmountError(String(t('support.oneTime.invalidAmount', limits)));
-            return;
-        }
-        setAmountError(undefined);
-        void checkout.start({ recipient: 'general-fund', mode: 'one-time', amountMinor: amountMinor! });
-    };
-
     return (
         <section className='space-y-6'>
             {header}
-            {options.mode === 'test' ? <Banner tone='warning'>{t('support.testMode')}</Banner> : null}
             <Surface title={t('support.mode.label')}>
-                <div className='space-y-4'>
-                    <SegmentedControl
-                        label={String(t('support.mode.label'))}
-                        value={mode}
-                        onChange={setMode}
-                        options={[
-                            { value: 'one-time', label: t('support.mode.oneTime') },
-                            { value: 'monthly', label: t('support.mode.monthly') },
-                        ]}
-                    />
-                    {mode === 'one-time' ? (
-                        <form
-                            className='space-y-3'
-                            aria-label={String(t('support.oneTime.title'))}
-                            onSubmit={(event) => {
-                                event.preventDefault();
-                                submitOneTime();
-                            }}
-                        >
-                            <div className='flex flex-wrap gap-2'>
-                                {options.oneTime.suggestedMinor.map((suggested) => (
-                                    <Button
-                                        key={suggested}
-                                        variant={amountMinor === suggested ? 'primary' : 'secondary'}
-                                        size='sm'
-                                        aria-pressed={amountMinor === suggested}
-                                        onClick={() => {
-                                            setAmountText(String(suggested / 100));
-                                            setAmountError(undefined);
-                                        }}
-                                    >
-                                        {money(suggested)}
-                                    </Button>
-                                ))}
-                            </div>
-                            <label className='block text-sm font-bold' htmlFor='support-amount'>
-                                {t('support.oneTime.amountLabel')}
-                            </label>
-                            <input
-                                id='support-amount'
-                                className='mh-input w-full max-w-xs px-3 py-2'
-                                inputMode='decimal'
-                                autoComplete='off'
-                                value={amountText}
-                                aria-describedby='support-amount-hint'
-                                aria-invalid={amountError ? true : undefined}
-                                onChange={(event) => setAmountText(event.target.value)}
-                            />
-                            <p id='support-amount-hint' className='text-xs text-mh-textMuted'>
-                                {t('support.oneTime.amountHint', limits)}
-                            </p>
-                            {amountError ? <StatusMessage message={`${t('common.error')}: ${amountError}`} /> : null}
-                            <Button type='submit' disabled={checkout.pending}>
-                                {checkout.pending ?
-                                    t('support.redirecting')
-                                :   t('support.oneTime.submit', {
-                                        amount: amountValid ? money(amountMinor!) : '',
-                                    })}
-                            </Button>
-                        </form>
-                    ) : (
-                        <div className='space-y-3'>
-                            <ul className='grid gap-3 sm:grid-cols-3' aria-label={String(t('support.monthly.title'))}>
-                                {options.tiers.map((tier) => (
-                                    <li key={tier.key}>
-                                        <Surface as='article' tone='plain' title={t(tier.nameKey)} headingLevel='h3'>
-                                            <p className='text-lg font-bold'>
-                                                {t('support.monthly.perMonth', { amount: money(tier.amountMinor) })}
-                                            </p>
-                                            <p className='mt-1 text-sm text-mh-textMuted'>{t(tier.descriptionKey)}</p>
-                                            <Button
-                                                className='mt-3'
-                                                size='sm'
-                                                disabled={checkout.pending}
-                                                onClick={() => void checkout.start({
-                                                    recipient: 'general-fund',
-                                                    mode: 'monthly',
-                                                    tierKey: tier.key,
-                                                })}
-                                            >
-                                                {t('support.monthly.choose', { name: t(tier.nameKey) })}
-                                            </Button>
-                                        </Surface>
-                                    </li>
-                                ))}
-                            </ul>
-                            <p className='text-sm text-mh-textMuted'>{t('support.monthly.recognition')}</p>
-                            <p className='text-sm text-mh-textMuted'>{t('support.monthly.cancelAnytime')}</p>
-                        </div>
-                    )}
-                    {checkout.error ? <StatusMessage message={checkout.error} /> : null}
-                    <p className='text-sm text-mh-textMuted'>{t('support.stripeNotice')}</p>
+                <div className='space-y-3'>
+                    <GivingForm options={options} recipient='general-fund' idPrefix='support' />
                     <ReceiptNotice options={options} />
                 </div>
             </Surface>
         </section>
+    );
+};
+
+/**
+ * Donate control on an organization card. The gift goes directly to the
+ * organization's own Stripe account; Patchwork makes no tax claim for it.
+ */
+export const OrganizationDonate = ({
+    organizationId,
+    organizationName,
+    options,
+}: {
+    organizationId: string;
+    organizationName: string;
+    options: SupportOptions;
+}) => {
+    const { t } = useLocale();
+    const [open, setOpen] = useState(false);
+    const panelId = `donate-${organizationId}`;
+    return (
+        <div className='mt-3'>
+            <Button
+                size='sm'
+                variant={open ? 'neutral' : 'primary'}
+                aria-expanded={open}
+                aria-controls={panelId}
+                onClick={() => setOpen((value) => !value)}
+            >
+                {open ? t('support.organization.close') : t('support.organization.donate')}
+            </Button>
+            {open ? (
+                <div id={panelId} className='mt-3 space-y-3' role='group' aria-label={String(t('support.organization.label', { name: organizationName }))}>
+                    <p className='text-sm'>{t('support.organization.direct', { name: organizationName })}</p>
+                    <p className='text-sm text-mh-textMuted'>{t('support.boundary')}</p>
+                    <GivingForm options={options} recipient={{ organizationId }} idPrefix={panelId} />
+                </div>
+            ) : null}
+        </div>
+    );
+};
+
+const formatMonth = (month: string, locale: string): string => {
+    const [year, monthNumber] = month.split('-').map(Number);
+    return new Intl.DateTimeFormat(locale === 'es' ? 'es-US' : 'en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+        .format(new Date(Date.UTC(year!, monthNumber! - 1, 1)));
+};
+
+/** Stripe onboarding status and giving totals for organization owners and admins. */
+export const OrganizationPaymentsPanel = ({ organizationId }: { organizationId: string }) => {
+    const { t, locale } = useLocale();
+    const money = useMoney();
+    const [payments, setPayments] = useState<OrganizationPayments>();
+    const [statusMessage, setStatusMessage] = useState<string>();
+    const [starting, setStarting] = useState(false);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        setPayments(undefined);
+        setStatusMessage(undefined);
+        void fetchOrganizationPaymentsViaApi(organizationId, controller.signal).then((result) => {
+            if (controller.signal.aborted) return;
+            if (result.ok) setPayments(result.data);
+            else setStatusMessage(`${t('common.error')}: ${t('support.payments.loadFailed')}`);
+        });
+        return () => controller.abort();
+    }, [organizationId, t]);
+
+    const startOnboarding = async () => {
+        setStarting(true);
+        setStatusMessage(undefined);
+        const result = await startOrganizationOnboardingViaApi(organizationId);
+        if (!result.ok) {
+            setStarting(false);
+            setStatusMessage(`${t('common.error')}: ${
+                result.code === 'ORGANIZATION_NOT_VERIFIED' ? t('support.payments.needsVerification')
+                : result.code === 'ORGANIZATION_PAYMENTS_UNAVAILABLE' ? t('support.payments.unavailable')
+                : result.code === 'PAYMENT_RECIPIENT_SUSPENDED' ? t('support.payments.suspended')
+                : t('support.payments.stripeFailed')
+            }`);
+            return;
+        }
+        window.location.assign(result.data.url);
+    };
+
+    const stateText = !payments ? undefined
+        : payments.status === 'suspended' ? t('support.payments.suspended')
+        : !payments.verified ? t('support.payments.needsVerification')
+        : payments.status === 'not-started' ? t('support.payments.notStarted')
+        : !payments.chargesEnabled ? t('support.payments.onboarding')
+        : payments.eligible ? t('support.payments.active')
+        : t('support.payments.unavailable');
+    const canOnboard = payments && payments.verified && payments.status !== 'suspended' && !payments.chargesEnabled;
+
+    return (
+        <Surface as='article' tone='quiet' title={String(t('support.payments.title'))}>
+            <p className='text-sm text-mh-textMuted'>{t('support.payments.help')}</p>
+            {stateText ? <p className='mt-2 text-sm font-bold' role='status'>{stateText}</p> : null}
+            {payments?.chargesEnabled && !payments.payoutsEnabled ? (
+                <p className='mt-1 text-sm'>{t('support.payments.payoutsPending')}</p>
+            ) : null}
+            <div className='mt-3 flex flex-wrap gap-2'>
+                {canOnboard ? (
+                    <Button size='sm' disabled={starting} onClick={() => void startOnboarding()}>
+                        {payments.status === 'not-started' ? t('support.payments.start') : t('support.payments.continue')}
+                    </Button>
+                ) : null}
+                {payments?.dashboardUrl ? (
+                    <ButtonLink variant='secondary' size='sm' href={payments.dashboardUrl} target='_blank' rel='noreferrer'>
+                        {t('support.payments.dashboard')}
+                    </ButtonLink>
+                ) : null}
+            </div>
+            {payments && payments.status !== 'not-started' ? (
+                <div className='mt-3 text-sm'>
+                    <p>{t('support.payments.monthly', {
+                        count: payments.activeMonthlySupporters,
+                        amount: money(payments.monthlyRecurringMinor),
+                    })}</p>
+                    {payments.months.length ? (
+                        <ul className='mt-1 space-y-1'>
+                            {payments.months.map((month) => (
+                                <li key={month.month}>
+                                    {t('support.payments.month', {
+                                        month: formatMonth(month.month, locale),
+                                        count: month.giftCount,
+                                        amount: money(month.giftTotalMinor),
+                                    })}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className='mt-1 text-mh-textMuted'>{t('support.payments.noGifts')}</p>
+                    )}
+                </div>
+            ) : null}
+            {statusMessage ? <StatusMessage className='mt-2' message={statusMessage} /> : null}
+        </Surface>
     );
 };
 
@@ -356,10 +518,10 @@ export const SupportingSection = () => {
         return () => controller.abort();
     }, []);
 
-    const openPortal = async () => {
+    const openPortal = async (recipientId: string) => {
         setOpening(true);
         setPortalStatus(undefined);
-        const result = await openSupportPortalViaApi();
+        const result = await openSupportPortalViaApi(recipientId);
         if (!result.ok) {
             setOpening(false);
             setPortalStatus(`${t('common.error')}: ${t('support.account.portalFailed')}`);
@@ -412,16 +574,24 @@ export const SupportingSection = () => {
                 </>
             ) : null}
             <div className='mt-3 flex flex-wrap items-center gap-2'>
-                {support?.canManage ? (
-                    <Button variant='secondary' size='sm' disabled={opening} onClick={() => void openPortal()}>
-                        {t('support.account.manage')}
+                {support?.manageable.map((recipient) => (
+                    <Button
+                        key={recipient.recipientId}
+                        variant='secondary'
+                        size='sm'
+                        disabled={opening}
+                        onClick={() => void openPortal(recipient.recipientId)}
+                    >
+                        {support.manageable.length > 1 ?
+                            t('support.account.manageFor', { name: recipient.recipientName })
+                        :   t('support.account.manage')}
                     </Button>
-                ) : null}
+                ))}
                 <ButtonLink variant='neutral' size='sm' href='/support'>
                     {t('support.account.give')}
                 </ButtonLink>
             </div>
-            {support?.canManage ? (
+            {support?.manageable.length ? (
                 <p className='mt-2 text-xs text-mh-textMuted'>{t('support.account.manageHelp')}</p>
             ) : null}
             {portalStatus ? <StatusMessage className='mt-2' message={portalStatus} /> : null}

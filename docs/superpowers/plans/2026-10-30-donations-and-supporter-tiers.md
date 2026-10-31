@@ -150,3 +150,13 @@ The web app adds `/support`, `/support/thanks`, `/support/cancelled` and a Suppo
 
 Payments still default to off. Event processors apply only events received after they are deployed. Subscription renewals do not create per-invoice payment records; the subscription row reflects the current Stripe state. Patchwork sends no receipts or failed-payment notices yet (step 5); Stripe's own emails cover receipts once enabled in the dashboard.
 
+## Step 3 record
+
+Step 3 adds organization giving. Current Stripe documentation (checked 2026-10-30) confirms the account choice. Connected accounts are created with the full Dashboard, `controller.fees.payer=account` and `controller.losses.payments=stripe`, which matches Standard behavior. The organization is the merchant of record for direct charges, pays its own Stripe fees, and Stripe rather than Subcult covers negative balances it cannot recover. Patchwork takes no application fee.
+
+Owners and admins of verified, non-synthetic organizations start onboarding from a Payments panel on the organizations page. Cards show a Donate control only for eligible organizations. The control states that the gift goes directly to the organization and that Patchwork does not decide tax deductibility. Organization admins see aggregate totals only. Donor names wait for the step 4 recognition setting.
+
+Eligibility is checked at checkout, on every Stripe retry, and in a sweep that pauses monthly gifts when an organization stops qualifying. The pause takes effect at the next sweep, not inside the verification transaction. Donor notification of paused gifts is step 5. Moderator suspension is enforced everywhere eligibility is checked, but the moderator commands that set it are step 5; until then suspension is a direct database change.
+
+Step 1 left a defect: deleting an organization with a payment recipient would have violated the closed-recipient check. Migration `0042` fixes it with a trigger. A test covers deletion with an active monthly gift.
+

@@ -2,10 +2,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import type { PaymentEventProcessor } from './payment-webhook-service.js';
+import { eligibleOrganizationRecipientSql } from './recipient-eligibility.js';
 import {
     StripeApiError,
     stripeIdOf,
     stripeIdPatterns,
+    type StripeAccountScope,
     type StripeCheckoutSession,
     type StripeEvent,
     type StripeFormValue,
@@ -96,12 +98,29 @@ export interface AccountSupport {
         currentPeriodEnd: string | null;
         cancelAtPeriodEnd: boolean;
     }>;
-    canManage: boolean;
+    /** Recipients whose Stripe Customer Portal this donor can open. */
+    manageable: Array<{ recipientId: string; recipientName: string }>;
 }
+
+interface ResolvedRecipient {
+    recipientId: string;
+    displayName: string;
+    /** Undefined for the general fund, which charges on the platform account. */
+    stripeAccountId?: string;
+    organizationId?: string;
+}
+
+const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const uuidPatternSource =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 const checkoutRequestSchema = z
     .object({
-        recipient: z.literal('general-fund'),
+        recipient: z.union([
+            z.literal('general-fund'),
+            z.object({ organizationId: z.string().regex(uuidPatternSource) }).strict(),
+        ]),
         mode: z.enum(['one-time', 'monthly']),
         amountMinor: z
             .number()
@@ -122,8 +141,6 @@ const checkoutRequestSchema = z
         :   value.tierKey !== undefined && value.amountMinor === undefined,
     );
 
-const uuidPattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 const checkoutEventTypes = [
     'checkout.session.completed',
@@ -172,6 +189,11 @@ const inTransaction = async <T>(
         client.release();
     }
 };
+
+interface EventRecipient {
+    recipientId: string;
+    scope: StripeAccountScope;
+}
 
 interface CheckoutRow {
     checkout_id: string;
@@ -254,7 +276,9 @@ export class SupportService {
         const requestHash = createHash('sha256')
             .update(JSON.stringify([
                 input.donorDid ?? null,
-                request.recipient,
+                typeof request.recipient === 'string' ?
+                    request.recipient
+                :   `organization:${request.recipient.organizationId}`,
                 request.mode,
                 request.amountMinor ?? null,
                 request.tierKey ?? null,
@@ -283,13 +307,8 @@ export class SupportService {
                 }
                 return { row, replay: false as const };
             }
-            const recipient = await client.query<{ status: string }>(
-                'SELECT status FROM payment_recipients WHERE recipient_id = $1',
-                [GENERAL_FUND_RECIPIENT_ID],
-            );
-            if (recipient.rows[0]?.status !== 'active') {
-                throw new SupportServiceError('RECIPIENT_UNAVAILABLE');
-            }
+            const recipient = await this.resolveRecipient(client, request.recipient);
+            if (!recipient) throw new SupportServiceError('RECIPIENT_UNAVAILABLE');
             let amountMinor = request.amountMinor;
             let tierVersionId: string | null = null;
             if (request.mode === 'monthly') {
@@ -318,7 +337,7 @@ export class SupportService {
                           tier_version_id, donor_did, checkout_url, status, livemode`,
                 [
                     randomUUID(), input.clientKey, requestHash,
-                    GENERAL_FUND_RECIPIENT_ID, request.mode, amountMinor,
+                    recipient.recipientId, request.mode, amountMinor,
                     tierVersionId, input.donorDid ?? null, this.livemode, now,
                 ],
             );
@@ -331,10 +350,14 @@ export class SupportService {
         const row = prepared.row;
         let session: StripeCheckoutSession;
         try {
-            const params = await this.checkoutParams(row);
+            // Recheck on every attempt: eligibility can lapse between retries.
+            const recipient = await this.recipientById(row.recipient_id, true);
+            if (!recipient) throw new SupportServiceError('RECIPIENT_UNAVAILABLE');
+            const params = await this.checkoutParams(row, recipient);
             session = await this.gateway.createCheckoutSession(
                 params,
                 `patchwork-checkout-${row.checkout_id}`,
+                { accountId: recipient.stripeAccountId },
             );
             if (!session.url || session.livemode !== this.livemode || session.status !== 'open') {
                 throw new StripeApiError('INVALID_RESPONSE', false);
@@ -358,11 +381,106 @@ export class SupportService {
         return { checkoutId: row.checkout_id, url: session.url! };
     }
 
-    private async checkoutParams(row: CheckoutRow): Promise<Record<string, StripeFormValue>> {
+    /** Resolve a requested recipient that can receive new gifts now. */
+    private async resolveRecipient(
+        client: PoolClient,
+        requested: 'general-fund' | { organizationId: string },
+    ): Promise<ResolvedRecipient | undefined> {
+        if (requested === 'general-fund') {
+            const result = await client.query<{ display_name: string; status: string }>(
+                'SELECT display_name, status FROM payment_recipients WHERE recipient_id = $1',
+                [GENERAL_FUND_RECIPIENT_ID],
+            );
+            const row = result.rows[0];
+            return row?.status === 'active' ?
+                    { recipientId: GENERAL_FUND_RECIPIENT_ID, displayName: row.display_name }
+                :   undefined;
+        }
+        const result = await client.query<{
+            recipient_id: string;
+            name: string;
+            stripe_account_id: string;
+            organization_id: string;
+        }>(
+            `SELECT r.recipient_id, o.name, r.stripe_account_id, o.organization_id
+               FROM payment_recipients r
+               JOIN organizations o ON o.organization_id = r.organization_id
+              WHERE r.organization_id = $1 AND ${eligibleOrganizationRecipientSql}`,
+            [requested.organizationId],
+        );
+        const row = result.rows[0];
+        return row ?
+                {
+                    recipientId: row.recipient_id,
+                    displayName: row.name,
+                    stripeAccountId: row.stripe_account_id,
+                    organizationId: row.organization_id,
+                }
+            :   undefined;
+    }
+
+    private async recipientById(
+        recipientId: string,
+        requireEligible: boolean,
+    ): Promise<ResolvedRecipient | undefined> {
+        if (recipientId === GENERAL_FUND_RECIPIENT_ID) {
+            const client = await this.pool.connect();
+            try {
+                return requireEligible ?
+                        await this.resolveRecipient(client, 'general-fund')
+                    :   { recipientId, displayName: 'Patchwork general fund' };
+            } finally {
+                client.release();
+            }
+        }
+        const result = await this.pool.query<{
+            recipient_id: string;
+            display_name: string;
+            stripe_account_id: string | null;
+            organization_id: string | null;
+            eligible: boolean;
+        }>(
+            `SELECT r.recipient_id, COALESCE(o.name, r.display_name) AS display_name,
+                    r.stripe_account_id, r.organization_id,
+                    COALESCE(o.organization_id IS NOT NULL AND ${eligibleOrganizationRecipientSql}, FALSE) AS eligible
+               FROM payment_recipients r
+               LEFT JOIN organizations o ON o.organization_id = r.organization_id
+              WHERE r.recipient_id = $1`,
+            [recipientId],
+        );
+        const row = result.rows[0];
+        if (!row?.stripe_account_id || (requireEligible && !row.eligible)) return undefined;
+        return {
+            recipientId: row.recipient_id,
+            displayName: row.display_name,
+            stripeAccountId: row.stripe_account_id,
+            ...(row.organization_id ? { organizationId: row.organization_id } : {}),
+        };
+    }
+
+    /** Organization IDs (from the given list) that can receive gifts now. */
+    async listEligibleOrganizations(organizationIds: readonly string[]): Promise<string[]> {
+        const ids = [...new Set(organizationIds)].filter(id => uuidPattern.test(id)).slice(0, 100);
+        if (ids.length === 0 || this.options.paymentsMode === 'off') return [];
+        const result = await this.pool.query<{ organization_id: string }>(
+            `SELECT o.organization_id
+               FROM payment_recipients r
+               JOIN organizations o ON o.organization_id = r.organization_id
+              WHERE r.organization_id = ANY($1::uuid[]) AND ${eligibleOrganizationRecipientSql}`,
+            [ids],
+        );
+        return result.rows.map(row => row.organization_id).sort();
+    }
+
+    private async checkoutParams(
+        row: CheckoutRow,
+        recipient: ResolvedRecipient,
+    ): Promise<Record<string, StripeFormValue>> {
         const origin = this.options.publicWebOrigin;
         const metadata = {
             patchwork_checkout_id: row.checkout_id,
-            patchwork_recipient: 'general-fund',
+            patchwork_recipient:
+                recipient.organizationId ? `organization:${recipient.organizationId}` : 'general-fund',
         };
         const customer = row.donor_did ?
             await this.customerFor(row.donor_did, row.recipient_id)
@@ -385,13 +503,17 @@ export class SupportService {
                     price_data: {
                         currency: 'usd',
                         unit_amount: row.amount_minor,
-                        product_data: { name: 'Gift to the Patchwork general fund' },
+                        product_data: {
+                            name: recipient.organizationId ?
+                                `Gift to ${recipient.displayName}`.slice(0, 250)
+                            :   'Gift to the Patchwork general fund',
+                        },
                     },
                 }],
                 payment_intent_data: { metadata },
             };
         }
-        const priceId = await this.ensureMonthlyPrice(row.tier_version_id!, row.recipient_id);
+        const priceId = await this.ensureMonthlyPrice(row.tier_version_id!, recipient);
         return {
             ...common,
             mode: 'subscription',
@@ -409,7 +531,8 @@ export class SupportService {
         return result.rows[0]?.stripe_customer_id;
     }
 
-    private async ensureMonthlyPrice(tierVersionId: string, recipientId: string): Promise<string> {
+    private async ensureMonthlyPrice(tierVersionId: string, recipient: ResolvedRecipient): Promise<string> {
+        const { recipientId } = recipient;
         const lookup = () =>
             this.pool.query<{ stripe_price_id: string }>(
                 `SELECT stripe_price_id FROM supporter_tier_prices
@@ -433,13 +556,14 @@ export class SupportService {
             {
                 amountMinor: tier.amount_minor,
                 currency: 'usd',
-                productName: `Patchwork general fund monthly support (${tier.tier_key} v${tier.version})`,
+                productName: `${recipient.organizationId ? recipient.displayName : 'Patchwork general fund'} monthly support (${tier.tier_key} v${tier.version})`.slice(0, 250),
                 metadata: {
                     patchwork_tier_version_id: tierVersionId,
                     patchwork_recipient_id: recipientId,
                 },
             },
             `patchwork-price-${tierVersionId}-${recipientId}`,
+            { accountId: recipient.stripeAccountId },
         );
         await this.pool.query(
             `INSERT INTO supporter_tier_prices (tier_version_id, recipient_id, stripe_price_id, created_at)
@@ -482,15 +606,23 @@ export class SupportService {
         };
     }
 
-    /** Portal access stays available with payments off so donors can cancel. */
-    async createPortalSession(donorDid: string): Promise<{ url: string }> {
-        const customer = await this.customerFor(donorDid, GENERAL_FUND_RECIPIENT_ID);
-        if (!customer) throw new SupportServiceError('NO_SUPPORT_ACCOUNT');
+    /**
+     * Portal access stays available with payments off, and for recipients
+     * that are no longer eligible, so donors can always cancel.
+     */
+    async createPortalSession(
+        donorDid: string,
+        recipientId = GENERAL_FUND_RECIPIENT_ID,
+    ): Promise<{ url: string }> {
+        if (!uuidPattern.test(recipientId)) throw new SupportServiceError('NO_SUPPORT_ACCOUNT');
+        const customer = await this.customerFor(donorDid, recipientId);
+        const recipient = customer ? await this.recipientById(recipientId, false) : undefined;
+        if (!customer || !recipient) throw new SupportServiceError('NO_SUPPORT_ACCOUNT');
         try {
-            return await this.gateway.createBillingPortalSession({
-                customer,
-                returnUrl: `${this.options.publicWebOrigin}/settings`,
-            });
+            return await this.gateway.createBillingPortalSession(
+                { customer, returnUrl: `${this.options.publicWebOrigin}/settings` },
+                { accountId: recipient.stripeAccountId },
+            );
         } catch {
             throw new SupportServiceError('CHECKOUT_UNAVAILABLE');
         }
@@ -533,9 +665,14 @@ export class SupportService {
                   LIMIT 100`,
                 [donorDid],
             ),
-            this.pool.query(
-                `SELECT 1 FROM donor_accounts WHERE donor_did = $1 AND recipient_id = $2`,
-                [donorDid, GENERAL_FUND_RECIPIENT_ID],
+            this.pool.query<{ recipient_id: string; display_name: string }>(
+                `SELECT a.recipient_id, COALESCE(o.name, r.display_name) AS display_name
+                   FROM donor_accounts a
+                   JOIN payment_recipients r ON r.recipient_id = a.recipient_id
+                   LEFT JOIN organizations o ON o.organization_id = r.organization_id
+                  WHERE a.donor_did = $1
+                  ORDER BY r.kind DESC, display_name, a.recipient_id`,
+                [donorDid],
             ),
         ]);
         return {
@@ -558,45 +695,80 @@ export class SupportService {
                 currentPeriodEnd: iso(row.current_period_end),
                 cancelAtPeriodEnd: row.cancel_at_period_end,
             })),
-            canManage: (accounts.rowCount ?? 0) > 0,
+            manageable: accounts.rows.map(row => ({
+                recipientId: row.recipient_id,
+                recipientName: row.display_name,
+            })),
         };
     }
 
     /**
-     * Webhook processors for platform-account events. Connected-account
-     * events are left for organization support (step 3) and are a no-op here.
+     * Webhook processors. Platform events apply to the general fund; Connect
+     * events apply only to the recipient that owns the delivering account,
+     * and every object is re-fetched from that same account.
      */
     processors(): Map<string, PaymentEventProcessor> {
-        const platformOnly = (processor: PaymentEventProcessor): PaymentEventProcessor =>
+        const scoped = (
+            processor: (event: StripeEvent, client: PoolClient, recipient: EventRecipient) => Promise<void>,
+        ): PaymentEventProcessor =>
             async (event, client) => {
-                if (event.account) return;
-                await processor(event, client);
+                const recipient = await this.recipientForEvent(client, event);
+                if (recipient) await processor(event, client, recipient);
             };
         const processors = new Map<string, PaymentEventProcessor>();
         for (const type of checkoutEventTypes) {
-            processors.set(type, platformOnly((event, client) => this.applyCheckoutEvent(event, client)));
+            processors.set(type, scoped((event, client, recipient) => this.applyCheckoutEvent(event, client, recipient)));
         }
         for (const type of [...subscriptionEventTypes, ...invoiceEventTypes]) {
-            processors.set(type, platformOnly((event, client) => this.applySubscriptionEvent(event, client)));
+            processors.set(type, scoped((event, client, recipient) => this.applySubscriptionEvent(event, client, recipient)));
         }
-        processors.set('charge.refunded', platformOnly((event, client) => this.applyRefund(event, client)));
+        processors.set('charge.refunded', scoped((event, client, recipient) => this.applyRefund(event, client, recipient)));
         for (const type of disputeEventTypes) {
-            processors.set(type, platformOnly((event, client) => this.applyDispute(event, client)));
+            processors.set(type, scoped((event, client, recipient) => this.applyDispute(event, client, recipient)));
         }
+        processors.set('account.updated', (event, client) => this.applyAccountUpdate(event, client));
         return processors;
     }
 
-    private async applyCheckoutEvent(event: StripeEvent, client: PoolClient): Promise<void> {
+    private async recipientForEvent(client: PoolClient, event: StripeEvent): Promise<EventRecipient | undefined> {
+        if (!event.account) return { recipientId: GENERAL_FUND_RECIPIENT_ID, scope: {} };
+        const result = await client.query<{ recipient_id: string }>(
+            'SELECT recipient_id FROM payment_recipients WHERE stripe_account_id = $1',
+            [event.account],
+        );
+        const row = result.rows[0];
+        return row ? { recipientId: row.recipient_id, scope: { accountId: event.account } } : undefined;
+    }
+
+    /** Mirror onboarding progress; suspended and closed recipients keep their status. */
+    private async applyAccountUpdate(event: StripeEvent, client: PoolClient): Promise<void> {
+        if (!event.account) return;
+        const account = await this.gateway.retrieveConnectedAccount(event.account);
+        await client.query(
+            `UPDATE payment_recipients SET
+                charges_enabled = $2, payouts_enabled = $3, details_submitted = $4,
+                status = CASE WHEN status = 'onboarding' AND $2 THEN 'active' ELSE status END,
+                account_synced_at = NOW(), updated_at = NOW()
+              WHERE stripe_account_id = $1 AND kind = 'organization'`,
+            [account.id, account.chargesEnabled, account.payoutsEnabled, account.detailsSubmitted],
+        );
+    }
+
+    private async applyCheckoutEvent(
+        event: StripeEvent,
+        client: PoolClient,
+        recipient: EventRecipient,
+    ): Promise<void> {
         const sessionId = stripeIdOf(event.data.object['id'], stripeIdPatterns.checkoutSession);
         if (!sessionId) throw processorError('INVALID_EVENT_OBJECT');
-        const session = await this.gateway.retrieveCheckoutSession(sessionId);
+        const session = await this.gateway.retrieveCheckoutSession(sessionId, recipient.scope);
         const found = await client.query<CheckoutRow>(
             `SELECT checkout_id, request_hash, recipient_id, mode, amount_minor,
                     tier_version_id, donor_did, checkout_url, status, livemode
                FROM payment_checkout_sessions
-              WHERE stripe_checkout_session_id = $1
+              WHERE stripe_checkout_session_id = $1 AND recipient_id = $2
               FOR UPDATE`,
-            [session.id],
+            [session.id, recipient.recipientId],
         );
         const row = found.rows[0];
         if (!row) return; // Not a Patchwork Checkout.
@@ -641,12 +813,16 @@ export class SupportService {
             return;
         }
         if (session.subscription) {
-            const subscription = await this.gateway.retrieveSubscription(session.subscription);
-            await this.syncSubscription(client, subscription, now);
+            const subscription = await this.gateway.retrieveSubscription(session.subscription, recipient.scope);
+            await this.syncSubscription(client, subscription, now, recipient);
         }
     }
 
-    private async applySubscriptionEvent(event: StripeEvent, client: PoolClient): Promise<void> {
+    private async applySubscriptionEvent(
+        event: StripeEvent,
+        client: PoolClient,
+        recipient: EventRecipient,
+    ): Promise<void> {
         const object = event.data.object;
         const subscriptionId = event.type.startsWith('invoice.') ?
             stripeIdOf(object['subscription'], stripeIdPatterns.subscription) ??
@@ -657,14 +833,15 @@ export class SupportService {
             )
         :   stripeIdOf(object['id'], stripeIdPatterns.subscription);
         if (!subscriptionId) return; // One-off invoices are not supporter subscriptions.
-        const subscription = await this.gateway.retrieveSubscription(subscriptionId);
-        await this.syncSubscription(client, subscription, new Date());
+        const subscription = await this.gateway.retrieveSubscription(subscriptionId, recipient.scope);
+        await this.syncSubscription(client, subscription, new Date(), recipient);
     }
 
     private async syncSubscription(
         client: PoolClient,
         subscription: StripeSubscription,
         fetchedAt: Date,
+        recipient: EventRecipient,
     ): Promise<void> {
         if (!subscriptionStatuses.has(subscription.status)) {
             throw processorError('UNKNOWN_SUBSCRIPTION_STATUS');
@@ -675,14 +852,14 @@ export class SupportService {
                 `SELECT checkout_id, request_hash, recipient_id, mode, amount_minor,
                         tier_version_id, donor_did, checkout_url, status, livemode
                    FROM payment_checkout_sessions
-                  WHERE checkout_id = $1 AND mode = 'monthly'`,
-                [checkoutId],
+                  WHERE checkout_id = $1 AND mode = 'monthly' AND recipient_id = $2`,
+                [checkoutId, recipient.recipientId],
             )).rows[0]
         :   undefined;
         if (!checkout) {
             const known = await client.query(
-                'SELECT 1 FROM supporter_subscriptions WHERE stripe_subscription_id = $1',
-                [subscription.id],
+                'SELECT 1 FROM supporter_subscriptions WHERE stripe_subscription_id = $1 AND recipient_id = $2',
+                [subscription.id, recipient.recipientId],
             );
             if (known.rowCount === 0) return; // Not a Patchwork subscription.
         }
@@ -728,10 +905,11 @@ export class SupportService {
                 status = $2, current_period_end = $3, cancel_at_period_end = $4,
                 paused_reason = CASE WHEN $5 THEN COALESCE(paused_reason, 'donor') END,
                 stripe_state_at = $6, updated_at = $6
-              WHERE stripe_subscription_id = $1 AND stripe_state_at <= $6`,
+              WHERE stripe_subscription_id = $1 AND stripe_state_at <= $6 AND recipient_id = $7`,
             [
                 subscription.id, subscription.status, periodEnd,
                 subscription.cancelAtPeriodEnd, subscription.collectionPaused, fetchedAt,
+                recipient.recipientId,
             ],
         );
     }
@@ -754,32 +932,32 @@ export class SupportService {
         );
     }
 
-    private async applyRefund(event: StripeEvent, client: PoolClient): Promise<void> {
+    private async applyRefund(event: StripeEvent, client: PoolClient, recipient: EventRecipient): Promise<void> {
         const chargeId = stripeIdOf(event.data.object['id'], stripeIdPatterns.charge);
         if (!chargeId) throw processorError('INVALID_EVENT_OBJECT');
-        const charge = await this.gateway.retrieveCharge(chargeId);
+        const charge = await this.gateway.retrieveCharge(chargeId, recipient.scope);
         // Partial refunds leave the gift recorded as succeeded.
         if (!charge.refunded || !charge.paymentIntent) return;
         await client.query(
             `UPDATE donations SET status = 'refunded', updated_at = NOW()
-              WHERE stripe_payment_intent_id = $1 AND status <> 'refunded'`,
-            [charge.paymentIntent],
+              WHERE stripe_payment_intent_id = $1 AND status <> 'refunded' AND recipient_id = $2`,
+            [charge.paymentIntent, recipient.recipientId],
         );
     }
 
-    private async applyDispute(event: StripeEvent, client: PoolClient): Promise<void> {
+    private async applyDispute(event: StripeEvent, client: PoolClient, recipient: EventRecipient): Promise<void> {
         const disputeId = stripeIdOf(event.data.object['id'], stripeIdPatterns.dispute);
         if (!disputeId) throw processorError('INVALID_EVENT_OBJECT');
-        const dispute = await this.gateway.retrieveDispute(disputeId);
+        const dispute = await this.gateway.retrieveDispute(disputeId, recipient.scope);
         if (!dispute.paymentIntent) return;
         const resolvedForDonee = dispute.status === 'won' || dispute.status === 'warning_closed';
         await client.query(
             resolvedForDonee ?
                 `UPDATE donations SET status = 'succeeded', updated_at = NOW()
-                  WHERE stripe_payment_intent_id = $1 AND status = 'disputed'`
+                  WHERE stripe_payment_intent_id = $1 AND status = 'disputed' AND recipient_id = $2`
             :   `UPDATE donations SET status = 'disputed', updated_at = NOW()
-                  WHERE stripe_payment_intent_id = $1 AND status = 'succeeded'`,
-            [dispute.paymentIntent],
+                  WHERE stripe_payment_intent_id = $1 AND status = 'succeeded' AND recipient_id = $2`,
+            [dispute.paymentIntent, recipient.recipientId],
         );
     }
 }

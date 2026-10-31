@@ -121,6 +121,7 @@ import {
 import { PaymentWebhookService } from './payments/payment-webhook-service.js';
 import { HttpStripeGateway } from './payments/stripe-gateway.js';
 import { SupportService } from './payments/support-service.js';
+import { OrganizationPaymentsService } from './payments/organization-payments-service.js';
 import {
     createSupportHandler,
     isSupportRoute,
@@ -403,6 +404,13 @@ const supportService =
                     }
                 :   {}),
             },
+        })
+    :   undefined;
+const organizationPaymentsService =
+    postgresPool && stripeGateway ?
+        new OrganizationPaymentsService(postgresPool, stripeGateway, {
+            paymentsMode: config.PATCHWORK_PAYMENTS_MODE,
+            publicWebOrigin: config.API_PUBLIC_ORIGIN.replace(/\/$/, ''),
         })
     :   undefined;
 const paymentWebhookService =
@@ -848,12 +856,18 @@ let paymentWebhookOldestPendingSeconds = 0;
 let paymentWebhookSweepFailuresTotal = 0;
 const paymentWebhookSignatureFailuresTotal = { platform: 0, connect: 0 };
 let paymentWebhookSweepRunning = false;
+let paymentEligibilityPauseFailuresTotal = 0;
 
 const runPaymentWebhookSweep = async (): Promise<void> => {
     if (!paymentWebhookService || paymentWebhookSweepRunning) return;
     paymentWebhookSweepRunning = true;
     try {
         const result = await paymentWebhookService.runSweep();
+        const eligibility = await organizationPaymentsService?.runEligibilitySweep();
+        paymentEligibilityPauseFailuresTotal += eligibility?.failed ?? 0;
+        if (eligibility && eligibility.paused + eligibility.failed > 0) {
+            console.log(JSON.stringify({ level: eligibility.failed > 0 ? 'warn' : 'info', event: 'payment_eligibility_sweep_completed', eligibility }));
+        }
         const metrics = await paymentWebhookService.getOperatorMetrics();
         paymentWebhookPending = metrics.pending;
         paymentWebhookRetrying = metrics.retrying;
@@ -880,9 +894,10 @@ const runPaymentWebhookSweep = async (): Promise<void> => {
 };
 
 const supportHandler =
-    supportService && authenticateApiRequest ?
+    supportService && organizationPaymentsService && authenticateApiRequest ?
         createSupportHandler({
             service: supportService,
+            organizations: organizationPaymentsService,
             authenticate: authenticateApiRequest,
             authenticateOptional: authenticateOptionalApiRequest,
         })
@@ -979,6 +994,9 @@ const renderPrometheusMetrics = (): string => {
         '# HELP patchwork_payment_webhook_sweep_failures_total Payment webhook sweeps that failed.',
         '# TYPE patchwork_payment_webhook_sweep_failures_total counter',
         `patchwork_payment_webhook_sweep_failures_total{${paymentLabels}} ${paymentWebhookSweepFailuresTotal}`,
+        '# HELP patchwork_payment_eligibility_pause_failures_total Monthly gifts to ineligible organizations that Stripe could not pause.',
+        '# TYPE patchwork_payment_eligibility_pause_failures_total counter',
+        `patchwork_payment_eligibility_pause_failures_total{${paymentLabels}} ${paymentEligibilityPauseFailuresTotal}`,
         '# HELP patchwork_payment_webhook_signature_failures_total Stripe webhook deliveries rejected by signature checks.',
         '# TYPE patchwork_payment_webhook_signature_failures_total counter',
         ...(['platform', 'connect'] as const).map(source =>
@@ -2016,7 +2034,10 @@ const contractRoutes = [
     '/support/tiers',
     '/support/checkout',
     '/support/portal',
+    '/support/recipients',
     '/account/support',
+    '/organizations/payments',
+    '/organizations/payments/onboarding',
     '/internal/payments/stripe/webhook',
     '/internal/payments/stripe/connect-webhook',
     '/status',

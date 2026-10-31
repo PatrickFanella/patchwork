@@ -84,22 +84,60 @@ export type StripeFormValue =
  * The narrow Stripe surface Patchwork uses. Tests substitute a fake; the
  * production adapter calls the REST API directly so no SDK is required.
  */
+export interface StripeConnectedAccount {
+    id: string;
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
+    detailsSubmitted: boolean;
+}
+
+/** Calls on a connected account pass its ID; omitted means the platform account. */
+export interface StripeAccountScope {
+    accountId?: string;
+}
+
 export interface StripeGateway {
     /** Fetch an event from Stripe rather than trusting a delivered payload. */
     retrieveEvent(eventId: string, accountId?: string): Promise<StripeEvent>;
     createCheckoutSession(
         params: Record<string, StripeFormValue>,
         idempotencyKey: string,
+        scope?: StripeAccountScope,
     ): Promise<StripeCheckoutSession>;
-    retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession>;
+    retrieveCheckoutSession(sessionId: string, scope?: StripeAccountScope): Promise<StripeCheckoutSession>;
     createMonthlyPrice(
         input: { amountMinor: number; currency: string; productName: string; metadata: Record<string, string> },
         idempotencyKey: string,
+        scope?: StripeAccountScope,
     ): Promise<{ id: string }>;
-    createBillingPortalSession(input: { customer: string; returnUrl: string }): Promise<{ url: string }>;
-    retrieveSubscription(subscriptionId: string): Promise<StripeSubscription>;
-    retrieveCharge(chargeId: string): Promise<StripeCharge>;
-    retrieveDispute(disputeId: string): Promise<StripeDispute>;
+    createBillingPortalSession(
+        input: { customer: string; returnUrl: string },
+        scope?: StripeAccountScope,
+    ): Promise<{ url: string }>;
+    retrieveSubscription(subscriptionId: string, scope?: StripeAccountScope): Promise<StripeSubscription>;
+    /** Stop invoicing without cancelling; the donor can resume in the Customer Portal. */
+    pauseSubscriptionCollection(
+        subscriptionId: string,
+        idempotencyKey: string,
+        scope: Required<StripeAccountScope>,
+    ): Promise<StripeSubscription>;
+    retrieveCharge(chargeId: string, scope?: StripeAccountScope): Promise<StripeCharge>;
+    retrieveDispute(disputeId: string, scope?: StripeAccountScope): Promise<StripeDispute>;
+    /**
+     * Create a connected account with Standard behavior: the organization
+     * pays its own Stripe fees, uses the full Dashboard, and Stripe (not the
+     * platform) carries negative-balance losses.
+     */
+    createConnectedAccount(
+        input: { businessName: string; metadata: Record<string, string> },
+        idempotencyKey: string,
+    ): Promise<StripeConnectedAccount>;
+    retrieveConnectedAccount(accountId: string): Promise<StripeConnectedAccount>;
+    createAccountOnboardingLink(input: {
+        accountId: string;
+        refreshUrl: string;
+        returnUrl: string;
+    }): Promise<{ url: string }>;
 }
 
 const eventIdPattern = /^evt_[A-Za-z0-9]{1,255}$/u;
@@ -217,6 +255,18 @@ const parseDispute = (value: unknown): StripeDispute => {
     return { id: id as string, ...(paymentIntent ? { paymentIntent } : {}), status: record['status'] as string };
 };
 
+const parseConnectedAccount = (value: unknown): StripeConnectedAccount => {
+    const record = asRecord(value) ?? invalid();
+    const id = record['id'];
+    if (record['object'] !== 'account' || typeof id !== 'string' || !accountIdPattern.test(id)) invalid();
+    return {
+        id: id as string,
+        chargesEnabled: record['charges_enabled'] === true,
+        payoutsEnabled: record['payouts_enabled'] === true,
+        detailsSubmitted: record['details_submitted'] === true,
+    };
+};
+
 /** Encode nested parameters the way Stripe's form API expects: a[b][0]=c. */
 export const encodeStripeForm = (params: Record<string, StripeFormValue>): URLSearchParams => {
     const form = new URLSearchParams();
@@ -298,23 +348,29 @@ export class HttpStripeGateway implements StripeGateway {
     async createCheckoutSession(
         params: Record<string, StripeFormValue>,
         idempotencyKey: string,
+        scope: StripeAccountScope = {},
     ): Promise<StripeCheckoutSession> {
         return parseCheckoutSession(await this.request('POST', '/v1/checkout/sessions', {
             form: encodeStripeForm(params),
             idempotencyKey,
+            accountId: this.scoped(scope),
         }));
     }
 
-    async retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession> {
+    async retrieveCheckoutSession(sessionId: string, scope: StripeAccountScope = {}): Promise<StripeCheckoutSession> {
         this.requireId(sessionId, stripeIdPatterns.checkoutSession);
-        return parseCheckoutSession(await this.request('GET', `/v1/checkout/sessions/${sessionId}`));
+        return parseCheckoutSession(await this.request('GET', `/v1/checkout/sessions/${sessionId}`, {
+            accountId: this.scoped(scope),
+        }));
     }
 
     async createMonthlyPrice(
         input: { amountMinor: number; currency: string; productName: string; metadata: Record<string, string> },
         idempotencyKey: string,
+        scope: StripeAccountScope = {},
     ): Promise<{ id: string }> {
         const body = asRecord(await this.request('POST', '/v1/prices', {
+            accountId: this.scoped(scope),
             form: encodeStripeForm({
                 currency: input.currency,
                 unit_amount: input.amountMinor,
@@ -329,9 +385,13 @@ export class HttpStripeGateway implements StripeGateway {
         return { id };
     }
 
-    async createBillingPortalSession(input: { customer: string; returnUrl: string }): Promise<{ url: string }> {
+    async createBillingPortalSession(
+        input: { customer: string; returnUrl: string },
+        scope: StripeAccountScope = {},
+    ): Promise<{ url: string }> {
         this.requireId(input.customer, stripeIdPatterns.customer);
         const body = asRecord(await this.request('POST', '/v1/billing_portal/sessions', {
+            accountId: this.scoped(scope),
             form: encodeStripeForm({ customer: input.customer, return_url: input.returnUrl }),
         }));
         const url = body?.['url'];
@@ -341,23 +401,87 @@ export class HttpStripeGateway implements StripeGateway {
         return { url };
     }
 
-    async retrieveSubscription(subscriptionId: string): Promise<StripeSubscription> {
+    async retrieveSubscription(subscriptionId: string, scope: StripeAccountScope = {}): Promise<StripeSubscription> {
         this.requireId(subscriptionId, stripeIdPatterns.subscription);
-        return parseSubscription(await this.request('GET', `/v1/subscriptions/${subscriptionId}`));
+        return parseSubscription(await this.request('GET', `/v1/subscriptions/${subscriptionId}`, {
+            accountId: this.scoped(scope),
+        }));
     }
 
-    async retrieveCharge(chargeId: string): Promise<StripeCharge> {
+    async pauseSubscriptionCollection(
+        subscriptionId: string,
+        idempotencyKey: string,
+        scope: Required<StripeAccountScope>,
+    ): Promise<StripeSubscription> {
+        this.requireId(subscriptionId, stripeIdPatterns.subscription);
+        return parseSubscription(await this.request('POST', `/v1/subscriptions/${subscriptionId}`, {
+            form: encodeStripeForm({ pause_collection: { behavior: 'void' } }),
+            idempotencyKey,
+            accountId: this.scoped(scope),
+        }));
+    }
+
+    async retrieveCharge(chargeId: string, scope: StripeAccountScope = {}): Promise<StripeCharge> {
         this.requireId(chargeId, stripeIdPatterns.charge);
-        return parseCharge(await this.request('GET', `/v1/charges/${chargeId}`));
+        return parseCharge(await this.request('GET', `/v1/charges/${chargeId}`, { accountId: this.scoped(scope) }));
     }
 
-    async retrieveDispute(disputeId: string): Promise<StripeDispute> {
+    async retrieveDispute(disputeId: string, scope: StripeAccountScope = {}): Promise<StripeDispute> {
         this.requireId(disputeId, stripeIdPatterns.dispute);
-        return parseDispute(await this.request('GET', `/v1/disputes/${disputeId}`));
+        return parseDispute(await this.request('GET', `/v1/disputes/${disputeId}`, { accountId: this.scoped(scope) }));
+    }
+
+    async createConnectedAccount(
+        input: { businessName: string; metadata: Record<string, string> },
+        idempotencyKey: string,
+    ): Promise<StripeConnectedAccount> {
+        return parseConnectedAccount(await this.request('POST', '/v1/accounts', {
+            form: encodeStripeForm({
+                controller: {
+                    fees: { payer: 'account' },
+                    losses: { payments: 'stripe' },
+                    stripe_dashboard: { type: 'full' },
+                },
+                business_profile: { name: input.businessName.slice(0, 160) },
+                metadata: input.metadata,
+            }),
+            idempotencyKey,
+        }));
+    }
+
+    async retrieveConnectedAccount(accountId: string): Promise<StripeConnectedAccount> {
+        this.requireId(accountId, accountIdPattern);
+        return parseConnectedAccount(await this.request('GET', `/v1/accounts/${accountId}`));
+    }
+
+    async createAccountOnboardingLink(input: {
+        accountId: string;
+        refreshUrl: string;
+        returnUrl: string;
+    }): Promise<{ url: string }> {
+        this.requireId(input.accountId, accountIdPattern);
+        const body = asRecord(await this.request('POST', '/v1/account_links', {
+            form: encodeStripeForm({
+                account: input.accountId,
+                refresh_url: input.refreshUrl,
+                return_url: input.returnUrl,
+                type: 'account_onboarding',
+            }),
+        }));
+        const url = body?.['url'];
+        if (typeof url !== 'string' || !url.startsWith('https://')) {
+            throw new StripeApiError('INVALID_RESPONSE', false);
+        }
+        return { url };
     }
 
     private requireId(id: string, pattern: RegExp): void {
         if (!pattern.test(id)) throw new StripeApiError('NOT_FOUND', false);
+    }
+
+    private scoped(scope: StripeAccountScope): string | undefined {
+        if (scope.accountId !== undefined) this.requireId(scope.accountId, accountIdPattern);
+        return scope.accountId;
     }
 
     private async request(

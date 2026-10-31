@@ -1,5 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
+    OrganizationPaymentsError,
+    type OrganizationPaymentsErrorCode,
+    type OrganizationPaymentsService,
+} from '../payments/organization-payments-service.js';
+import {
     SupportServiceError,
     type SupportService,
     type SupportServiceErrorCode,
@@ -16,7 +21,10 @@ const routes = new Map<string, readonly string[]>([
     ['/support/tiers', ['GET']],
     ['/support/checkout', ['GET', 'POST']],
     ['/support/portal', ['POST']],
+    ['/support/recipients', ['GET']],
     ['/account/support', ['GET']],
+    ['/organizations/payments', ['GET']],
+    ['/organizations/payments/onboarding', ['POST']],
 ]);
 
 export const isSupportRoute = (request: IncomingMessage, requestUrl: URL): boolean =>
@@ -35,17 +43,42 @@ const errors: Readonly<Record<SupportServiceErrorCode, [number, string]>> = {
     NO_SUPPORT_ACCOUNT: [404, 'There is no giving history to manage for this account.'],
 };
 
+const organizationErrors: Readonly<Record<OrganizationPaymentsErrorCode, [number, string]>> = {
+    ORGANIZATION_NOT_FOUND: [404, 'That organization was not found.'],
+    ORGANIZATION_PAYMENTS_FORBIDDEN: [403, 'Only organization owners and admins can manage payments.'],
+    ORGANIZATION_NOT_VERIFIED: [409, 'The organization must be verified before it can receive gifts.'],
+    ORGANIZATION_PAYMENTS_UNAVAILABLE: [409, 'This organization cannot receive gifts through Patchwork.'],
+    PAYMENT_RECIPIENT_SUSPENDED: [409, 'Gifts to this organization are suspended.'],
+    STRIPE_UNAVAILABLE: [503, 'Stripe could not be reached. Try again in a moment.'],
+};
+
 const mapError = (error: unknown): unknown => {
+    if (error instanceof OrganizationPaymentsError) {
+        const [status, message] = organizationErrors[error.code];
+        return new PublicHttpError(status, error.code, message);
+    }
     if (!(error instanceof SupportServiceError)) return error;
     const [status, message] = errors[error.code];
     return new PublicHttpError(status, error.code, message);
 };
 
+const optionalJsonBody = async (request: IncomingMessage): Promise<Record<string, unknown>> => {
+    if (!request.headers['content-type']) return {};
+    const body = await readJsonBody(request, 4_096);
+    return body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
+};
+
 export const createSupportHandler = (dependencies: {
     service: Pick<
         SupportService,
-        'getOptions' | 'createCheckout' | 'getCheckoutStatus' | 'createPortalSession' | 'getAccountSupport'
+        | 'getOptions'
+        | 'createCheckout'
+        | 'getCheckoutStatus'
+        | 'createPortalSession'
+        | 'getAccountSupport'
+        | 'listEligibleOrganizations'
     >;
+    organizations: Pick<OrganizationPaymentsService, 'getStatus' | 'startOnboarding'>;
     authenticate(request: IncomingMessage): Promise<AuthenticatedRequest>;
     authenticateOptional(request: IncomingMessage): Promise<AuthenticatedRequest | undefined>;
 }) => (
@@ -95,19 +128,53 @@ export const createSupportHandler = (dependencies: {
                 );
                 return;
             }
+            if (pathname === '/support/recipients') {
+                writeJsonResponse(response, 200, {
+                    eligibleOrganizationIds: await dependencies.service.listEligibleOrganizations(
+                        requestUrl.searchParams.getAll('organization'),
+                    ),
+                });
+                return;
+            }
             const authenticated = await dependencies.authenticate(request);
+            const actorDid = authenticated.principal.did;
             if (pathname === '/support/portal') {
+                const body = await optionalJsonBody(request);
+                const recipientId = typeof body['recipientId'] === 'string' ? body['recipientId'] : undefined;
                 writeJsonResponse(
                     response,
                     200,
-                    await dependencies.service.createPortalSession(authenticated.principal.did),
+                    await dependencies.service.createPortalSession(actorDid, recipientId),
+                );
+                return;
+            }
+            if (pathname === '/organizations/payments') {
+                writeJsonResponse(
+                    response,
+                    200,
+                    await dependencies.organizations.getStatus(
+                        actorDid,
+                        requestUrl.searchParams.get('organization') ?? '',
+                    ),
+                );
+                return;
+            }
+            if (pathname === '/organizations/payments/onboarding') {
+                const body = await optionalJsonBody(request);
+                writeJsonResponse(
+                    response,
+                    200,
+                    await dependencies.organizations.startOnboarding(
+                        actorDid,
+                        typeof body['organizationId'] === 'string' ? body['organizationId'] : '',
+                    ),
                 );
                 return;
             }
             writeJsonResponse(
                 response,
                 200,
-                await dependencies.service.getAccountSupport(authenticated.principal.did),
+                await dependencies.service.getAccountSupport(actorDid),
             );
         } catch (error) {
             if (!response.headersSent) writePublicError(response, mapError(error));

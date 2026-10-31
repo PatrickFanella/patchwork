@@ -160,6 +160,11 @@ groups:
         for: 5m
         labels: { severity: warning, owner: patchwork-primary-on-call }
         annotations: { runbook_url: "docs/operations/incident-response.md#payment-webhooks" }
+      - alert: PatchworkPaymentEligibilityPauseFailing
+        expr: increase(patchwork_payment_eligibility_pause_failures_total{service="api",environment="staging"}[30m]) > 0
+        for: 30m
+        labels: { severity: warning, owner: patchwork-primary-on-call }
+        annotations: { runbook_url: "docs/operations/incident-response.md#payment-webhooks" }
       - alert: PatchworkPaymentWebhookSignatureFailures
         expr: increase(patchwork_payment_webhook_signature_failures_total{service="api",environment="staging"}[15m]) > 10
         labels: { severity: warning, owner: patchwork-primary-on-call }

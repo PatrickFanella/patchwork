@@ -214,7 +214,10 @@ signature failures usually means a rotated webhook secret; if the secret is
 current, treat it as forged traffic. After fixing a cause, requeue specific
 dead letters with `PaymentWebhookService.requeue`; do not edit attempt counts
 or insert events by hand. Setting `PATCHWORK_PAYMENTS_MODE=off` does not stop
-webhook intake. Never put donor emails, card details, Stripe customer IDs or
+webhook intake. The same sweep pauses monthly gifts to organizations that can
+no longer receive them; a sustained pause-failure count means those donors may
+still be charged, so restore Stripe access promptly or pause the listed
+subscriptions in the organization's Stripe account. Never put donor emails, card details, Stripe customer IDs or
 API keys in incident notes.
 
 ### Source refresh

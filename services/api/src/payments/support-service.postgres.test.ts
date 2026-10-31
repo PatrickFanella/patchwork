@@ -3,16 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentWebhookService } from './payment-webhook-service.js';
-import {
-    StripeApiError,
-    type StripeCharge,
-    type StripeCheckoutSession,
-    type StripeDispute,
-    type StripeEvent,
-    type StripeFormValue,
-    type StripeGateway,
-    type StripeSubscription,
-} from './stripe-gateway.js';
+import type { StripeCheckoutSession, StripeEvent, StripeSubscription } from './stripe-gateway.js';
+import { FakeStripe } from './testing/fake-stripe.js';
 import { SupportService, type SupportServiceOptions } from './support-service.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -21,82 +13,6 @@ const origin = 'https://patchwork.example.test';
 
 const migration = (name: string) =>
     readFile(new URL(`../db/migrations/${name}`, import.meta.url), 'utf8');
-
-class FakeStripe implements StripeGateway {
-    sessions = new Map<string, StripeCheckoutSession>();
-    subscriptions = new Map<string, StripeSubscription>();
-    charges = new Map<string, StripeCharge>();
-    disputes = new Map<string, StripeDispute>();
-    events = new Map<string, StripeEvent>();
-    checkoutCalls: Array<{ params: Record<string, StripeFormValue>; idempotencyKey: string }> = [];
-    priceCalls: string[] = [];
-    failNextCheckout = false;
-    private sequence = 0;
-
-    async retrieveEvent(eventId: string): Promise<StripeEvent> {
-        const event = this.events.get(eventId);
-        if (!event) throw new StripeApiError('NOT_FOUND', false);
-        return event;
-    }
-
-    async createCheckoutSession(
-        params: Record<string, StripeFormValue>,
-        idempotencyKey: string,
-    ): Promise<StripeCheckoutSession> {
-        this.checkoutCalls.push({ params, idempotencyKey });
-        if (this.failNextCheckout) {
-            this.failNextCheckout = false;
-            throw new StripeApiError('UNAVAILABLE', true);
-        }
-        const existing = [...this.sessions.values()].find(
-            session => session.id === `cs_test_${idempotencyKey.replaceAll('-', '')}`,
-        );
-        if (existing) return existing;
-        const session: StripeCheckoutSession = {
-            id: `cs_test_${idempotencyKey.replaceAll('-', '')}`,
-            url: `https://checkout.stripe.test/${(this.sequence += 1)}`,
-            status: 'open',
-            paymentStatus: 'unpaid',
-            mode: params['mode'] === 'subscription' ? 'subscription' : 'payment',
-            livemode: false,
-        };
-        this.sessions.set(session.id, session);
-        return session;
-    }
-
-    async retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession> {
-        const session = this.sessions.get(sessionId);
-        if (!session) throw new StripeApiError('NOT_FOUND', false);
-        return session;
-    }
-
-    async createMonthlyPrice(_input: unknown, idempotencyKey: string): Promise<{ id: string }> {
-        this.priceCalls.push(idempotencyKey);
-        return { id: `price_${idempotencyKey.replace(/[^A-Za-z0-9]/gu, '').slice(-24)}` };
-    }
-
-    async createBillingPortalSession(input: { customer: string; returnUrl: string }) {
-        return { url: `https://billing.stripe.test/${input.customer}?return=${encodeURIComponent(input.returnUrl)}` };
-    }
-
-    async retrieveSubscription(id: string): Promise<StripeSubscription> {
-        const subscription = this.subscriptions.get(id);
-        if (!subscription) throw new StripeApiError('NOT_FOUND', false);
-        return subscription;
-    }
-
-    async retrieveCharge(id: string): Promise<StripeCharge> {
-        const charge = this.charges.get(id);
-        if (!charge) throw new StripeApiError('NOT_FOUND', false);
-        return charge;
-    }
-
-    async retrieveDispute(id: string): Promise<StripeDispute> {
-        const dispute = this.disputes.get(id);
-        if (!dispute) throw new StripeApiError('NOT_FOUND', false);
-        return dispute;
-    }
-}
 
 describe('SupportService', () => {
     const schema = `support_${randomUUID().replaceAll('-', '')}`;
@@ -142,9 +58,9 @@ describe('SupportService', () => {
         url: string,
         changes: Partial<StripeCheckoutSession>,
     ): StripeCheckoutSession => {
-        const session = [...stripe.sessions.values()].find(entry => entry.url === url)!;
+        const { session, scope } = stripe.sessionByUrl(url);
         const completed = { ...session, status: 'complete' as const, ...changes };
-        stripe.sessions.set(session.id, completed);
+        stripe.setSession(completed, scope);
         return completed;
     };
 
@@ -152,8 +68,10 @@ describe('SupportService', () => {
         await adminPool.query(`CREATE SCHEMA ${schema}`);
         for (const name of [
             '0016_organizations_and_stewardship.sql',
+            '0017_verification_and_exact_public_addresses.sql',
             '0040_donations_and_supporter_tiers.sql',
             '0041_general_fund_checkout.sql',
+            '0042_organization_payment_recipients.sql',
         ]) {
             await pool.query(await migration(name));
         }
@@ -168,8 +86,11 @@ describe('SupportService', () => {
     beforeEach(async () => {
         await pool.query(
             `TRUNCATE payment_webhook_events, donations, supporter_subscriptions,
-                      donor_accounts, supporter_tier_prices, payment_checkout_sessions CASCADE`,
+                      donor_accounts, supporter_tier_prices, payment_checkout_sessions,
+                      payment_audit_events CASCADE`,
         );
+        await pool.query(`DELETE FROM payment_recipients WHERE kind = 'organization'`);
+        await pool.query('DELETE FROM organizations');
         await pool.query('UPDATE supporter_tiers SET active = TRUE');
         stripe = new FakeStripe();
         service = new SupportService(pool, stripe, options);
@@ -226,7 +147,8 @@ describe('SupportService', () => {
         { recipient: 'general-fund', mode: 'one-time', amountMinor: 500, tierKey: 'tier-1' },
         { recipient: 'general-fund', mode: 'monthly', amountMinor: 500 },
         { recipient: 'general-fund', mode: 'monthly', tierKey: 'tier-1', extra: true },
-        { recipient: { organizationId: randomUUID() }, mode: 'one-time', amountMinor: 500 },
+        { recipient: { organizationId: 'not-a-uuid' }, mode: 'one-time', amountMinor: 500 },
+        { recipient: { organizationId: randomUUID(), extra: 1 }, mode: 'one-time', amountMinor: 500 },
         { recipient: 'general-fund', mode: 'weekly', tierKey: 'tier-1' },
     ])('rejects %j without calling Stripe', async body => {
         await expect(service.createCheckout({ body, clientKey: randomUUID() }))
@@ -296,7 +218,7 @@ describe('SupportService', () => {
             paymentStatus: 'succeeded',
         });
         const account = await service.getAccountSupport(donorDid);
-        expect(account.canManage).toBe(true);
+        expect(account.manageable).toEqual([{ recipientId: '00000000-0000-4000-8000-000000000001', recipientName: 'Patchwork general fund' }]);
         expect(account.donations).toEqual([expect.objectContaining({
             amountMinor: 2_500, status: 'succeeded', recipientName: 'Patchwork general fund',
         })]);
@@ -319,7 +241,7 @@ describe('SupportService', () => {
         await deliver('checkout.session.completed', { id: failedSession.id });
         expect((await service.getCheckoutStatus(confirmed.checkoutId)).paymentStatus).toBe('pending');
 
-        stripe.sessions.set(confirmedSession.id, { ...confirmedSession, paymentStatus: 'paid' });
+        stripe.setSession({ ...confirmedSession, paymentStatus: 'paid' });
         await deliver('checkout.session.async_payment_succeeded', { id: confirmedSession.id });
         await deliver('checkout.session.async_payment_failed', { id: failedSession.id });
         expect((await service.getCheckoutStatus(confirmed.checkoutId)).paymentStatus).toBe('succeeded');
@@ -331,8 +253,8 @@ describe('SupportService', () => {
         const clientKey = randomUUID();
         const body = { recipient: 'general-fund', mode: 'one-time', amountMinor: 1_000 };
         const checkout = await service.createCheckout({ body, clientKey });
-        const session = [...stripe.sessions.values()][0]!;
-        stripe.sessions.set(session.id, { ...session, status: 'expired' });
+        const session = stripe.sessionByUrl(checkout.url).session;
+        stripe.setSession({ ...session, status: 'expired' });
         await deliver('checkout.session.expired', { id: session.id });
         await expect(service.getCheckoutStatus(checkout.checkoutId)).resolves.toMatchObject({ status: 'expired' });
         await expect(service.createCheckout({ body, clientKey })).rejects.toMatchObject({ code: 'CHECKOUT_CLOSED' });
@@ -355,7 +277,7 @@ describe('SupportService', () => {
             metadata: { patchwork_checkout_id: checkout.checkoutId },
         };
         // Stripe may deliver the subscription event before checkout completion.
-        stripe.subscriptions.set(subscription.id, subscription);
+        stripe.setSubscription(subscription);
         await deliver('customer.subscription.created', { id: subscription.id });
         const session = completeSession(checkout.url, { subscription: subscription.id, customer: 'cus_1Monthly' });
         await deliver('checkout.session.completed', { id: session.id });
@@ -368,16 +290,16 @@ describe('SupportService', () => {
             cancelAtPeriodEnd: false,
             currentPeriodEnd: new Date(1_796_000_000_000).toISOString(),
         })]);
-        expect(account.canManage).toBe(true);
+        expect(account.manageable).toEqual([{ recipientId: '00000000-0000-4000-8000-000000000001', recipientName: 'Patchwork general fund' }]);
 
-        stripe.subscriptions.set(subscription.id, { ...subscription, status: 'past_due' });
+        stripe.setSubscription({ ...subscription, status: 'past_due' });
         await deliver('invoice.payment_failed', {
             id: 'in_1Failed',
             parent: { type: 'subscription_details', subscription_details: { subscription: subscription.id } },
         });
         expect((await service.getAccountSupport(donorDid)).subscriptions[0]?.status).toBe('past_due');
 
-        stripe.subscriptions.set(subscription.id, {
+        stripe.setSubscription({
             ...subscription, cancelAtPeriodEnd: true, collectionPaused: true,
         });
         await deliver('invoice.paid', { id: 'in_1Legacy', subscription: subscription.id });
@@ -388,7 +310,7 @@ describe('SupportService', () => {
 
         // A write fetched before the stored state never replaces it.
         await pool.query(`UPDATE supporter_subscriptions SET stripe_state_at = '2999-01-01'`);
-        stripe.subscriptions.set(subscription.id, { ...subscription, status: 'canceled' });
+        stripe.setSubscription({ ...subscription, status: 'canceled' });
         await deliver('customer.subscription.deleted', { id: subscription.id });
         expect((await service.getAccountSupport(donorDid)).subscriptions[0]?.status).toBe('active');
     });
@@ -401,29 +323,29 @@ describe('SupportService', () => {
         const session = completeSession(checkout.url, { paymentStatus: 'paid', paymentIntent: 'pi_1Disputed' });
         await deliver('checkout.session.completed', { id: session.id });
 
-        stripe.disputes.set('dp_1Open', { id: 'dp_1Open', paymentIntent: 'pi_1Disputed', status: 'needs_response' });
+        stripe.setDispute({ id: 'dp_1Open', paymentIntent: 'pi_1Disputed', status: 'needs_response' });
         await deliver('charge.dispute.created', { id: 'dp_1Open' });
         expect((await service.getCheckoutStatus(checkout.checkoutId)).paymentStatus).toBe('disputed');
-        stripe.disputes.set('dp_1Open', { id: 'dp_1Open', paymentIntent: 'pi_1Disputed', status: 'won' });
+        stripe.setDispute({ id: 'dp_1Open', paymentIntent: 'pi_1Disputed', status: 'won' });
         await deliver('charge.dispute.closed', { id: 'dp_1Open' });
         expect((await service.getCheckoutStatus(checkout.checkoutId)).paymentStatus).toBe('succeeded');
 
-        stripe.charges.set('ch_1Partial', { id: 'ch_1Partial', paymentIntent: 'pi_1Disputed', refunded: false });
+        stripe.setCharge({ id: 'ch_1Partial', paymentIntent: 'pi_1Disputed', refunded: false });
         await deliver('charge.refunded', { id: 'ch_1Partial' });
         expect((await service.getCheckoutStatus(checkout.checkoutId)).paymentStatus).toBe('succeeded');
-        stripe.charges.set('ch_1Partial', { id: 'ch_1Partial', paymentIntent: 'pi_1Disputed', refunded: true });
+        stripe.setCharge({ id: 'ch_1Partial', paymentIntent: 'pi_1Disputed', refunded: true });
         await deliver('charge.refunded', { id: 'ch_1Partial' });
         expect((await service.getCheckoutStatus(checkout.checkoutId)).paymentStatus).toBe('refunded');
     });
 
     it('ignores Checkouts, subscriptions, and connected-account events that are not Patchwork general-fund gifts', async () => {
         const retrieveCheckoutSession = vi.spyOn(stripe, 'retrieveCheckoutSession');
-        stripe.sessions.set('cs_test_1Foreign', {
+        stripe.setSession({
             id: 'cs_test_1Foreign', url: null, status: 'complete', paymentStatus: 'paid',
             mode: 'payment', livemode: false, paymentIntent: 'pi_1Foreign',
         });
         await deliver('checkout.session.completed', { id: 'cs_test_1Foreign' });
-        stripe.subscriptions.set('sub_1Foreign', {
+        stripe.setSubscription({
             id: 'sub_1Foreign', status: 'active', livemode: false, cancelAtPeriodEnd: false,
             collectionPaused: false, metadata: {},
         });
@@ -439,7 +361,7 @@ describe('SupportService', () => {
         await expect(service.getCheckoutStatus('not-a-uuid')).rejects.toMatchObject({ code: 'CHECKOUT_NOT_FOUND' });
         await expect(service.getCheckoutStatus(randomUUID())).rejects.toMatchObject({ code: 'CHECKOUT_NOT_FOUND' });
         await expect(service.getAccountSupport(donorDid)).resolves.toEqual({
-            donations: [], subscriptions: [], canManage: false,
+            donations: [], subscriptions: [], manageable: [],
         });
     });
 });

@@ -20,6 +20,11 @@ describe('support HTTP boundary', () => {
         getCheckoutStatus: vi.fn(),
         createPortalSession: vi.fn(),
         getAccountSupport: vi.fn(),
+        listEligibleOrganizations: vi.fn(),
+    };
+    const organizations = {
+        getStatus: vi.fn(),
+        startOnboarding: vi.fn(),
     };
     const authenticate = vi.fn<(request: unknown) => Promise<AuthenticatedRequest>>();
     const authenticateOptional = vi.fn<(request: unknown) => Promise<AuthenticatedRequest | undefined>>();
@@ -27,7 +32,7 @@ describe('support HTTP boundary', () => {
     let server: ReturnType<typeof createServer>;
 
     beforeAll(async () => {
-        const handler = createSupportHandler({ service, authenticate, authenticateOptional });
+        const handler = createSupportHandler({ service, organizations, authenticate, authenticateOptional });
         server = createServer((request, response) => {
             if (!handler(request, response, new URL(request.url ?? '/', 'http://localhost'))) {
                 response.writeHead(404).end();
@@ -44,7 +49,7 @@ describe('support HTTP boundary', () => {
     });
 
     beforeEach(() => {
-        for (const mock of Object.values(service)) mock.mockReset();
+        for (const mock of [...Object.values(service), ...Object.values(organizations)]) mock.mockReset();
         authenticate.mockReset();
         authenticateOptional.mockReset();
         authenticate.mockResolvedValue(principal(donorDid));
@@ -111,7 +116,13 @@ describe('support HTTP boundary', () => {
         service.getAccountSupport.mockResolvedValue({ donations: [], subscriptions: [], canManage: false });
         const portal = await fetch(`${origin}/support/portal`, { method: 'POST' });
         expect(portal.status).toBe(200);
-        expect(service.createPortalSession).toHaveBeenCalledWith(donorDid);
+        expect(service.createPortalSession).toHaveBeenCalledWith(donorDid, undefined);
+        await fetch(`${origin}/support/portal`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ recipientId: 'r1' }),
+        });
+        expect(service.createPortalSession).toHaveBeenLastCalledWith(donorDid, 'r1');
         const account = await fetch(`${origin}/account/support`);
         expect(account.status).toBe(200);
         expect(service.getAccountSupport).toHaveBeenCalledWith(donorDid);
@@ -119,5 +130,40 @@ describe('support HTTP boundary', () => {
         authenticate.mockRejectedValue(new PublicHttpError(401, 'AUTHENTICATION_REQUIRED', 'Sign in.'));
         expect((await fetch(`${origin}/account/support`)).status).toBe(401);
         expect((await fetch(`${origin}/support/portal`, { method: 'POST' })).status).toBe(401);
+    });
+
+    it('answers eligibility for a batch of organizations without a session', async () => {
+        service.listEligibleOrganizations.mockResolvedValue(['b']);
+        const response = await fetch(`${origin}/support/recipients?organization=a&organization=b`);
+        await expect(response.json()).resolves.toEqual({ eligibleOrganizationIds: ['b'] });
+        expect(service.listEligibleOrganizations).toHaveBeenCalledWith(['a', 'b']);
+        expect(authenticate).not.toHaveBeenCalled();
+    });
+
+    it('routes organization payment status and onboarding for the signed-in actor', async () => {
+        organizations.getStatus.mockResolvedValue({ status: 'not-started' });
+        organizations.startOnboarding.mockResolvedValue({ url: 'https://connect.stripe.test/x' });
+        const status = await fetch(`${origin}/organizations/payments?organization=o1`);
+        expect(status.status).toBe(200);
+        expect(organizations.getStatus).toHaveBeenCalledWith(donorDid, 'o1');
+        const onboarding = await fetch(`${origin}/organizations/payments/onboarding`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ organizationId: 'o1' }),
+        });
+        await expect(onboarding.json()).resolves.toEqual({ url: 'https://connect.stripe.test/x' });
+        expect(organizations.startOnboarding).toHaveBeenCalledWith(donorDid, 'o1');
+
+        const { OrganizationPaymentsError } = await import('../payments/organization-payments-service.js');
+        for (const [code, statusCode] of [
+            ['ORGANIZATION_PAYMENTS_FORBIDDEN', 403],
+            ['ORGANIZATION_NOT_VERIFIED', 409],
+            ['STRIPE_UNAVAILABLE', 503],
+        ] as const) {
+            organizations.getStatus.mockRejectedValueOnce(new OrganizationPaymentsError(code));
+            const failed = await fetch(`${origin}/organizations/payments?organization=o1`);
+            expect(failed.status).toBe(statusCode);
+            await expect(failed.json()).resolves.toMatchObject({ error: { code } });
+        }
     });
 });
