@@ -103,7 +103,9 @@ describe('payment lifecycle', () => {
 
     const notifications = async () =>
         (await pool.query<{ recipient_did: string; notification_type: string }>(
-            'SELECT recipient_did, notification_type FROM notification_intents ORDER BY created_at',
+            `SELECT recipient_did, notification_type FROM notification_intents
+              WHERE recipient_did = ANY($1) ORDER BY created_at`,
+            [dids],
         )).rows;
 
     const reset = async () => {
