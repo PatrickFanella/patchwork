@@ -105,6 +105,11 @@ import {
     NotificationCenterRoute,
 } from '../routes/notifications';
 import {
+    SupportCancelledRoute,
+    SupportRoute,
+    SupportThanksRoute,
+} from '../routes/support';
+import {
     OrganizationsRoute,
 } from '../routes/organizations';
 import {
@@ -1096,6 +1101,12 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                         <AccountPrivacyRoute onDeactivated={auth.restore} />
                     )
                 );
+            case '/support':
+                return <SupportRoute />;
+            case '/support/thanks':
+                return <SupportThanksRoute />;
+            case '/support/cancelled':
+                return <SupportCancelledRoute />;
             case '/legal/terms':
             case '/legal/privacy':
             case '/legal/community-guidelines':

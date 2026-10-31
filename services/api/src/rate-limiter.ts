@@ -111,6 +111,18 @@ export const moderationLimiter = new RateLimiter({
     maxRequests: 10,
 });
 
+/** Signed provider webhooks arrive in bursts from a few provider IPs: 600 req / 60 s */
+export const providerWebhookLimiter = new RateLimiter({
+    windowMs: 60_000,
+    maxRequests: 600,
+});
+
+/** Checkout creation, which card-testing bots target: 10 req / 60 s */
+export const checkoutLimiter = new RateLimiter({
+    windowMs: 60_000,
+    maxRequests: 10,
+});
+
 /* ------------------------------------------------------------------ */
 /*  Route classification                                              */
 /* ------------------------------------------------------------------ */
@@ -124,6 +136,8 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  * Select the appropriate rate limiter for a given route pathname.
  */
 export const selectLimiter = (method: string | undefined, pathname: string): RateLimiter => {
+    if (method === 'POST' && pathname.startsWith('/internal/payments/stripe/')) return providerWebhookLimiter;
+    if (method === 'POST' && pathname === '/support/checkout') return checkoutLimiter;
     if (pathname === '/resource-corrections/review') return moderationLimiter;
     if (method === 'POST' && ['/resource-corrections','/resource-corrections/respond'].includes(pathname)) return reportLimiter;
     if (method === 'GET' && pathname === '/auth/session') {

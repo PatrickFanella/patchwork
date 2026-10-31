@@ -27,7 +27,9 @@ import {
     fetchOrganizationResourcesViaApi,
     type OrganizationResource,
     type ResolvedIdentity,
+    fetchEligibleOrganizationsViaApi,
 } from '../features/api-client';
+import { OrganizationDonate, OrganizationPaymentsPanel, useSupportOptions } from './support';
 import { IdentityField } from '../features/identity/IdentityField';
 import { AccountName, accountLabel } from '../features/identity/AccountName';
 import { useHandles } from '../features/identity/useHandles';
@@ -67,6 +69,8 @@ export const OrganizationsRoute = ({ did }: { did: string }) => {
     const [acceptToken, setAcceptToken] = useState('');
     const [resourceUri, setResourceUri] = useState('');
     const [stewardDid, setStewardDid] = useState('');
+    const { options: supportOptions } = useSupportOptions();
+    const [eligibleIds, setEligibleIds] = useState<ReadonlySet<string>>(new Set());
 
     const loadPublic = useCallback(async () => {
         setStatus(t('organizations.loading'));
@@ -99,9 +103,15 @@ export const OrganizationsRoute = ({ did }: { did: string }) => {
             return;
         }
         setMine(result.data);
+        // Stripe onboarding returns to /organizations?payments=<organization id>.
+        const returnedFrom =
+            typeof window === 'undefined' ? null
+            : new URLSearchParams(window.location.search).get('payments');
         const nextSelected = result.data.some((item) => item.id === selectedId)
             ? selectedId
-            : (result.data[0]?.id ?? '');
+            : result.data.some((item) => item.id === returnedFrom)
+              ? returnedFrom!
+              : (result.data[0]?.id ?? '');
         setSelectedId(nextSelected);
         if (!nextSelected) {
             setMembers([]);
@@ -124,6 +134,21 @@ export const OrganizationsRoute = ({ did }: { did: string }) => {
     useEffect(() => {
         void loadPublic();
     }, [loadPublic]);
+
+    useEffect(() => {
+        if (!supportOptions?.paymentsEnabled || organizations.length === 0) {
+            setEligibleIds(new Set());
+            return;
+        }
+        const controller = new AbortController();
+        void fetchEligibleOrganizationsViaApi(
+            organizations.map((organization) => organization.id),
+            controller.signal,
+        ).then((result) => {
+            if (!controller.signal.aborted) setEligibleIds(new Set(result.ok ? result.data : []));
+        });
+        return () => controller.abort();
+    }, [organizations, supportOptions]);
 
     useEffect(() => {
         void loadPrivate();
@@ -329,6 +354,13 @@ export const OrganizationsRoute = ({ did }: { did: string }) => {
                             <p className='mt-2 text-xs text-mh-textMuted'>
                                 {organization.nonEndorsementLabel}
                             </p>
+                            {supportOptions?.paymentsEnabled && eligibleIds.has(organization.id) ? (
+                                <OrganizationDonate
+                                    organizationId={organization.id}
+                                    organizationName={organization.name}
+                                    options={supportOptions}
+                                />
+                            ) : null}
                         </Surface>
                     ))}
                 </div>
@@ -414,6 +446,11 @@ export const OrganizationsRoute = ({ did }: { did: string }) => {
                                             ),
                                         })}
                                     </p>
+                                    {canAdmin && supportOptions?.paymentsEnabled ? (
+                                        <div className='mt-3'>
+                                            <OrganizationPaymentsPanel organizationId={selected.id} />
+                                        </div>
+                                    ) : null}
                                     <ul className='mt-3 space-y-2 text-sm'>
                                         {members.map((member) => {
                                             const canManageMember =

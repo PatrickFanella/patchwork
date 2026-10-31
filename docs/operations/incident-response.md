@@ -201,6 +201,44 @@ endpoints, subscription keys, notification bodies, exact locations, private
 evidence, moderation notes, or provider credentials in incident notes.
 Provider feedback uses its dedicated bearer-token boundary.
 
+### Payment webhooks
+
+Stripe deliveries are recorded by event ID only, then applied by a sweep that
+re-fetches each event from Stripe. A dead letter means the fetched event was
+missing (Stripe keeps events for 30 days), disagreed with the signed delivery,
+or exhausted its retries. Check the pending, retrying, dead-letter,
+oldest-pending, sweep-failure and signature-failure metrics and the bounded
+`last_error_code`. `STRIPE_UNAUTHORIZED` means the API key was rotated or lacks
+scope; fix the key and the queued events retry on their own. A burst of
+signature failures usually means a rotated webhook secret; if the secret is
+current, treat it as forged traffic. After fixing a cause, requeue specific
+dead letters with `PaymentWebhookService.requeue`; do not edit attempt counts
+or insert events by hand. Setting `PATCHWORK_PAYMENTS_MODE=off` does not stop
+webhook intake. The same sweep pauses monthly gifts to organizations that can
+no longer receive them; a sustained pause-failure count means those donors may
+still be charged, so restore Stripe access promptly or pause the listed
+subscriptions in the organization's Stripe account.
+
+Account deactivation queues a command to end each of the donor's monthly gifts
+at the end of the paid period, because the Stripe call cannot run inside the
+deactivation transaction. The webhook sweep sends these commands. A stale
+command means Stripe is unreachable or not configured; the donor's account is
+already deactivated, but Stripe will keep renewing until the command goes
+through. A dead-lettered command was rejected by Stripe: check
+`last_error_code`, set the subscription to cancel at period end in the Stripe
+Dashboard if needed, then return dead letters to the queue with
+`PaymentLifecycleService.requeueCommands`. The idempotency key is fixed per
+subscription, so a repeated command is safe.
+
+Moderators suspend an organization's donations from the moderator console with
+a reason that goes to `payment_audit_events`. New gifts stop at once; the next
+sweep pauses its monthly gifts and notifies their donors. Restoring does not
+resume paused gifts. Payment records are deleted by the private retention
+sweep after seven years, a placeholder until counsel sets the period.
+
+Never put donor emails, card details, Stripe customer IDs or API keys in
+incident notes.
+
 ### Source refresh
 
 Check `systemctl status patchwork-source-refresh.service` and the latest journal

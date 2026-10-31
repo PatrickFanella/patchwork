@@ -496,6 +496,56 @@ export class AccountPrivacyService {
                 [did, didHash, auditRetentionUntil],
             );
 
+            // Monthly gifts stop at the end of the paid period. The Stripe call
+            // runs from a queue, because it cannot be part of this transaction.
+            const subscriptionCancellations = await client.query(
+                `INSERT INTO payment_commands (
+                    command_id, kind, subscription_id, status, next_attempt_at, created_at
+                 )
+                 SELECT gen_random_uuid(), 'cancel-at-period-end', subscription_id,
+                        'pending', $2, $2
+                   FROM supporter_subscriptions
+                  WHERE donor_did = $1
+                    AND status NOT IN ('canceled', 'incomplete_expired')
+                    AND NOT cancel_at_period_end
+                 ON CONFLICT (kind, subscription_id) DO NOTHING`,
+                [did, now],
+            );
+            const supporterRecognition = await client.query(
+                `DELETE FROM supporter_recognition WHERE donor_did = $1`,
+                [did],
+            );
+            // Payment records stay for accounting retention without the donor's DID.
+            const paymentDonations = await client.query(
+                `UPDATE donations SET donor_did = NULL, updated_at = $2 WHERE donor_did = $1`,
+                [did, now],
+            );
+            const paymentSubscriptions = await client.query(
+                `UPDATE supporter_subscriptions SET donor_did = NULL, updated_at = $2
+                  WHERE donor_did = $1`,
+                [did, now],
+            );
+            await client.query(
+                `UPDATE payment_checkout_sessions SET donor_did = NULL, updated_at = $2
+                  WHERE donor_did = $1`,
+                [did, now],
+            );
+            await client.query(
+                `UPDATE donor_accounts SET donor_did = NULL, updated_at = $2
+                  WHERE donor_did = $1`,
+                [did, now],
+            );
+            const paymentAudit = await client.query(
+                `UPDATE payment_audit_events SET actor_did = 'deactivated:' || $2
+                  WHERE actor_did = $1`,
+                [did, didHash],
+            );
+            await client.query(
+                `UPDATE payment_recipients SET suspended_by_did = 'deactivated:' || $2
+                  WHERE suspended_by_did = $1`,
+                [did, didHash],
+            );
+
             const result = {
                 status: 'deactivated',
                 effectiveAt: now,
@@ -546,12 +596,14 @@ export class AccountPrivacyService {
                     preferenceAudit: preferenceAudit.rowCount ?? 0,
                     preferences: preferences.rowCount ?? 0,
                     policyConsents: policyConsents.rowCount ?? 0,
+                    supporterRecognition: supporterRecognition.rowCount ?? 0,
                 },
                 revoked: {
                     browserSessions: browserSessions.rowCount ?? 0,
                     oauthSessions: oauthSessions.rowCount ?? 0,
                     organizationStewardships:
                         organizationStewardships.rowCount ?? 0,
+                    monthlyGifts: subscriptionCancellations.rowCount ?? 0,
                 },
                 retained: {
                     deactivationReceipt: 1,
@@ -578,6 +630,9 @@ export class AccountPrivacyService {
                         verificationModeratorDecisions.rowCount ?? 0,
                     verificationAudit:
                         verificationAudit.rowCount ?? 0,
+                    paymentDonations: paymentDonations.rowCount ?? 0,
+                    paymentSubscriptions: paymentSubscriptions.rowCount ?? 0,
+                    paymentAudit: paymentAudit.rowCount ?? 0,
                 },
             };
             await client.query(
@@ -1212,6 +1267,54 @@ export class AccountPrivacyService {
         const oauthRow = oauth.rows[0];
         const roleRow = role.rows[0];
 
+        const supportDonations = await client.query<{
+            recipient_name: string;
+            amount_minor: number;
+            currency: string;
+            status: string;
+            created_at: Date | string;
+            succeeded_at: Date | string | null;
+        }>(
+            `SELECT r.display_name AS recipient_name, d.amount_minor, d.currency,
+                    d.status, d.created_at, d.succeeded_at
+               FROM donations d
+               JOIN payment_recipients r ON r.recipient_id = d.recipient_id
+              WHERE d.donor_did = $1
+              ORDER BY d.created_at, d.donation_id`,
+            [did],
+        );
+        const supportSubscriptions = await client.query<{
+            recipient_name: string;
+            tier_key: string;
+            amount_minor: number;
+            currency: string;
+            status: string;
+            current_period_end: Date | string | null;
+            cancel_at_period_end: boolean;
+            paused_reason: string | null;
+            created_at: Date | string;
+        }>(
+            `SELECT r.display_name AS recipient_name, v.tier_key, v.amount_minor,
+                    v.currency, s.status, s.current_period_end,
+                    s.cancel_at_period_end, s.paused_reason, s.created_at
+               FROM supporter_subscriptions s
+               JOIN payment_recipients r ON r.recipient_id = s.recipient_id
+               JOIN supporter_tier_versions v ON v.tier_version_id = s.tier_version_id
+              WHERE s.donor_did = $1
+              ORDER BY s.created_at, s.subscription_id`,
+            [did],
+        );
+        const supportRecognition = await client.query<{
+            badge_visible: boolean;
+            listed_publicly: boolean;
+            share_name_with_recipient: boolean;
+            updated_at: Date | string;
+        }>(
+            `SELECT badge_visible, listed_publicly, share_name_with_recipient, updated_at
+               FROM supporter_recognition WHERE donor_did = $1`,
+            [did],
+        );
+        const recognitionRow = supportRecognition.rows[0];
         return {
             formatVersion: '1.0',
             generatedAt: new Date().toISOString(),
@@ -1701,6 +1804,34 @@ export class AccountPrivacyService {
                     acceptedDocuments: row.accepted_documents,
                     acceptedAt: iso(row.accepted_at),
                 })),
+                support: {
+                    donations: supportDonations.rows.map(row => ({
+                        recipientName: row.recipient_name,
+                        amountMinor: row.amount_minor,
+                        currency: row.currency,
+                        status: row.status,
+                        createdAt: iso(row.created_at),
+                        succeededAt: iso(row.succeeded_at),
+                    })),
+                    subscriptions: supportSubscriptions.rows.map(row => ({
+                        recipientName: row.recipient_name,
+                        tierKey: row.tier_key,
+                        amountMinor: row.amount_minor,
+                        currency: row.currency,
+                        status: row.status,
+                        currentPeriodEnd: iso(row.current_period_end),
+                        cancelAtPeriodEnd: row.cancel_at_period_end,
+                        pausedReason: row.paused_reason,
+                        createdAt: iso(row.created_at),
+                    })),
+                    recognition: {
+                        badgeVisible: recognitionRow?.badge_visible ?? false,
+                        listedPublicly: recognitionRow?.listed_publicly ?? false,
+                        shareNameWithRecipient:
+                            recognitionRow?.share_name_with_recipient ?? false,
+                        updatedAt: recognitionRow ? iso(recognitionRow.updated_at) : null,
+                    },
+                },
                 preferences:
                     preferences.rows[0] ?
                         {
@@ -1730,6 +1861,11 @@ export class AccountPrivacyService {
                     category: 'credentials',
                     reason:
                         'Tokens, encrypted OAuth payloads, session identifiers, and lookup hashes are never exported.',
+                },
+                {
+                    category: 'payment-processor',
+                    reason:
+                        'Stripe identifiers, card details and the email address used at checkout stay with Stripe. Stripe receipts and the Stripe customer portal hold those records.',
                 },
             ],
         };

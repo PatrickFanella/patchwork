@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { resourceMapResponseSchema, type ResourceMapViewport } from '@patchwork/shared';
 import { resourceProfileSchema } from '@patchwork/shared';
 import type { DiscoveryMapAggregates } from '@patchwork/shared';
@@ -4173,3 +4174,268 @@ export const dismissSourceRefreshCandidateViaApi = (input: {candidateId: string;
     requestJsonPost('/admin/source-refresh/candidates/dismiss', input);
 export const applySourceRefreshContactViaApi = (candidateId: string) =>
     requestJsonPost('/admin/source-refresh/candidates/apply-contact', { candidateId });
+
+// ---------------------------------------------------------------------------
+// Giving: general fund (donations plan step 2)
+// ---------------------------------------------------------------------------
+
+const supportTierSchema = z.object({
+    key: z.string(),
+    version: z.number().int(),
+    nameKey: z.string(),
+    descriptionKey: z.string(),
+    amountMinor: z.number().int(),
+    currency: z.literal('usd'),
+});
+
+const supportOptionsSchema = z.object({
+    paymentsEnabled: z.boolean(),
+    mode: z.enum(['off', 'test', 'live']),
+    currency: z.literal('usd'),
+    receipt: z.object({
+        mode: z.enum(['non-deductible', 'charitable']),
+        legalName: z.string().optional(),
+        ein: z.string().optional(),
+    }),
+    oneTime: z.object({
+        minMinor: z.number().int(),
+        maxMinor: z.number().int(),
+        suggestedMinor: z.array(z.number().int()),
+    }),
+    tiers: z.array(supportTierSchema),
+});
+
+const supportCheckoutStatusSchema = z.object({
+    checkoutId: z.string(),
+    mode: z.enum(['one-time', 'monthly']),
+    amountMinor: z.number().int(),
+    currency: z.literal('usd'),
+    recipientName: z.string(),
+    status: z.enum(['creating', 'open', 'complete', 'expired', 'failed']),
+    paymentStatus: z.string().nullable(),
+});
+
+const accountSupportSchema = z.object({
+    donations: z.array(z.object({
+        donationId: z.string(),
+        recipientName: z.string(),
+        amountMinor: z.number().int(),
+        currency: z.literal('usd'),
+        status: z.string(),
+        createdAt: z.string(),
+    })),
+    subscriptions: z.array(z.object({
+        subscriptionId: z.string(),
+        recipientName: z.string(),
+        tierKey: z.string(),
+        nameKey: z.string(),
+        amountMinor: z.number().int(),
+        currency: z.literal('usd'),
+        status: z.string(),
+        currentPeriodEnd: z.string().nullable(),
+        cancelAtPeriodEnd: z.boolean(),
+    })),
+    manageable: z.array(z.object({ recipientId: z.string(), recipientName: z.string() })),
+    isSupporter: z.boolean(),
+    recognition: z.object({
+        badgeVisible: z.boolean(),
+        listedPublicly: z.boolean(),
+        shareNameWithRecipient: z.boolean(),
+    }),
+});
+
+const organizationPaymentsSchema = z.object({
+    organizationId: z.string(),
+    status: z.enum(['not-started', 'onboarding', 'active', 'suspended']),
+    verified: z.boolean(),
+    chargesEnabled: z.boolean(),
+    payoutsEnabled: z.boolean(),
+    detailsSubmitted: z.boolean(),
+    eligible: z.boolean(),
+    dashboardUrl: z.string().nullable(),
+    activeMonthlySupporters: z.number().int(),
+    monthlyRecurringMinor: z.number().int(),
+    months: z.array(z.object({
+        month: z.string(),
+        giftCount: z.number().int(),
+        giftTotalMinor: z.number().int(),
+    })),
+    namedSupporterDids: z.array(z.string()),
+});
+
+export type SupportTier = z.infer<typeof supportTierSchema>;
+export type SupportOptions = z.infer<typeof supportOptionsSchema>;
+export type SupportCheckoutStatus = z.infer<typeof supportCheckoutStatusSchema>;
+export type AccountSupport = z.infer<typeof accountSupportSchema>;
+export type OrganizationPayments = z.infer<typeof organizationPaymentsSchema>;
+export type SupporterRecognition = AccountSupport['recognition'];
+export type SupportRecipient = 'general-fund' | { organizationId: string };
+export type SupportCheckoutRequest =
+    | { recipient: SupportRecipient; mode: 'one-time'; amountMinor: number }
+    | { recipient: SupportRecipient; mode: 'monthly'; tierKey: string };
+
+const parseWith = <T>(
+    schema: z.ZodType<T>,
+    result: ApiClientResult<unknown>,
+    message: string,
+): ApiClientResult<T> => {
+    if (!result.ok) return result;
+    const parsed = schema.safeParse(result.data);
+    return parsed.success ? { ok: true, data: parsed.data } : invalidResponseFailure(message);
+};
+
+export const fetchSupportOptionsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<SupportOptions>> =>
+    parseWith(
+        supportOptionsSchema,
+        await requestJson('/support/tiers', new URLSearchParams(), signal),
+        'Giving options response was malformed.',
+    );
+
+/** Reuse one idempotency key per attempt so a double click opens one Checkout. */
+export const createSupportCheckoutViaApi = async (
+    request: SupportCheckoutRequest,
+    idempotencyKey: string,
+): Promise<ApiClientResult<{ checkoutId: string; url: string }>> =>
+    parseWith(
+        z.object({ checkoutId: z.string(), url: z.string().url().startsWith('https://') }),
+        await requestJsonPost('/support/checkout', request, undefined, idempotencyKey),
+        'Checkout response was malformed.',
+    );
+
+export const fetchSupportCheckoutViaApi = async (
+    checkoutId: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<SupportCheckoutStatus>> =>
+    parseWith(
+        supportCheckoutStatusSchema,
+        await requestJson('/support/checkout', new URLSearchParams({ checkout: checkoutId }), signal),
+        'Checkout status response was malformed.',
+    );
+
+export const openSupportPortalViaApi = async (
+    recipientId?: string,
+): Promise<ApiClientResult<{ url: string }>> =>
+    parseWith(
+        z.object({ url: z.string().url().startsWith('https://') }),
+        await requestJsonPost('/support/portal', recipientId ? { recipientId } : {}),
+        'Portal response was malformed.',
+    );
+
+export const fetchEligibleOrganizationsViaApi = async (
+    organizationIds: readonly string[],
+    signal?: AbortSignal,
+): Promise<ApiClientResult<string[]>> => {
+    const params = new URLSearchParams();
+    for (const id of organizationIds.slice(0, 100)) params.append('organization', id);
+    const result = parseWith(
+        z.object({ eligibleOrganizationIds: z.array(z.string()) }),
+        await requestJson('/support/recipients', params, signal),
+        'Recipient response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.eligibleOrganizationIds } : result;
+};
+
+export const fetchOrganizationPaymentsViaApi = async (
+    organizationId: string,
+    signal?: AbortSignal,
+): Promise<ApiClientResult<OrganizationPayments>> =>
+    parseWith(
+        organizationPaymentsSchema,
+        await requestJson('/organizations/payments', new URLSearchParams({ organization: organizationId }), signal),
+        'Organization payments response was malformed.',
+    );
+
+export const startOrganizationOnboardingViaApi = async (
+    organizationId: string,
+): Promise<ApiClientResult<{ url: string }>> =>
+    parseWith(
+        z.object({ url: z.string().url().startsWith('https://') }),
+        await requestJsonPost('/organizations/payments/onboarding', { organizationId }),
+        'Onboarding response was malformed.',
+    );
+
+export const fetchAccountSupportViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<AccountSupport>> =>
+    parseWith(
+        accountSupportSchema,
+        await requestJson('/account/support', new URLSearchParams(), signal),
+        'Giving history response was malformed.',
+    );
+
+export const updateSupportRecognitionViaApi = async (
+    recognition: SupporterRecognition,
+): Promise<ApiClientResult<SupporterRecognition>> => {
+    const result = parseWith(
+        z.object({ recognition: accountSupportSchema.shape.recognition }),
+        await requestJsonPut('/account/support/recognition', recognition),
+        'Recognition response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.recognition } : result;
+};
+
+const supporterDidsSchema = z.object({ supporterDids: z.array(z.string()) });
+
+export const fetchSupporterBadgesViaApi = async (
+    dids: readonly string[],
+    signal?: AbortSignal,
+): Promise<ApiClientResult<string[]>> => {
+    const params = new URLSearchParams();
+    for (const did of [...new Set(dids)].slice(0, 100)) params.append('did', did);
+    const result = parseWith(
+        supporterDidsSchema,
+        await requestJson('/support/badges', params, signal),
+        'Badge response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.supporterDids } : result;
+};
+
+export const fetchPublicSupportersViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<string[]>> => {
+    const result = parseWith(
+        supporterDidsSchema,
+        await requestJson('/support/supporters', new URLSearchParams(), signal),
+        'Supporters response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.supporterDids } : result;
+};
+
+const moderatedRecipientSchema = z.object({
+    recipientId: z.string(),
+    organizationId: z.string().nullable(),
+    displayName: z.string(),
+    status: z.enum(['onboarding', 'active', 'suspended', 'closed']),
+    chargesEnabled: z.boolean(),
+    suspensionReason: z.string().nullable(),
+    activeMonthlyGifts: z.number().int(),
+    updatedAt: z.string(),
+});
+
+export type ModeratedPaymentRecipient = z.infer<typeof moderatedRecipientSchema>;
+
+export const fetchModeratedPaymentRecipientsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<ModeratedPaymentRecipient[]>> => {
+    const result = parseWith(
+        z.object({ recipients: z.array(moderatedRecipientSchema) }),
+        await requestJson('/moderation/payment-recipients', new URLSearchParams(), signal),
+        'Payment recipient list was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.recipients } : result;
+};
+
+export const moderatePaymentRecipientViaApi = async (
+    action: 'suspend' | 'restore',
+    recipientId: string,
+    reason: string,
+): Promise<ApiClientResult<ModeratedPaymentRecipient>> => {
+    const result = parseWith(
+        z.object({ recipient: moderatedRecipientSchema }),
+        await requestJsonPost(`/moderation/payment-recipients/${action}`, { recipientId, reason }),
+        'Payment recipient response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.recipient } : result;
+};

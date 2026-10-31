@@ -18,6 +18,9 @@ export const appRoutes = [
     '/notifications',
     '/scheduling',
     '/groups',
+    '/support',
+    '/support/thanks',
+    '/support/cancelled',
     '/legal/terms',
     '/legal/privacy',
     '/legal/community-guidelines',
@@ -43,6 +46,9 @@ export const routeLabelKeys: Readonly<Record<AppRoute, string>> = {
     '/notifications': 'route.notifications',
     '/scheduling': 'route.scheduling',
     '/groups': 'route.groups',
+    '/support': 'route.support',
+    '/support/thanks': 'route.supportThanks',
+    '/support/cancelled': 'route.supportCancelled',
     '/legal/terms': 'route.terms',
     '/legal/privacy': 'route.privacy',
     '/legal/community-guidelines': 'route.guidelines',
@@ -92,9 +98,17 @@ const productionAccountRoutes: readonly AppRoute[] = [
     '/settings',
 ];
 
+/** Reached from links and Stripe redirects, never from the navigation menus. */
+const unlistedRoutes: readonly AppRoute[] = [
+    '/support',
+    '/support/thanks',
+    '/support/cancelled',
+];
+
 const fixtureSecondaryRoutes = appRoutes.filter(
     (route) =>
         !primaryRoutes.includes(route) &&
+        !unlistedRoutes.includes(route) &&
         !fixtureAccountRoutes.includes(route) &&
         !isLegalRoute(route),
 );

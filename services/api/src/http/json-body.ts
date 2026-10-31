@@ -74,3 +74,42 @@ export const readJsonBody = async (
         });
     });
 };
+
+/**
+ * Read the exact request bytes for signed provider webhooks, whose signatures
+ * cover the unparsed body.
+ */
+export const readRawBody = async (
+    request: IncomingMessage,
+    maxBytes = DEFAULT_MAX_JSON_BODY_BYTES,
+): Promise<Buffer> => {
+    if (!isJsonMediaType(request.headers['content-type'])) {
+        throw new PublicHttpError(
+            415,
+            'UNSUPPORTED_MEDIA_TYPE',
+            'Webhook bodies must use application/json.',
+        );
+    }
+    const declaredLength = Number(request.headers['content-length']);
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+        throw new PublicHttpError(
+            413,
+            'REQUEST_BODY_TOO_LARGE',
+            `The request body exceeds the ${maxBytes}-byte limit.`,
+        );
+    }
+    const chunks: Buffer[] = [];
+    let totalSize = 0;
+    for await (const chunk of request as AsyncIterable<Buffer>) {
+        totalSize += chunk.length;
+        if (totalSize > maxBytes) {
+            throw new PublicHttpError(
+                413,
+                'REQUEST_BODY_TOO_LARGE',
+                `The request body exceeds the ${maxBytes}-byte limit.`,
+            );
+        }
+        chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+};
