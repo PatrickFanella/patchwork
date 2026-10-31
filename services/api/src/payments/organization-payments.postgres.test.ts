@@ -110,7 +110,7 @@ describe('organization payments', () => {
 
     beforeEach(async () => {
         await pool.query(
-            `TRUNCATE payment_webhook_events, donations, supporter_subscriptions, donor_accounts,
+            `TRUNCATE payment_webhook_events, payment_charge_states, donations, supporter_subscriptions, donor_accounts,
                       supporter_tier_prices, payment_checkout_sessions, payment_audit_events CASCADE`,
         );
         await pool.query(`DELETE FROM payment_recipients WHERE kind = 'organization'`);

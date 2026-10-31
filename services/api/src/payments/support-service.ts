@@ -902,7 +902,15 @@ export class SupportService {
                     donation_id, recipient_id, donor_did, stripe_checkout_session_id,
                     stripe_payment_intent_id, amount_minor, currency, status, livemode,
                     created_at, updated_at, succeeded_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, 'usd', $7, $8, $9, $9,
+                ) VALUES ($1, $2, $3, $4, $5, $6, 'usd',
+                          -- A refund or dispute applied before this completion wins.
+                          CASE WHEN $7 = 'succeeded' THEN COALESCE((
+                              SELECT CASE WHEN c.refunded THEN 'refunded'
+                                          WHEN c.dispute_open THEN 'disputed' END
+                                FROM payment_charge_states c
+                               WHERE c.stripe_payment_intent_id = $5 AND c.recipient_id = $2
+                          ), $7) ELSE $7 END,
+                          $8, $9, $9,
                           CASE WHEN $7 = 'succeeded' THEN $9::timestamptz END)
                 ON CONFLICT (stripe_checkout_session_id) DO UPDATE SET
                     stripe_payment_intent_id =
@@ -1093,10 +1101,31 @@ export class SupportService {
         const charge = await this.gateway.retrieveCharge(chargeId, recipient.scope);
         // Partial refunds leave the gift recorded as succeeded.
         if (!charge.refunded || !charge.paymentIntent) return;
+        await this.recordChargeState(client, charge.paymentIntent, recipient.recipientId, { refunded: true });
         await client.query(
             `UPDATE donations SET status = 'refunded', updated_at = NOW()
               WHERE stripe_payment_intent_id = $1 AND status <> 'refunded' AND recipient_id = $2`,
             [charge.paymentIntent, recipient.recipientId],
+        );
+    }
+
+    private async recordChargeState(
+        client: PoolClient,
+        paymentIntent: string,
+        recipientId: string,
+        state: { refunded: true } | { disputeOpen: boolean },
+    ): Promise<void> {
+        const refunded = 'refunded' in state;
+        await client.query(
+            `INSERT INTO payment_charge_states (
+                stripe_payment_intent_id, recipient_id, refunded, dispute_open, updated_at
+            ) VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (stripe_payment_intent_id) DO UPDATE SET
+                refunded = payment_charge_states.refunded OR EXCLUDED.refunded,
+                dispute_open = CASE WHEN $3 THEN payment_charge_states.dispute_open ELSE EXCLUDED.dispute_open END,
+                updated_at = EXCLUDED.updated_at
+            WHERE payment_charge_states.recipient_id = EXCLUDED.recipient_id`,
+            [paymentIntent, recipientId, refunded, refunded ? false : state.disputeOpen],
         );
     }
 
@@ -1106,6 +1135,7 @@ export class SupportService {
         const dispute = await this.gateway.retrieveDispute(disputeId, recipient.scope);
         if (!dispute.paymentIntent) return;
         const resolvedForDonee = dispute.status === 'won' || dispute.status === 'warning_closed';
+        await this.recordChargeState(client, dispute.paymentIntent, recipient.recipientId, { disputeOpen: !resolvedForDonee });
         await client.query(
             resolvedForDonee ?
                 `UPDATE donations SET status = 'succeeded', updated_at = NOW()

@@ -180,3 +180,9 @@ Moderators with `moderate:users` can suspend and restore an organization's donat
 Retention deletes gifts, ended monthly gifts and payment audit events after 7 years, and unfinished checkouts and settled webhook receipts after 90 days. Seven years is a placeholder until counsel sets the period, and the privacy policy has not been updated to state it; that belongs to step 0.
 
 The payment PostgreSQL suites now apply the full API migration chain to their isolated schemas, because notifications need the outbox tables. The lifecycle suite uses the public schema, like the existing account-privacy suite, because deactivation and export also read indexer and moderation tables, and indexer migrations write to a fixed shadow schema.
+
+## Step 6 record
+
+On 2026-10-31 the branch ran against a real Stripe sandbox, "Patchwork sandbox", using the Stripe CLI to forward webhooks and Playwright to pay on Stripe's hosted Checkout page with test cards. The run covered one-time and monthly gifts to the general fund and to a connected test account, a failed renewal and its recovery, a refund, a dispute, a tier price change, moderator suspension and restore, onboarding, the Customer Portal, export and deactivation. All passed. Evidence is in `docs/operations/evidence/2026-10-31-stripe-sandbox-donations.md`.
+
+The run found one defect. A dispute or refund that Stripe sends before `checkout.session.completed` was applied before the gift existed and lost. Migration `0044_payment_charge_states.sql` keeps that state by PaymentIntent so the gift takes it when recorded, and a PostgreSQL test covers both orders. Completing Stripe's hosted onboarding forms and registering production webhook endpoints were not part of the run. Live mode still waits for step 0.

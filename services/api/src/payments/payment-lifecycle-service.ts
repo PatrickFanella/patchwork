@@ -200,6 +200,7 @@ export class PaymentLifecycleService {
                 'DELETE FROM payment_audit_events WHERE occurred_at <= $1',
                 [cutoff],
             );
+            await client.query('DELETE FROM payment_charge_states WHERE updated_at <= $1', [cutoff]);
             await client.query('COMMIT');
             return {
                 donations: donations.rowCount ?? 0,

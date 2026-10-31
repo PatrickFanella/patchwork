@@ -110,7 +110,7 @@ describe('payment lifecycle', () => {
 
     const reset = async () => {
         await pool.query(
-            `TRUNCATE payment_commands, supporter_subscriptions, donations, donor_accounts,
+            `TRUNCATE payment_commands, payment_charge_states, supporter_subscriptions, donations, donor_accounts,
                       payment_checkout_sessions, supporter_recognition, payment_audit_events,
                       payment_webhook_events CASCADE`,
         );

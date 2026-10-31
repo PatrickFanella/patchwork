@@ -90,7 +90,7 @@ describe('supporter recognition', () => {
     });
 
     beforeEach(async () => {
-        await pool.query('TRUNCATE supporter_subscriptions, donations, supporter_recognition CASCADE');
+        await pool.query('TRUNCATE supporter_subscriptions, donations, supporter_recognition, payment_charge_states CASCADE');
         await pool.query(`DELETE FROM payment_recipients WHERE kind = 'organization'`);
         await pool.query('DELETE FROM organizations');
         const stripe = new FakeStripe();

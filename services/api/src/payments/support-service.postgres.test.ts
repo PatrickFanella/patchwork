@@ -81,7 +81,7 @@ describe('SupportService', () => {
 
     beforeEach(async () => {
         await pool.query(
-            `TRUNCATE payment_webhook_events, donations, supporter_subscriptions,
+            `TRUNCATE payment_webhook_events, payment_charge_states, donations, supporter_subscriptions,
                       donor_accounts, supporter_tier_prices, payment_checkout_sessions,
                       payment_audit_events, notification_intents CASCADE`,
         );
@@ -372,6 +372,32 @@ describe('SupportService', () => {
         stripe.setCharge({ id: 'ch_1Partial', paymentIntent: 'pi_1Disputed', refunded: true });
         await deliver('charge.refunded', { id: 'ch_1Partial' });
         expect((await service.getCheckoutStatus(checkout.checkoutId)).paymentStatus).toBe('refunded');
+    });
+
+    it('applies a dispute or refund that Stripe sends before the Checkout completion', async () => {
+        // A charge can be disputed or refunded within seconds, and those events
+        // are older than checkout.session.completed, so they are applied first.
+        const body = { recipient: 'general-fund', mode: 'one-time', amountMinor: 1_500 };
+        const disputed = await service.createCheckout({ body, clientKey: randomUUID(), donorDid });
+        const refunded = await service.createCheckout({ body, clientKey: randomUUID() });
+        stripe.setDispute({ id: 'dp_1Early', paymentIntent: 'pi_1EarlyDispute', status: 'needs_response' });
+        await deliver('charge.dispute.created', { id: 'dp_1Early' });
+        stripe.setCharge({ id: 'ch_1EarlyRefund', paymentIntent: 'pi_1EarlyRefund', refunded: true });
+        await deliver('charge.refunded', { id: 'ch_1EarlyRefund' });
+
+        const disputedSession = completeSession(disputed.url, { paymentStatus: 'paid', paymentIntent: 'pi_1EarlyDispute' });
+        await deliver('checkout.session.completed', { id: disputedSession.id });
+        const refundedSession = completeSession(refunded.url, { paymentStatus: 'paid', paymentIntent: 'pi_1EarlyRefund' });
+        await deliver('checkout.session.completed', { id: refundedSession.id });
+        expect((await service.getCheckoutStatus(disputed.checkoutId)).paymentStatus).toBe('disputed');
+        expect((await service.getCheckoutStatus(refunded.checkoutId)).paymentStatus).toBe('refunded');
+        // A gift that was disputed before it was recorded gets no receipt.
+        expect(await notifications()).toEqual([]);
+
+        // A dispute that later closes in the organization's favour restores the gift.
+        stripe.setDispute({ id: 'dp_1Early', paymentIntent: 'pi_1EarlyDispute', status: 'won' });
+        await deliver('charge.dispute.closed', { id: 'dp_1Early' });
+        expect((await service.getCheckoutStatus(disputed.checkoutId)).paymentStatus).toBe('succeeded');
     });
 
     it('ignores Checkouts, subscriptions, and connected-account events that are not Patchwork general-fund gifts', async () => {
