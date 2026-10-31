@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
+import { notifyDonor } from './payment-notifications.js';
 import type { PaymentEventProcessor } from './payment-webhook-service.js';
 import {
     activeSupporterSubscriptionSql,
@@ -896,7 +897,7 @@ export class SupportService {
                 session.paymentStatus === 'paid' ? 'succeeded'
                 : event.type === 'checkout.session.async_payment_failed' ? 'failed'
                 : 'pending';
-            await client.query(
+            const donation = await client.query<{ status: string }>(
                 `INSERT INTO donations (
                     donation_id, recipient_id, donor_did, stripe_checkout_session_id,
                     stripe_payment_intent_id, amount_minor, currency, status, livemode,
@@ -909,7 +910,8 @@ export class SupportService {
                     status = CASE WHEN donations.status = 'pending'
                                   THEN EXCLUDED.status ELSE donations.status END,
                     succeeded_at = COALESCE(donations.succeeded_at, EXCLUDED.succeeded_at),
-                    updated_at = EXCLUDED.updated_at`,
+                    updated_at = EXCLUDED.updated_at
+                RETURNING status`,
                 [
                     randomUUID(), row.recipient_id, row.donor_did, session.id,
                     session.paymentIntent ?? null,
@@ -917,6 +919,12 @@ export class SupportService {
                     status, session.livemode, now,
                 ],
             );
+            const recorded = donation.rows[0]?.status;
+            if (recorded === 'succeeded') {
+                await notifyDonor(client, row.donor_did, 'support_receipt', `support-receipt:${session.id}`, now);
+            } else if (recorded === 'failed') {
+                await notifyDonor(client, row.donor_did, 'support_payment_failed', `support-failed:${session.id}`, now);
+            }
             return;
         }
         if (session.subscription) {
@@ -941,7 +949,20 @@ export class SupportService {
         :   stripeIdOf(object['id'], stripeIdPatterns.subscription);
         if (!subscriptionId) return; // One-off invoices are not supporter subscriptions.
         const subscription = await this.gateway.retrieveSubscription(subscriptionId, recipient.scope);
-        await this.syncSubscription(client, subscription, new Date(), recipient);
+        const now = new Date();
+        await this.syncSubscription(client, subscription, now, recipient);
+        const invoiceId = stripeIdOf(object['id'], stripeIdPatterns.invoice);
+        if (!invoiceId || !event.type.startsWith('invoice.')) return;
+        const donor = await client.query<{ donor_did: string | null }>(
+            'SELECT donor_did FROM supporter_subscriptions WHERE stripe_subscription_id = $1 AND recipient_id = $2',
+            [subscription.id, recipient.recipientId],
+        );
+        const donorDid = donor.rows[0]?.donor_did;
+        if (event.type === 'invoice.paid') {
+            await notifyDonor(client, donorDid, 'support_receipt', `support-receipt:${invoiceId}`, now);
+        } else {
+            await notifyDonor(client, donorDid, 'support_payment_failed', `support-failed:${invoiceId}`, now);
+        }
     }
 
     private async syncSubscription(
@@ -979,9 +1000,34 @@ export class SupportService {
             subscription.currentPeriodEnd !== undefined ?
                 new Date(subscription.currentPeriodEnd * 1_000)
             :   null;
+        const previous = (await client.query<{
+            donor_did: string | null;
+            status: string;
+            cancel_at_period_end: boolean;
+        }>(
+            `SELECT donor_did, status, cancel_at_period_end FROM supporter_subscriptions
+              WHERE stripe_subscription_id = $1 AND recipient_id = $2 FOR UPDATE`,
+            [subscription.id, recipient.recipientId],
+        )).rows[0];
+        const notifyEnding = async (written: number | null) => {
+            if (!written) return;
+            const donorDid = previous ? previous.donor_did : checkout?.donor_did;
+            if (subscription.status === 'canceled') {
+                // A cancellation the donor was already told about is not announced twice.
+                if (previous && previous.status !== 'canceled' && !previous.cancel_at_period_end) {
+                    await notifyDonor(client, donorDid, 'support_subscription_ending',
+                        `support-ending:${subscription.id}:ended`, fetchedAt);
+                }
+                return;
+            }
+            if (subscription.cancelAtPeriodEnd && !previous?.cancel_at_period_end) {
+                await notifyDonor(client, donorDid, 'support_subscription_ending',
+                    `support-ending:${subscription.id}:${periodEnd?.toISOString() ?? 'scheduled'}`, fetchedAt);
+            }
+        };
         if (checkout) {
             // Insert or refresh; a write fetched earlier never replaces newer state.
-            await client.query(
+            const written = await client.query(
                 `INSERT INTO supporter_subscriptions (
                     subscription_id, recipient_id, tier_version_id, donor_did,
                     stripe_subscription_id, status, current_period_end,
@@ -1005,9 +1051,10 @@ export class SupportService {
                     subscription.livemode, fetchedAt, checkout.checkout_id,
                 ],
             );
+            await notifyEnding(written.rowCount);
             return;
         }
-        await client.query(
+        const written = await client.query(
             `UPDATE supporter_subscriptions SET
                 status = $2, current_period_end = $3, cancel_at_period_end = $4,
                 paused_reason = CASE WHEN $5 THEN COALESCE(paused_reason, 'donor') END,
@@ -1019,6 +1066,7 @@ export class SupportService {
                 recipient.recipientId,
             ],
         );
+        await notifyEnding(written.rowCount);
     }
 
     private async recordDonorAccount(

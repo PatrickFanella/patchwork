@@ -2138,6 +2138,33 @@
             "saved": "Se guardó la configuración de reconocimiento.",
             "failed": "No se pudo guardar la configuración de reconocimiento.",
             "notActive": "Esta configuración se aplica mientras tengas una donación mensual activa."
+        },
+        "deactivation": {
+            "title": "Donaciones mensuales que se detendrán: {{count}}",
+            "lastPeriod": "el último periodo pagado termina el {{date}}",
+            "help": "Al desactivar tu cuenta, estas donaciones se cancelan al final del periodo que ya pagaste. No se te volverá a cobrar. Tus donaciones anteriores quedan en los registros contables de Patchwork sin el nombre de tu cuenta."
+        },
+        "moderation": {
+            "title": "Donaciones a organizaciones",
+            "help": "Suspende las donaciones de una organización cuando un reporte sobre su recaudación necesite revisión. Las donaciones nuevas se detienen de inmediato. Las mensuales se pausan en la siguiente revisión y se avisa a quienes donan. Restaurar no reactiva las donaciones pausadas.",
+            "unavailable": "Las donaciones no están configuradas en este servidor.",
+            "empty": "Ninguna organización ha configurado donaciones.",
+            "reason": "Motivo, guardado en el registro de auditoría de pagos",
+            "reasonRequired": "Indica un motivo antes de suspender o restaurar.",
+            "failed": "No se pudo guardar el cambio.",
+            "suspend": "Suspender donaciones a {{name}}",
+            "restore": "Restaurar donaciones a {{name}}",
+            "suspended": "Se suspendieron las donaciones a {{name}}.",
+            "restored": "Se restauraron las donaciones a {{name}}.",
+            "monthlyGifts": "Donaciones mensuales activas: {{count}}",
+            "updated": "actualizado el {{date}}",
+            "currentReason": "Motivo de la suspensión: {{reason}}",
+            "status": {
+                "onboarding": "Configuración de Stripe sin terminar",
+                "active": "Recibe donaciones",
+                "suspended": "Suspendida",
+                "closed": "Cerrada"
+            }
         }
     }
 }

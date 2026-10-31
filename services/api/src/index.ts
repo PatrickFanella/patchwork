@@ -180,6 +180,8 @@ import {
     type RetentionScheduler,
 } from './db/retention-scheduler.js';
 import { RetentionMetrics } from './db/retention-metrics.js';
+import { PaymentLifecycleService } from './payments/payment-lifecycle-service.js';
+import { PaymentModerationService } from './payments/payment-moderation-service.js';
 
 const config = loadApiConfig();
 
@@ -413,6 +415,10 @@ const organizationPaymentsService =
             publicWebOrigin: config.API_PUBLIC_ORIGIN.replace(/\/$/, ''),
         })
     :   undefined;
+const paymentLifecycleService =
+    postgresPool ? new PaymentLifecycleService(postgresPool, stripeGateway) : undefined;
+const paymentModerationService =
+    postgresPool ? new PaymentModerationService(postgresPool) : undefined;
 const paymentWebhookService =
     postgresPool && stripeGateway && supportService ?
         new PaymentWebhookService(postgresPool, stripeGateway, {
@@ -857,6 +863,9 @@ let paymentWebhookSweepFailuresTotal = 0;
 const paymentWebhookSignatureFailuresTotal = { platform: 0, connect: 0 };
 let paymentWebhookSweepRunning = false;
 let paymentEligibilityPauseFailuresTotal = 0;
+let paymentCommandsPending = 0;
+let paymentCommandsDeadLetters = 0;
+let paymentCommandsOldestPendingSeconds = 0;
 
 const runPaymentWebhookSweep = async (): Promise<void> => {
     if (!paymentWebhookService || paymentWebhookSweepRunning) return;
@@ -868,6 +877,14 @@ const runPaymentWebhookSweep = async (): Promise<void> => {
         if (eligibility && eligibility.paused + eligibility.failed > 0) {
             console.log(JSON.stringify({ level: eligibility.failed > 0 ? 'warn' : 'info', event: 'payment_eligibility_sweep_completed', eligibility }));
         }
+        const commands = await paymentLifecycleService?.runCommandSweep();
+        if (commands && commands.completed + commands.retried + commands.deadLettered > 0) {
+            console.log(JSON.stringify({ level: commands.deadLettered > 0 ? 'warn' : 'info', event: 'payment_command_sweep_completed', commands }));
+        }
+        const lifecycle = await paymentLifecycleService?.getOperatorMetrics();
+        paymentCommandsPending = lifecycle?.pendingCommands ?? 0;
+        paymentCommandsDeadLetters = lifecycle?.deadLetterCommands ?? 0;
+        paymentCommandsOldestPendingSeconds = lifecycle?.oldestPendingCommandSeconds ?? 0;
         const metrics = await paymentWebhookService.getOperatorMetrics();
         paymentWebhookPending = metrics.pending;
         paymentWebhookRetrying = metrics.retrying;
@@ -894,10 +911,11 @@ const runPaymentWebhookSweep = async (): Promise<void> => {
 };
 
 const supportHandler =
-    supportService && organizationPaymentsService && authenticateApiRequest ?
+    supportService && organizationPaymentsService && paymentModerationService && authenticateApiRequest ?
         createSupportHandler({
             service: supportService,
             organizations: organizationPaymentsService,
+            moderation: paymentModerationService,
             authenticate: authenticateApiRequest,
             authenticateOptional: authenticateOptionalApiRequest,
         })
@@ -997,6 +1015,15 @@ const renderPrometheusMetrics = (): string => {
         '# HELP patchwork_payment_eligibility_pause_failures_total Monthly gifts to ineligible organizations that Stripe could not pause.',
         '# TYPE patchwork_payment_eligibility_pause_failures_total counter',
         `patchwork_payment_eligibility_pause_failures_total{${paymentLabels}} ${paymentEligibilityPauseFailuresTotal}`,
+        '# HELP patchwork_payment_commands_pending Stripe commands queued by account deactivation and not yet sent.',
+        '# TYPE patchwork_payment_commands_pending gauge',
+        `patchwork_payment_commands_pending{${paymentLabels}} ${paymentCommandsPending}`,
+        '# HELP patchwork_payment_commands_oldest_pending_seconds Age of the oldest unsent Stripe command.',
+        '# TYPE patchwork_payment_commands_oldest_pending_seconds gauge',
+        `patchwork_payment_commands_oldest_pending_seconds{${paymentLabels}} ${paymentCommandsOldestPendingSeconds}`,
+        '# HELP patchwork_payment_commands_dead_letters Stripe commands that failed and need an operator.',
+        '# TYPE patchwork_payment_commands_dead_letters gauge',
+        `patchwork_payment_commands_dead_letters{${paymentLabels}} ${paymentCommandsDeadLetters}`,
         '# HELP patchwork_payment_webhook_signature_failures_total Stripe webhook deliveries rejected by signature checks.',
         '# TYPE patchwork_payment_webhook_signature_failures_total counter',
         ...(['platform', 'connect'] as const).map(source =>
@@ -2707,12 +2734,14 @@ export const startApiServer = () => {
             intervalMs: config.API_RETENTION_INTERVAL_SECONDS * 1_000,
             enforce: async () => {
                 const result = await retention.enforce();
+                const payments = await paymentLifecycleService?.runRetention();
                 retentionMetrics.recordSuccess();
                 console.log(
                     JSON.stringify({
                         level: 'info',
                         event: 'private_retention_completed',
                         ...result,
+                        ...(payments ? { payments } : {}),
                     }),
                 );
             },

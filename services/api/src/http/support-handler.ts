@@ -1,9 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { AuthorizationError, requireCapability } from '../authorization-guard.js';
 import {
     OrganizationPaymentsError,
     type OrganizationPaymentsErrorCode,
     type OrganizationPaymentsService,
 } from '../payments/organization-payments-service.js';
+import {
+    PaymentModerationError,
+    type PaymentModerationErrorCode,
+    type PaymentModerationService,
+} from '../payments/payment-moderation-service.js';
 import {
     SupportServiceError,
     type SupportService,
@@ -28,6 +34,9 @@ const routes = new Map<string, readonly string[]>([
     ['/support/supporters', ['GET']],
     ['/organizations/payments', ['GET']],
     ['/organizations/payments/onboarding', ['POST']],
+    ['/moderation/payment-recipients', ['GET']],
+    ['/moderation/payment-recipients/suspend', ['POST']],
+    ['/moderation/payment-recipients/restore', ['POST']],
 ]);
 
 export const isSupportRoute = (request: IncomingMessage, requestUrl: URL): boolean =>
@@ -55,7 +64,21 @@ const organizationErrors: Readonly<Record<OrganizationPaymentsErrorCode, [number
     STRIPE_UNAVAILABLE: [503, 'Stripe could not be reached. Try again in a moment.'],
 };
 
+const moderationErrors: Readonly<Record<PaymentModerationErrorCode, [number, string]>> = {
+    INVALID_MODERATION_REQUEST: [400, 'Choose a recipient and give a reason.'],
+    PAYMENT_RECIPIENT_NOT_FOUND: [404, 'That payment recipient was not found.'],
+    PAYMENT_RECIPIENT_CLOSED: [409, 'This recipient is closed and cannot change.'],
+    PAYMENT_RECIPIENT_NOT_SUSPENDED: [409, 'This recipient is not suspended.'],
+};
+
 const mapError = (error: unknown): unknown => {
+    if (error instanceof AuthorizationError) {
+        return new PublicHttpError(error.statusCode, error.code, 'The required moderation capability is missing.');
+    }
+    if (error instanceof PaymentModerationError) {
+        const [status, message] = moderationErrors[error.code];
+        return new PublicHttpError(status, error.code, message);
+    }
     if (error instanceof OrganizationPaymentsError) {
         const [status, message] = organizationErrors[error.code];
         return new PublicHttpError(status, error.code, message);
@@ -85,6 +108,7 @@ export const createSupportHandler = (dependencies: {
         | 'listPublicSupporters'
     >;
     organizations: Pick<OrganizationPaymentsService, 'getStatus' | 'startOnboarding'>;
+    moderation: Pick<PaymentModerationService, 'listRecipients' | 'suspend' | 'restore'>;
     authenticate(request: IncomingMessage): Promise<AuthenticatedRequest>;
     authenticateOptional(request: IncomingMessage): Promise<AuthenticatedRequest | undefined>;
 }) => (
@@ -158,6 +182,22 @@ export const createSupportHandler = (dependencies: {
             }
             const authenticated = await dependencies.authenticate(request);
             const actorDid = authenticated.principal.did;
+            if (pathname.startsWith('/moderation/')) {
+                requireCapability(authenticated.principal.authorization, 'moderate:users');
+                if (request.method === 'GET') {
+                    writeJsonResponse(response, 200, {
+                        recipients: await dependencies.moderation.listRecipients(),
+                    });
+                    return;
+                }
+                const body = await readJsonBody(request, 4_096);
+                writeJsonResponse(response, 200, {
+                    recipient: pathname.endsWith('/suspend') ?
+                        await dependencies.moderation.suspend(actorDid, body)
+                    :   await dependencies.moderation.restore(actorDid, body),
+                });
+                return;
+            }
             if (pathname === '/account/support/recognition') {
                 writeJsonResponse(
                     response,

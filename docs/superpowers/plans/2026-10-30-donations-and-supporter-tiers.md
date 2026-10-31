@@ -166,3 +166,17 @@ Step 4 adds recognition. Three settings in Settings → Supporting start off: sh
 
 Volunteer cards are the only profile surface that shows the badge. Other places that show accounts, such as member lists and chat, are unchanged. Adding the badge there would add a lookup to many pages and is left for a later decision. Deleting recognition data on deactivation and including it in export are step 5.
 
+
+## Step 5 record
+
+Step 5 adds the lifecycle. Migration `0043_payment_lifecycle.sql` adds a queue of Stripe commands, four notification types and a hashed marker for deactivated moderators.
+
+Account export now includes the account's own gifts, monthly gifts and recognition settings. It leaves out Stripe identifiers, card details, the checkout email address and other donors. Deactivation stops each monthly gift at the end of its paid period, deletes recognition settings, and removes the donor's DID from the payment records that are kept. The confirmation dialog lists the monthly gifts that will stop. The Stripe call cannot run inside the deactivation transaction, so deactivation queues it and the webhook sweep sends it, with retries, a dead-letter state, metrics and alerts. Until Stripe accepts the command, the gift keeps renewing.
+
+Donors get in-app notices, plus email or push if they turned those on, when a gift is received, a payment fails, a monthly gift is ending, or an organization's gifts are paused. A notice never names an amount or a recipient. This is stricter than the plan, which allowed both in the in-app text. The reason is that every channel sends the same text, and the Spanish copy is fixed per notice type. The notices are not tax receipts; Stripe's emailed receipts still serve that purpose.
+
+Moderators with `moderate:users` can suspend and restore an organization's donations from the moderator console, and each change records a reason in the payment audit log. Suspension stops new gifts at once, and the next sweep pauses the monthly gifts and notifies their donors. Restoring does not resume paused gifts, because that is still an open question. Routes take the recipient in the body, `/moderation/payment-recipients/suspend|restore`, because the API router does not use path parameters.
+
+Retention deletes gifts, ended monthly gifts and payment audit events after 7 years, and unfinished checkouts and settled webhook receipts after 90 days. Seven years is a placeholder until counsel sets the period, and the privacy policy has not been updated to state it; that belongs to step 0.
+
+The payment PostgreSQL suites now apply the full API migration chain to their isolated schemas, because notifications need the outbox tables. The lifecycle suite uses the public schema, like the existing account-privacy suite, because deactivation and export also read indexer and moderation tables, and indexer migrations write to a fixed shadow schema.

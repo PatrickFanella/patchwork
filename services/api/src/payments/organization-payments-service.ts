@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { notifyDonor } from './payment-notifications.js';
 import {
     activeSupporterSubscriptionSql,
     eligibleOrganizationRecipientSql,
@@ -334,18 +335,37 @@ export class OrganizationPaymentsService {
                     `patchwork-pause-${row.subscription_id}-${reason}`,
                     { accountId: row.stripe_account_id },
                 );
-                await this.pool.query(
-                    `UPDATE supporter_subscriptions
-                        SET paused_reason = $2, updated_at = NOW()
-                      WHERE subscription_id = $1 AND paused_reason IS NULL`,
-                    [row.subscription_id, reason],
-                );
+                await this.recordPause(row.subscription_id, reason);
                 result.paused += 1;
             } catch {
                 result.failed += 1;
             }
         }
         return result;
+    }
+
+    private async recordPause(subscriptionId: string, reason: string): Promise<void> {
+        const client = await this.pool.connect();
+        try {
+            await client.query('BEGIN');
+            const paused = await client.query<{ donor_did: string | null }>(
+                `UPDATE supporter_subscriptions
+                    SET paused_reason = $2, updated_at = NOW()
+                  WHERE subscription_id = $1 AND paused_reason IS NULL
+                  RETURNING donor_did`,
+                [subscriptionId, reason],
+            );
+            if (paused.rows[0]) {
+                await notifyDonor(client, paused.rows[0].donor_did, 'support_recipient_paused',
+                    `support-paused:${subscriptionId}:${reason}`, new Date());
+            }
+            await client.query('COMMIT');
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     private async audit(

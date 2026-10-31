@@ -11,7 +11,7 @@ import { useLocale } from '../i18n';
 import { defaultAccountPreferences, type AccountPreferences } from '@patchwork/shared';
 import { Surface } from '../components/Surface';
 import { PageHeader } from '../components/PageHeader';
-import { SupportingSection } from './support';
+import { DeactivationGiftsNotice, SupportingSection } from './support';
 
 interface AccountPrivacyRouteProps {
     onDeactivated: () => Promise<void>;
@@ -300,6 +300,7 @@ export const AccountPrivacyRoute = ({ onDeactivated }: AccountPrivacyRouteProps)
                                 <p className='mt-1 text-xs'>
                                     {t('account.confirmHelp')}
                                 </p>
+                                <DeactivationGiftsNotice />
                                 <div className='mt-2 flex flex-wrap gap-2'>
                                     <Button
                                         type='button'

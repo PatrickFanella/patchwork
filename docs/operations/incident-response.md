@@ -217,8 +217,27 @@ or insert events by hand. Setting `PATCHWORK_PAYMENTS_MODE=off` does not stop
 webhook intake. The same sweep pauses monthly gifts to organizations that can
 no longer receive them; a sustained pause-failure count means those donors may
 still be charged, so restore Stripe access promptly or pause the listed
-subscriptions in the organization's Stripe account. Never put donor emails, card details, Stripe customer IDs or
-API keys in incident notes.
+subscriptions in the organization's Stripe account.
+
+Account deactivation queues a command to end each of the donor's monthly gifts
+at the end of the paid period, because the Stripe call cannot run inside the
+deactivation transaction. The webhook sweep sends these commands. A stale
+command means Stripe is unreachable or not configured; the donor's account is
+already deactivated, but Stripe will keep renewing until the command goes
+through. A dead-lettered command was rejected by Stripe: check
+`last_error_code`, set the subscription to cancel at period end in the Stripe
+Dashboard if needed, then return dead letters to the queue with
+`PaymentLifecycleService.requeueCommands`. The idempotency key is fixed per
+subscription, so a repeated command is safe.
+
+Moderators suspend an organization's donations from the moderator console with
+a reason that goes to `payment_audit_events`. New gifts stop at once; the next
+sweep pauses its monthly gifts and notifies their donors. Restoring does not
+resume paused gifts. Payment records are deleted by the private retention
+sweep after seven years, a placeholder until counsel sets the period.
+
+Never put donor emails, card details, Stripe customer IDs or API keys in
+incident notes.
 
 ### Source refresh
 

@@ -2138,6 +2138,33 @@
             "saved": "Recognition settings saved.",
             "failed": "Recognition settings could not be saved.",
             "notActive": "These settings take effect while you have an active monthly gift."
+        },
+        "deactivation": {
+            "title": "Monthly gifts that will stop: {{count}}",
+            "lastPeriod": "last paid period ends {{date}}",
+            "help": "Deactivating cancels these gifts at the end of the period you have paid for. You will not be charged again. Your past gifts stay in Patchwork's accounting records without your account name."
+        },
+        "moderation": {
+            "title": "Organization donations",
+            "help": "Suspend an organization's donations when a fundraising report needs review. New gifts stop immediately. Monthly gifts pause at the next check, and their donors are told. Restoring does not restart paused gifts.",
+            "unavailable": "Donations are not configured on this server.",
+            "empty": "No organization has set up donations.",
+            "reason": "Reason, kept in the payment audit log",
+            "reasonRequired": "Give a reason before suspending or restoring.",
+            "failed": "The change could not be saved.",
+            "suspend": "Suspend donations to {{name}}",
+            "restore": "Restore donations to {{name}}",
+            "suspended": "Donations to {{name}} are suspended.",
+            "restored": "Donations to {{name}} are restored.",
+            "monthlyGifts": "Active monthly gifts: {{count}}",
+            "updated": "updated {{date}}",
+            "currentReason": "Suspension reason: {{reason}}",
+            "status": {
+                "onboarding": "Stripe setup not finished",
+                "active": "Accepting gifts",
+                "suspended": "Suspended",
+                "closed": "Closed"
+            }
         }
     }
 }

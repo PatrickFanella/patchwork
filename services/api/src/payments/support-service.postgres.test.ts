@@ -1,18 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentWebhookService } from './payment-webhook-service.js';
 import type { StripeCheckoutSession, StripeEvent, StripeSubscription } from './stripe-gateway.js';
 import { FakeStripe } from './testing/fake-stripe.js';
+import { applyApiMigrations } from './testing/migrations.js';
 import { SupportService, type SupportServiceOptions } from './support-service.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const donorDid = 'did:plc:supportdonor';
 const origin = 'https://patchwork.example.test';
 
-const migration = (name: string) =>
-    readFile(new URL(`../db/migrations/${name}`, import.meta.url), 'utf8');
 
 describe('SupportService', () => {
     const schema = `support_${randomUUID().replaceAll('-', '')}`;
@@ -54,6 +52,12 @@ describe('SupportService', () => {
         return result;
     };
 
+    const notifications = async () =>
+        (await pool.query<{ recipient_did: string; notification_type: string; deduplication_key: string }>(
+            `SELECT recipient_did, notification_type, deduplication_key
+               FROM notification_intents ORDER BY created_at, deduplication_key`,
+        )).rows;
+
     const completeSession = (
         url: string,
         changes: Partial<StripeCheckoutSession>,
@@ -66,15 +70,7 @@ describe('SupportService', () => {
 
     beforeAll(async () => {
         await adminPool.query(`CREATE SCHEMA ${schema}`);
-        for (const name of [
-            '0016_organizations_and_stewardship.sql',
-            '0017_verification_and_exact_public_addresses.sql',
-            '0040_donations_and_supporter_tiers.sql',
-            '0041_general_fund_checkout.sql',
-            '0042_organization_payment_recipients.sql',
-        ]) {
-            await pool.query(await migration(name));
-        }
+        await applyApiMigrations(pool);
     });
 
     afterAll(async () => {
@@ -87,7 +83,7 @@ describe('SupportService', () => {
         await pool.query(
             `TRUNCATE payment_webhook_events, donations, supporter_subscriptions,
                       donor_accounts, supporter_tier_prices, payment_checkout_sessions,
-                      payment_audit_events CASCADE`,
+                      payment_audit_events, notification_intents CASCADE`,
         );
         await pool.query(`DELETE FROM payment_recipients WHERE kind = 'organization'`);
         await pool.query('DELETE FROM organizations');
@@ -212,6 +208,11 @@ describe('SupportService', () => {
         });
         await deliver('checkout.session.completed', { id: session.id });
         await deliver('checkout.session.completed', { id: session.id });
+        // A redelivered completion does not send a second receipt notice.
+        expect(await notifications()).toEqual([{
+            recipient_did: donorDid, notification_type: 'support_receipt',
+            deduplication_key: `support-receipt:${session.id}`,
+        }]);
 
         await expect(service.getCheckoutStatus(checkout.checkoutId)).resolves.toMatchObject({
             status: 'complete',
@@ -298,6 +299,7 @@ describe('SupportService', () => {
             parent: { type: 'subscription_details', subscription_details: { subscription: subscription.id } },
         });
         expect((await service.getAccountSupport(donorDid)).subscriptions[0]?.status).toBe('past_due');
+        expect((await notifications()).map(row => row.notification_type)).toEqual(['support_payment_failed']);
 
         stripe.setSubscription({
             ...subscription, cancelAtPeriodEnd: true, collectionPaused: true,
@@ -307,12 +309,46 @@ describe('SupportService', () => {
         expect(account.subscriptions[0]).toMatchObject({ status: 'active', cancelAtPeriodEnd: true });
         const paused = await pool.query('SELECT paused_reason FROM supporter_subscriptions');
         expect(paused.rows).toEqual([{ paused_reason: 'donor' }]);
+        expect((await notifications()).map(row => row.deduplication_key).sort()).toEqual([
+            'support-ending:sub_1Monthly:2026-11-30T00:53:20.000Z',
+            'support-failed:in_1Failed',
+            'support-receipt:in_1Legacy',
+        ]);
+        expect(new Set((await notifications()).map(row => row.recipient_did))).toEqual(new Set([donorDid]));
 
         // A write fetched before the stored state never replaces it.
         await pool.query(`UPDATE supporter_subscriptions SET stripe_state_at = '2999-01-01'`);
         stripe.setSubscription({ ...subscription, status: 'canceled' });
         await deliver('customer.subscription.deleted', { id: subscription.id });
         expect((await service.getAccountSupport(donorDid)).subscriptions[0]?.status).toBe('active');
+    });
+
+    it('announces an abrupt end once, and never notifies guests', async () => {
+        const signedIn = await service.createCheckout({
+            body: { recipient: 'general-fund', mode: 'monthly', tierKey: 'tier-2' },
+            clientKey: randomUUID(),
+            donorDid,
+        });
+        const guest = await service.createCheckout({
+            body: { recipient: 'general-fund', mode: 'monthly', tierKey: 'tier-2' },
+            clientKey: randomUUID(),
+        });
+        const base = {
+            status: 'active' as const, livemode: false, cancelAtPeriodEnd: false,
+            currentPeriodEnd: 1_796_000_000, collectionPaused: false,
+        };
+        for (const [checkout, id] of [[signedIn, 'sub_1Abrupt'], [guest, 'sub_1Guest']] as const) {
+            stripe.setSubscription({ ...base, id, customer: `cus_1${id.slice(5)}`, metadata: { patchwork_checkout_id: checkout.checkoutId } });
+            await deliver('customer.subscription.created', { id });
+            await deliver('invoice.paid', { id: `in_1${id.slice(5)}`, subscription: id });
+            stripe.setSubscription({ ...base, id, status: 'canceled', customer: `cus_1${id.slice(5)}`, metadata: { patchwork_checkout_id: checkout.checkoutId } });
+            await deliver('customer.subscription.deleted', { id });
+            await deliver('customer.subscription.deleted', { id });
+        }
+        expect((await notifications()).map(row => row.deduplication_key)).toEqual([
+            'support-receipt:in_1Abrupt',
+            'support-ending:sub_1Abrupt:ended',
+        ]);
     });
 
     it('applies full refunds and dispute outcomes to one-time gifts', async () => {

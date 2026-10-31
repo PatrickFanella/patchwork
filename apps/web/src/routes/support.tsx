@@ -16,6 +16,9 @@ import {
     fetchPublicSupportersViaApi,
     fetchSupporterBadgesViaApi,
     updateSupportRecognitionViaApi,
+    fetchModeratedPaymentRecipientsViaApi,
+    moderatePaymentRecipientViaApi,
+    type ModeratedPaymentRecipient,
     type SupporterRecognition,
     type AccountSupport,
     type OrganizationPayments,
@@ -28,6 +31,7 @@ import { useLocale } from '../i18n';
 import { AccountName } from '../features/identity/AccountName';
 import { useHandles } from '../features/identity/useHandles';
 import { Badge } from '../components/Badge';
+import { Input } from '../components/Input';
 
 const dollarsPattern = /^\d{1,5}(\.\d{1,2})?$/u;
 
@@ -726,6 +730,134 @@ export const SupportingSection = () => {
             {support ? (
                 <RecognitionSettings initial={support.recognition} isSupporter={support.isSupporter} />
             ) : null}
+        </Surface>
+    );
+};
+
+/** Shown in the deactivation confirmation: monthly gifts that will stop. */
+export const DeactivationGiftsNotice = () => {
+    const { t, fmt } = useLocale();
+    const money = useMoney();
+    const [gifts, setGifts] = useState<AccountSupport['subscriptions']>([]);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        void fetchAccountSupportViaApi(controller.signal).then((result) => {
+            if (controller.signal.aborted || !result.ok) return;
+            setGifts(result.data.subscriptions.filter((subscription) =>
+                !subscription.cancelAtPeriodEnd
+                && !['canceled', 'incomplete_expired'].includes(subscription.status)));
+        });
+        return () => controller.abort();
+    }, []);
+
+    if (gifts.length === 0) return null;
+    return (
+        <div className='mt-2 text-xs'>
+            <p className='font-bold'>{t('support.deactivation.title', { count: gifts.length })}</p>
+            <ul className='mt-1 list-disc pl-4'>
+                {gifts.map((gift) => (
+                    <li key={gift.subscriptionId}>
+                        {t('support.monthly.perMonth', { amount: money(gift.amountMinor) })}{' · '}{gift.recipientName}
+                        {gift.currentPeriodEnd ?
+                            <>{' · '}{t('support.deactivation.lastPeriod', { date: fmt.shortDate(gift.currentPeriodEnd) })}</>
+                        :   null}
+                    </li>
+                ))}
+            </ul>
+            <p className='mt-1'>{t('support.deactivation.help')}</p>
+        </div>
+    );
+};
+
+/** Moderator switch for organization fundraising. */
+export const PaymentRecipientModeration = () => {
+    const { t, fmt } = useLocale();
+    const [recipients, setRecipients] = useState<ModeratedPaymentRecipient[]>();
+    const [unavailable, setUnavailable] = useState(false);
+    const [reason, setReason] = useState('');
+    const [busy, setBusy] = useState<string>();
+    const [statusMessage, setStatusMessage] = useState<string>();
+
+    useEffect(() => {
+        const controller = new AbortController();
+        void fetchModeratedPaymentRecipientsViaApi(controller.signal).then((result) => {
+            if (controller.signal.aborted) return;
+            if (result.ok) setRecipients(result.data);
+            else setUnavailable(true);
+        });
+        return () => controller.abort();
+    }, []);
+
+    const act = async (action: 'suspend' | 'restore', recipient: ModeratedPaymentRecipient) => {
+        if (!reason.trim()) {
+            setStatusMessage(String(t('support.moderation.reasonRequired')));
+            return;
+        }
+        setBusy(recipient.recipientId);
+        setStatusMessage(undefined);
+        const result = await moderatePaymentRecipientViaApi(action, recipient.recipientId, reason.trim());
+        setBusy(undefined);
+        if (!result.ok) {
+            setStatusMessage(`${t('common.error')}: ${t('support.moderation.failed')}`);
+            return;
+        }
+        setRecipients((current) => current?.map((row) =>
+            row.recipientId === result.data.recipientId ? result.data : row));
+        setReason('');
+        setStatusMessage(String(t(action === 'suspend' ? 'support.moderation.suspended' : 'support.moderation.restored', {
+            name: result.data.displayName,
+        })));
+    };
+
+    const statusLabel = (status: ModeratedPaymentRecipient['status']) => t(`support.moderation.status.${status}`);
+
+    return (
+        <Surface title={t('support.moderation.title')}>
+            <p className='text-sm text-mh-textMuted'>{t('support.moderation.help')}</p>
+            {unavailable ? <p className='mt-2 text-sm'>{t('support.moderation.unavailable')}</p> : null}
+            {recipients && recipients.length === 0 ? (
+                <p className='mt-2 text-sm'>{t('support.moderation.empty')}</p>
+            ) : null}
+            {recipients && recipients.length > 0 ? (
+                <>
+                    <label className='mt-3 block text-sm font-bold'>
+                        {t('support.moderation.reason')}
+                        <Input value={reason} maxLength={2_000} onChange={(event) => setReason(event.target.value)} />
+                    </label>
+                    <ul className='mt-3 space-y-2 text-sm'>
+                        {recipients.map((recipient) => (
+                            <li key={recipient.recipientId} className='border-2 border-mh-border p-2'>
+                                <p className='font-bold'>{recipient.displayName}</p>
+                                <p>
+                                    {statusLabel(recipient.status)}{' · '}
+                                    {t('support.moderation.monthlyGifts', { count: recipient.activeMonthlyGifts })}{' · '}
+                                    {t('support.moderation.updated', { date: fmt.shortDate(recipient.updatedAt) })}
+                                </p>
+                                {recipient.suspensionReason ? (
+                                    <p className='text-mh-textMuted'>
+                                        {t('support.moderation.currentReason', { reason: recipient.suspensionReason })}
+                                    </p>
+                                ) : null}
+                                <div className='mt-2'>
+                                    {recipient.status === 'suspended' ? (
+                                        <Button size='sm' variant='secondary' disabled={busy !== undefined}
+                                            onClick={() => void act('restore', recipient)}>
+                                            {t('support.moderation.restore', { name: recipient.displayName })}
+                                        </Button>
+                                    ) : (
+                                        <Button size='sm' variant='danger' disabled={busy !== undefined}
+                                            onClick={() => void act('suspend', recipient)}>
+                                            {t('support.moderation.suspend', { name: recipient.displayName })}
+                                        </Button>
+                                    )}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </>
+            ) : null}
+            {statusMessage ? <StatusMessage className='mt-2' message={statusMessage} /> : null}
         </Surface>
     );
 };

@@ -1,16 +1,18 @@
 import { createServer } from 'node:http';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAuthorizationContext } from '../authorization-guard.js';
+import { PaymentModerationError } from '../payments/payment-moderation-service.js';
 import { SupportServiceError } from '../payments/support-service.js';
 import type { AuthenticatedRequest } from './authenticated-request.js';
 import { PublicHttpError } from './error-response.js';
 import { createSupportHandler } from './support-handler.js';
 
 const donorDid = 'did:plc:handlerdonor';
-const principal = (did: string): AuthenticatedRequest => ({
+const moderatorDid = 'did:plc:handlermoderator';
+const principal = (did: string, role: 'user' | 'moderator' = 'user'): AuthenticatedRequest => ({
     sessionToken: 'opaque',
     session: { did },
-    principal: { did, role: 'user', authorization: createAuthorizationContext(did, 'user') },
+    principal: { did, role, authorization: createAuthorizationContext(did, role) },
 }) as AuthenticatedRequest;
 
 describe('support HTTP boundary', () => {
@@ -29,13 +31,18 @@ describe('support HTTP boundary', () => {
         getStatus: vi.fn(),
         startOnboarding: vi.fn(),
     };
+    const moderation = {
+        listRecipients: vi.fn(),
+        suspend: vi.fn(),
+        restore: vi.fn(),
+    };
     const authenticate = vi.fn<(request: unknown) => Promise<AuthenticatedRequest>>();
     const authenticateOptional = vi.fn<(request: unknown) => Promise<AuthenticatedRequest | undefined>>();
     let origin: string;
     let server: ReturnType<typeof createServer>;
 
     beforeAll(async () => {
-        const handler = createSupportHandler({ service, organizations, authenticate, authenticateOptional });
+        const handler = createSupportHandler({ service, organizations, moderation, authenticate, authenticateOptional });
         server = createServer((request, response) => {
             if (!handler(request, response, new URL(request.url ?? '/', 'http://localhost'))) {
                 response.writeHead(404).end();
@@ -52,7 +59,7 @@ describe('support HTTP boundary', () => {
     });
 
     beforeEach(() => {
-        for (const mock of [...Object.values(service), ...Object.values(organizations)]) mock.mockReset();
+        for (const mock of [...Object.values(service), ...Object.values(organizations), ...Object.values(moderation)]) mock.mockReset();
         authenticate.mockReset();
         authenticateOptional.mockReset();
         authenticate.mockResolvedValue(principal(donorDid));
@@ -196,5 +203,39 @@ describe('support HTTP boundary', () => {
             body: JSON.stringify(recognition),
         });
         expect(unauthenticated.status).toBe(401);
+    });
+
+    it('lets only moderators list, suspend and restore organization recipients', async () => {
+        const recipientId = '61111111-1111-4111-8111-111111111111';
+        const forbidden = await fetch(`${origin}/moderation/payment-recipients`);
+        expect(forbidden.status).toBe(403);
+        expect(await forbidden.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
+        const forbiddenSuspend = await fetch(`${origin}/moderation/payment-recipients/suspend`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ recipientId, reason: 'Fraud report' }),
+        });
+        expect(forbiddenSuspend.status).toBe(403);
+        expect(moderation.suspend).not.toHaveBeenCalled();
+
+        authenticate.mockResolvedValue(principal(moderatorDid, 'moderator'));
+        moderation.listRecipients.mockResolvedValue([{ recipientId, status: 'active' }]);
+        const listed = await fetch(`${origin}/moderation/payment-recipients`);
+        expect(await listed.json()).toEqual({ recipients: [{ recipientId, status: 'active' }] });
+
+        moderation.suspend.mockResolvedValue({ recipientId, status: 'suspended' });
+        const suspended = await fetch(`${origin}/moderation/payment-recipients/suspend`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ recipientId, reason: 'Fraud report' }),
+        });
+        expect(suspended.status).toBe(200);
+        expect(moderation.suspend).toHaveBeenCalledWith(moderatorDid, { recipientId, reason: 'Fraud report' });
+
+        moderation.restore.mockRejectedValue(new PaymentModerationError('PAYMENT_RECIPIENT_NOT_SUSPENDED'));
+        const restored = await fetch(`${origin}/moderation/payment-recipients/restore`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ recipientId, reason: 'Resolved' }),
+        });
+        expect(restored.status).toBe(409);
+        expect(await restored.json()).toMatchObject({ error: { code: 'PAYMENT_RECIPIENT_NOT_SUSPENDED' } });
     });
 });

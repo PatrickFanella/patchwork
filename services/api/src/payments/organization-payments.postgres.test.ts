@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { OrganizationPaymentsService } from './organization-payments-service.js';
@@ -7,6 +6,7 @@ import { PaymentWebhookService } from './payment-webhook-service.js';
 import type { StripeEvent, StripeSubscription } from './stripe-gateway.js';
 import { SupportService } from './support-service.js';
 import { FakeStripe } from './testing/fake-stripe.js';
+import { applyApiMigrations } from './testing/migrations.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const origin = 'https://patchwork.example.test';
@@ -15,8 +15,6 @@ const admin = 'did:plc:orgadmin';
 const steward = 'did:plc:orgsteward';
 const donor = 'did:plc:orgdonor';
 
-const migration = (name: string) =>
-    readFile(new URL(`../db/migrations/${name}`, import.meta.url), 'utf8');
 
 describe('organization payments', () => {
     const schema = `orgpay_${randomUUID().replaceAll('-', '')}`;
@@ -101,15 +99,7 @@ describe('organization payments', () => {
 
     beforeAll(async () => {
         await adminPool.query(`CREATE SCHEMA ${schema}`);
-        for (const name of [
-            '0016_organizations_and_stewardship.sql',
-            '0017_verification_and_exact_public_addresses.sql',
-            '0040_donations_and_supporter_tiers.sql',
-            '0041_general_fund_checkout.sql',
-            '0042_organization_payment_recipients.sql',
-        ]) {
-            await pool.query(await migration(name));
-        }
+        await applyApiMigrations(pool);
     });
 
     afterAll(async () => {

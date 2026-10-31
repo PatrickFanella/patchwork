@@ -26,6 +26,8 @@ export class FakeStripe implements StripeGateway {
     }> = [];
     priceCalls: Array<{ idempotencyKey: string; accountId?: string }> = [];
     pauseCalls: Array<{ subscriptionId: string; idempotencyKey: string; accountId: string }> = [];
+    cancelCalls: Array<{ subscriptionId: string; idempotencyKey: string; accountId?: string }> = [];
+    cancelFailures: StripeApiError[] = [];
     accountCalls: Array<{ businessName: string; idempotencyKey: string }> = [];
     linkCalls: Array<{ accountId: string; refreshUrl: string; returnUrl: string }> = [];
     failNextCheckout = false;
@@ -142,6 +144,20 @@ export class FakeStripe implements StripeGateway {
         const paused = { ...subscription, collectionPaused: true };
         this.setSubscription(paused, scope);
         return paused;
+    }
+
+    async cancelSubscriptionAtPeriodEnd(
+        subscriptionId: string,
+        idempotencyKey: string,
+        scope: StripeAccountScope = {},
+    ): Promise<StripeSubscription> {
+        this.cancelCalls.push({ subscriptionId, idempotencyKey, ...(scope.accountId ? { accountId: scope.accountId } : {}) });
+        const failure = this.cancelFailures.shift();
+        if (failure) throw failure;
+        const subscription = this.find<StripeSubscription>('subscription', subscriptionId, scope);
+        const ending = { ...subscription, cancelAtPeriodEnd: true };
+        this.setSubscription(ending, scope);
+        return ending;
     }
 
     async retrieveCharge(id: string, scope?: StripeAccountScope): Promise<StripeCharge> {

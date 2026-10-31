@@ -4402,3 +4402,40 @@ export const fetchPublicSupportersViaApi = async (
     );
     return result.ok ? { ok: true, data: result.data.supporterDids } : result;
 };
+
+const moderatedRecipientSchema = z.object({
+    recipientId: z.string(),
+    organizationId: z.string().nullable(),
+    displayName: z.string(),
+    status: z.enum(['onboarding', 'active', 'suspended', 'closed']),
+    chargesEnabled: z.boolean(),
+    suspensionReason: z.string().nullable(),
+    activeMonthlyGifts: z.number().int(),
+    updatedAt: z.string(),
+});
+
+export type ModeratedPaymentRecipient = z.infer<typeof moderatedRecipientSchema>;
+
+export const fetchModeratedPaymentRecipientsViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<ModeratedPaymentRecipient[]>> => {
+    const result = parseWith(
+        z.object({ recipients: z.array(moderatedRecipientSchema) }),
+        await requestJson('/moderation/payment-recipients', new URLSearchParams(), signal),
+        'Payment recipient list was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.recipients } : result;
+};
+
+export const moderatePaymentRecipientViaApi = async (
+    action: 'suspend' | 'restore',
+    recipientId: string,
+    reason: string,
+): Promise<ApiClientResult<ModeratedPaymentRecipient>> => {
+    const result = parseWith(
+        z.object({ recipient: moderatedRecipientSchema }),
+        await requestJsonPost(`/moderation/payment-recipients/${action}`, { recipientId, reason }),
+        'Payment recipient response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.recipient } : result;
+};

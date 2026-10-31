@@ -1,17 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { OrganizationPaymentsService } from './organization-payments-service.js';
 import { GENERAL_FUND_RECIPIENT_ID, SupportService } from './support-service.js';
 import { FakeStripe } from './testing/fake-stripe.js';
+import { applyApiMigrations } from './testing/migrations.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const tierVersion = '00000000-0000-4000-8000-000000000101';
 const owner = 'did:plc:recognitionowner';
 
-const migration = (name: string) =>
-    readFile(new URL(`../db/migrations/${name}`, import.meta.url), 'utf8');
 
 describe('supporter recognition', () => {
     const schema = `recognition_${randomUUID().replaceAll('-', '')}`;
@@ -82,15 +80,7 @@ describe('supporter recognition', () => {
 
     beforeAll(async () => {
         await adminPool.query(`CREATE SCHEMA ${schema}`);
-        for (const name of [
-            '0016_organizations_and_stewardship.sql',
-            '0017_verification_and_exact_public_addresses.sql',
-            '0040_donations_and_supporter_tiers.sql',
-            '0041_general_fund_checkout.sql',
-            '0042_organization_payment_recipients.sql',
-        ]) {
-            await pool.query(await migration(name));
-        }
+        await applyApiMigrations(pool);
     });
 
     afterAll(async () => {

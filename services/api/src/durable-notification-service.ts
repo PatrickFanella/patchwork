@@ -225,6 +225,22 @@ const spanishNotificationCopy: Readonly<
     },
     group_join_requested: { title: 'Nueva solicitud de ingreso', body: 'Abre Grupos para revisar una solicitud privada de ingreso.' },
     group_join_decided: { title: 'Solicitud de ingreso actualizada', body: 'Abre Grupos para ver la decisión sobre tu solicitud.' },
+    support_receipt: {
+        title: 'Recibimos tu donación',
+        body: 'Gracias. Stripe te envía el recibo por correo. Consulta tus donaciones en Configuración.',
+    },
+    support_payment_failed: {
+        title: 'No se pudo cobrar tu donación',
+        body: 'Actualiza tu método de pago en Stripe desde Configuración para que tu donación continúe.',
+    },
+    support_subscription_ending: {
+        title: 'Tu donación mensual va a terminar',
+        body: 'Tu donación mensual no se renovará. Consulta los detalles en Configuración.',
+    },
+    support_recipient_paused: {
+        title: 'Pausamos tu donación mensual',
+        body: 'La organización ya no puede recibir donaciones por Patchwork. No se te cobrará mientras esté en pausa.',
+    },
     group_invited: {
         title: 'Invitación a un grupo',
         body: 'Tienes una nueva invitación a un grupo.',

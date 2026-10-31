@@ -53,6 +53,10 @@ export const NOTIFICATION_TYPES = [
     'group_closed',
     'group_join_requested',
     'group_join_decided',
+    'support_receipt',
+    'support_payment_failed',
+    'support_subscription_ending',
+    'support_recipient_paused',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

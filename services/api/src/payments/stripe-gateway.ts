@@ -121,6 +121,12 @@ export interface StripeGateway {
         idempotencyKey: string,
         scope: Required<StripeAccountScope>,
     ): Promise<StripeSubscription>;
+    /** Let the paid period finish, then end the subscription. */
+    cancelSubscriptionAtPeriodEnd(
+        subscriptionId: string,
+        idempotencyKey: string,
+        scope?: StripeAccountScope,
+    ): Promise<StripeSubscription>;
     retrieveCharge(chargeId: string, scope?: StripeAccountScope): Promise<StripeCharge>;
     retrieveDispute(disputeId: string, scope?: StripeAccountScope): Promise<StripeDispute>;
     /**
@@ -416,6 +422,19 @@ export class HttpStripeGateway implements StripeGateway {
         this.requireId(subscriptionId, stripeIdPatterns.subscription);
         return parseSubscription(await this.request('POST', `/v1/subscriptions/${subscriptionId}`, {
             form: encodeStripeForm({ pause_collection: { behavior: 'void' } }),
+            idempotencyKey,
+            accountId: this.scoped(scope),
+        }));
+    }
+
+    async cancelSubscriptionAtPeriodEnd(
+        subscriptionId: string,
+        idempotencyKey: string,
+        scope: StripeAccountScope = {},
+    ): Promise<StripeSubscription> {
+        this.requireId(subscriptionId, stripeIdPatterns.subscription);
+        return parseSubscription(await this.request('POST', `/v1/subscriptions/${subscriptionId}`, {
+            form: encodeStripeForm({ cancel_at_period_end: true }),
             idempotencyKey,
             accountId: this.scoped(scope),
         }));

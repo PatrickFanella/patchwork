@@ -169,6 +169,16 @@ groups:
         expr: increase(patchwork_payment_webhook_signature_failures_total{service="api",environment="staging"}[15m]) > 10
         labels: { severity: warning, owner: patchwork-primary-on-call }
         annotations: { runbook_url: "docs/operations/incident-response.md#payment-webhooks" }
+      - alert: PatchworkPaymentCommandDeadLetter
+        expr: patchwork_payment_commands_dead_letters{service="api",environment="staging"} > 0
+        for: 5m
+        labels: { severity: warning, owner: patchwork-primary-on-call }
+        annotations: { runbook_url: "docs/operations/incident-response.md#payment-webhooks" }
+      - alert: PatchworkPaymentCommandStale
+        expr: patchwork_payment_commands_oldest_pending_seconds{service="api",environment="staging"} > 3600
+        for: 15m
+        labels: { severity: warning, owner: patchwork-primary-on-call }
+        annotations: { runbook_url: "docs/operations/incident-response.md#payment-webhooks" }
       - alert: PatchworkModerationRetentionFailed
         expr: moderation_retention_last_attempt_success{service="moderation-worker",environment="staging"} == 0
         for: 5m
