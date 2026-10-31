@@ -13,6 +13,10 @@ import {
     fetchSupportOptionsViaApi,
     openSupportPortalViaApi,
     startOrganizationOnboardingViaApi,
+    fetchPublicSupportersViaApi,
+    fetchSupporterBadgesViaApi,
+    updateSupportRecognitionViaApi,
+    type SupporterRecognition,
     type AccountSupport,
     type OrganizationPayments,
     type SupportCheckoutRequest,
@@ -21,6 +25,9 @@ import {
     type SupportOptions,
 } from '../features/api-client';
 import { useLocale } from '../i18n';
+import { AccountName } from '../features/identity/AccountName';
+import { useHandles } from '../features/identity/useHandles';
+import { Badge } from '../components/Badge';
 
 const dollarsPattern = /^\d{1,5}(\.\d{1,2})?$/u;
 
@@ -72,6 +79,53 @@ const ReceiptNotice = ({ options }: { options: SupportOptions }) => {
                 })
             :   t('support.receipt.nonDeductible')}
         </p>
+    );
+};
+
+/** DIDs (from the given list) that currently show a supporter badge. */
+export const useSupporterBadges = (dids: readonly string[]): ReadonlySet<string> => {
+    const key = [...new Set(dids)].sort().join(' ');
+    const [holders, setHolders] = useState<ReadonlySet<string>>(new Set());
+    useEffect(() => {
+        const requested = key ? key.split(' ') : [];
+        if (requested.length === 0) {
+            setHolders(new Set());
+            return;
+        }
+        const controller = new AbortController();
+        void fetchSupporterBadgesViaApi(requested, controller.signal).then((result) => {
+            if (!controller.signal.aborted) setHolders(new Set(result.ok ? result.data : []));
+        });
+        return () => controller.abort();
+    }, [key]);
+    return holders;
+};
+
+export const SupporterBadge = () => {
+    const { t } = useLocale();
+    return <Badge tone='success'>{t('support.badge')}</Badge>;
+};
+
+const PublicSupporters = () => {
+    const { t } = useLocale();
+    const [dids, setDids] = useState<string[]>([]);
+    useEffect(() => {
+        const controller = new AbortController();
+        void fetchPublicSupportersViaApi(controller.signal).then((result) => {
+            if (!controller.signal.aborted && result.ok) setDids(result.data);
+        });
+        return () => controller.abort();
+    }, []);
+    const handles = useHandles(dids);
+    if (dids.length === 0) return null;
+    return (
+        <Surface title={t('support.supporters.title')} description={t('support.supporters.help')}>
+            <ul className='flex flex-wrap gap-x-4 gap-y-1 text-sm'>
+                {dids.map((did) => (
+                    <li key={did}><AccountName did={did} handles={handles} /></li>
+                ))}
+            </ul>
+        </Surface>
     );
 };
 
@@ -261,6 +315,7 @@ export const SupportRoute = () => {
                     <ReceiptNotice options={options} />
                 </div>
             </Surface>
+            <PublicSupporters />
         </section>
     );
 };
@@ -397,8 +452,81 @@ export const OrganizationPaymentsPanel = ({ organizationId }: { organizationId: 
                     )}
                 </div>
             ) : null}
+            {payments && payments.status !== 'not-started' ? (
+                <NamedSupporters dids={payments.namedSupporterDids} />
+            ) : null}
             {statusMessage ? <StatusMessage className='mt-2' message={statusMessage} /> : null}
         </Surface>
+    );
+};
+
+const NamedSupporters = ({ dids }: { dids: string[] }) => {
+    const { t } = useLocale();
+    const handles = useHandles(dids);
+    return (
+        <p className='mt-2 text-sm'>
+            {dids.length === 0 ?
+                t('support.payments.namedNone')
+            :   t('support.payments.named', {
+                    names: dids.map((did) => (handles[did] ? `@${handles[did]}` : did)).join(', '),
+                })}
+        </p>
+    );
+};
+
+const RecognitionSettings = ({
+    initial,
+    isSupporter,
+}: {
+    initial: SupporterRecognition;
+    isSupporter: boolean;
+}) => {
+    const { t } = useLocale();
+    const [value, setValue] = useState(initial);
+    const [status, setStatus] = useState<string>();
+    const [saving, setSaving] = useState(false);
+    const save = async () => {
+        setSaving(true);
+        setStatus(undefined);
+        const result = await updateSupportRecognitionViaApi(value);
+        setSaving(false);
+        if (!result.ok) {
+            setStatus(`${t('common.error')}: ${t('support.recognition.failed')}`);
+            return;
+        }
+        setValue(result.data);
+        setStatus(String(t('support.recognition.saved')));
+    };
+    const settings = [
+        ['badgeVisible', 'support.recognition.badge'],
+        ['listedPublicly', 'support.recognition.listed'],
+        ['shareNameWithRecipient', 'support.recognition.share'],
+    ] as const;
+    return (
+        <fieldset className='mt-4'>
+            <legend className='text-sm font-bold'>{t('support.recognition.title')}</legend>
+            <p className='text-xs text-mh-textMuted'>{t('support.recognition.help')}</p>
+            {!isSupporter ? <p className='mt-1 text-xs text-mh-textMuted'>{t('support.recognition.notActive')}</p> : null}
+            <div className='mt-2 space-y-1'>
+                {settings.map(([key, label]) => (
+                    <label key={key} className='flex items-start gap-2 text-sm'>
+                        <input
+                            type='checkbox'
+                            className='mt-1'
+                            checked={value[key]}
+                            onChange={(event) => setValue((current) => ({ ...current, [key]: event.target.checked }))}
+                        />
+                        {t(label)}
+                    </label>
+                ))}
+            </div>
+            <div className='mt-2 flex items-center gap-3'>
+                <Button size='sm' variant='secondary' disabled={saving} onClick={() => void save()}>
+                    {t('support.recognition.save')}
+                </Button>
+                {status ? <StatusMessage message={status} /> : null}
+            </div>
+        </fieldset>
     );
 };
 
@@ -595,6 +723,9 @@ export const SupportingSection = () => {
                 <p className='mt-2 text-xs text-mh-textMuted'>{t('support.account.manageHelp')}</p>
             ) : null}
             {portalStatus ? <StatusMessage className='mt-2' message={portalStatus} /> : null}
+            {support ? (
+                <RecognitionSettings initial={support.recognition} isSupporter={support.isSupporter} />
+            ) : null}
         </Surface>
     );
 };

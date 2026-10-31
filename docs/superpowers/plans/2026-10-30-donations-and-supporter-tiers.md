@@ -160,3 +160,9 @@ Eligibility is checked at checkout, on every Stripe retry, and in a sweep that p
 
 Step 1 left a defect: deleting an organization with a payment recipient would have violated the closed-recipient check. Migration `0042` fixes it with a trigger. A test covers deletion with an active monthly gift.
 
+## Step 4 record
+
+Step 4 adds recognition. Three settings in Settings → Supporting start off: show a badge, be listed on the support page, and share a name with recipient organizations. A badge shows on volunteer profile cards while the donor has an active, unpaused monthly gift to any recipient. The public list on `/support` covers general-fund monthly supporters only. Organization admins see only the handles of donors who opted in, and never with amounts.
+
+Volunteer cards are the only profile surface that shows the badge. Other places that show accounts, such as member lists and chat, are unchanged. Adding the badge there would add a lookup to many pages and is left for a later decision. Deleting recognition data on deactivation and including it in export are step 5.
+

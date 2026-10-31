@@ -4236,6 +4236,12 @@ const accountSupportSchema = z.object({
         cancelAtPeriodEnd: z.boolean(),
     })),
     manageable: z.array(z.object({ recipientId: z.string(), recipientName: z.string() })),
+    isSupporter: z.boolean(),
+    recognition: z.object({
+        badgeVisible: z.boolean(),
+        listedPublicly: z.boolean(),
+        shareNameWithRecipient: z.boolean(),
+    }),
 });
 
 const organizationPaymentsSchema = z.object({
@@ -4254,6 +4260,7 @@ const organizationPaymentsSchema = z.object({
         giftCount: z.number().int(),
         giftTotalMinor: z.number().int(),
     })),
+    namedSupporterDids: z.array(z.string()),
 });
 
 export type SupportTier = z.infer<typeof supportTierSchema>;
@@ -4261,6 +4268,7 @@ export type SupportOptions = z.infer<typeof supportOptionsSchema>;
 export type SupportCheckoutStatus = z.infer<typeof supportCheckoutStatusSchema>;
 export type AccountSupport = z.infer<typeof accountSupportSchema>;
 export type OrganizationPayments = z.infer<typeof organizationPaymentsSchema>;
+export type SupporterRecognition = AccountSupport['recognition'];
 export type SupportRecipient = 'general-fund' | { organizationId: string };
 export type SupportCheckoutRequest =
     | { recipient: SupportRecipient; mode: 'one-time'; amountMinor: number }
@@ -4356,3 +4364,41 @@ export const fetchAccountSupportViaApi = async (
         await requestJson('/account/support', new URLSearchParams(), signal),
         'Giving history response was malformed.',
     );
+
+export const updateSupportRecognitionViaApi = async (
+    recognition: SupporterRecognition,
+): Promise<ApiClientResult<SupporterRecognition>> => {
+    const result = parseWith(
+        z.object({ recognition: accountSupportSchema.shape.recognition }),
+        await requestJsonPut('/account/support/recognition', recognition),
+        'Recognition response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.recognition } : result;
+};
+
+const supporterDidsSchema = z.object({ supporterDids: z.array(z.string()) });
+
+export const fetchSupporterBadgesViaApi = async (
+    dids: readonly string[],
+    signal?: AbortSignal,
+): Promise<ApiClientResult<string[]>> => {
+    const params = new URLSearchParams();
+    for (const did of [...new Set(dids)].slice(0, 100)) params.append('did', did);
+    const result = parseWith(
+        supporterDidsSchema,
+        await requestJson('/support/badges', params, signal),
+        'Badge response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.supporterDids } : result;
+};
+
+export const fetchPublicSupportersViaApi = async (
+    signal?: AbortSignal,
+): Promise<ApiClientResult<string[]>> => {
+    const result = parseWith(
+        supporterDidsSchema,
+        await requestJson('/support/supporters', new URLSearchParams(), signal),
+        'Supporters response was malformed.',
+    );
+    return result.ok ? { ok: true, data: result.data.supporterDids } : result;
+};

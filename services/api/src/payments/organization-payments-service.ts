@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { eligibleOrganizationRecipientSql } from './recipient-eligibility.js';
+import {
+    activeSupporterSubscriptionSql,
+    eligibleOrganizationRecipientSql,
+} from './recipient-eligibility.js';
 import type { StripeGateway } from './stripe-gateway.js';
 
 export type OrganizationPaymentsErrorCode =
@@ -32,6 +35,11 @@ export interface OrganizationPaymentsStatus {
     activeMonthlySupporters: number;
     monthlyRecurringMinor: number;
     months: Array<{ month: string; giftCount: number; giftTotalMinor: number }>;
+    /**
+     * Donors who chose to share their name with recipients and have given
+     * here in the last 12 months or give monthly now. Never tied to amounts.
+     */
+    namedSupporterDids: string[];
 }
 
 export interface EligibilitySweepResult {
@@ -195,6 +203,7 @@ export class OrganizationPaymentsService {
             activeMonthlySupporters: 0,
             monthlyRecurringMinor: 0,
             months: [] as OrganizationPaymentsStatus['months'],
+            namedSupporterDids: [] as string[],
         };
         if (!recipient) {
             return {
@@ -209,7 +218,7 @@ export class OrganizationPaymentsService {
                 ...empty,
             };
         }
-        const [eligible, subscriptions, months] = await Promise.all([
+        const [eligible, subscriptions, months, named] = await Promise.all([
             this.pool.query(
                 `SELECT 1 FROM payment_recipients r
                    JOIN organizations o ON o.organization_id = r.organization_id
@@ -233,6 +242,26 @@ export class OrganizationPaymentsService {
                   GROUP BY 1 ORDER BY 1 DESC`,
                 [recipient.recipient_id],
             ),
+            this.pool.query<{ donor_did: string }>(
+                `SELECT r.donor_did FROM supporter_recognition r
+                  WHERE r.share_name_with_recipient
+                    AND (
+                        EXISTS (
+                            SELECT 1 FROM supporter_subscriptions s
+                             WHERE s.donor_did = r.donor_did AND s.recipient_id = $1
+                               AND ${activeSupporterSubscriptionSql}
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM donations d
+                             WHERE d.donor_did = r.donor_did AND d.recipient_id = $1
+                               AND d.status = 'succeeded'
+                               AND d.succeeded_at >= NOW() - INTERVAL '12 months'
+                        )
+                    )
+                  ORDER BY r.donor_did
+                  LIMIT 200`,
+                [recipient.recipient_id],
+            ),
         ]);
         return {
             organizationId,
@@ -250,6 +279,7 @@ export class OrganizationPaymentsService {
                 giftCount: Number(row.gifts),
                 giftTotalMinor: Number(row.total),
             })),
+            namedSupporterDids: named.rows.map(row => row.donor_did),
         };
     }
 

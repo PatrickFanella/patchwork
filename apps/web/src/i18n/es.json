@@ -2119,7 +2119,25 @@
             "stripeFailed": "No se pudo conectar con Stripe. Inténtalo de nuevo en un momento.",
             "monthly": "Donantes mensuales: {{count}} ({{amount}} al mes).",
             "month": "{{month}}: {{amount}} en donaciones únicas ({{count}}).",
-            "noGifts": "No hubo donaciones únicas en los últimos 12 meses."
+            "noGifts": "No hubo donaciones únicas en los últimos 12 meses.",
+            "named": "Donantes que decidieron compartir su nombre: {{names}}",
+            "namedNone": "Ningún donante ha decidido compartir su nombre."
+        },
+        "badge": "Donante mensual",
+        "supporters": {
+            "title": "Donantes mensuales",
+            "help": "Personas que donan cada mes al fondo general y decidieron aparecer en la lista. Nunca se muestran cantidades ni niveles."
+        },
+        "recognition": {
+            "title": "Reconocimiento",
+            "help": "Todo está desactivado a menos que lo actives. Nadie ve nunca las cantidades.",
+            "badge": "Mostrar una insignia de \"Donante mensual\" en mi perfil de voluntariado mientras done cada mes",
+            "listed": "Incluir mi usuario entre quienes donan cada mes al fondo general en la página de apoyo",
+            "share": "Permitir que las organizaciones a las que dono vean mi usuario (no la cantidad)",
+            "save": "Guardar la configuración de reconocimiento",
+            "saved": "Se guardó la configuración de reconocimiento.",
+            "failed": "No se pudo guardar la configuración de reconocimiento.",
+            "notActive": "Esta configuración se aplica mientras tengas una donación mensual activa."
         }
     }
 }

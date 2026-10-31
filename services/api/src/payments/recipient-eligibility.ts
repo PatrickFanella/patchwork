@@ -16,3 +16,10 @@ export const eligibleOrganizationRecipientSql = `
            AND v.status = 'approved'
            AND (v.expires_at IS NULL OR v.expires_at > NOW())
     )`;
+
+/**
+ * SQL condition, over `supporter_subscriptions s`, for a monthly gift that
+ * currently counts toward recognition. Overdue and paused gifts do not.
+ */
+export const activeSupporterSubscriptionSql = `
+    s.status IN ('active', 'trialing') AND s.paused_reason IS NULL`;

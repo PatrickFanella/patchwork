@@ -2,7 +2,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import type { PaymentEventProcessor } from './payment-webhook-service.js';
-import { eligibleOrganizationRecipientSql } from './recipient-eligibility.js';
+import {
+    activeSupporterSubscriptionSql,
+    eligibleOrganizationRecipientSql,
+} from './recipient-eligibility.js';
 import {
     StripeApiError,
     stripeIdOf,
@@ -100,7 +103,28 @@ export interface AccountSupport {
     }>;
     /** Recipients whose Stripe Customer Portal this donor can open. */
     manageable: Array<{ recipientId: string; recipientName: string }>;
+    /** True while the donor has an active, unpaused monthly gift. */
+    isSupporter: boolean;
+    recognition: SupporterRecognition;
 }
+
+export interface SupporterRecognition {
+    badgeVisible: boolean;
+    listedPublicly: boolean;
+    shareNameWithRecipient: boolean;
+}
+
+const recognitionSchema = z
+    .object({
+        badgeVisible: z.boolean(),
+        listedPublicly: z.boolean(),
+        shareNameWithRecipient: z.boolean(),
+    })
+    .strict();
+
+const didPattern = /^did:[A-Za-z0-9]+:[A-Za-z0-9._:%-]+$/u;
+
+
 
 interface ResolvedRecipient {
     recipientId: string;
@@ -629,7 +653,7 @@ export class SupportService {
     }
 
     async getAccountSupport(donorDid: string): Promise<AccountSupport> {
-        const [donations, subscriptions, accounts] = await Promise.all([
+        const [donations, subscriptions, recognition, supporter, accounts] = await Promise.all([
             this.pool.query<{
                 donation_id: string;
                 display_name: string;
@@ -663,6 +687,12 @@ export class SupportService {
                   WHERE s.donor_did = $1
                   ORDER BY s.created_at DESC, s.subscription_id
                   LIMIT 100`,
+                [donorDid],
+            ),
+            this.recognitionFor(donorDid),
+            this.pool.query(
+                `SELECT 1 FROM supporter_subscriptions s
+                  WHERE s.donor_did = $1 AND ${activeSupporterSubscriptionSql} LIMIT 1`,
                 [donorDid],
             ),
             this.pool.query<{ recipient_id: string; display_name: string }>(
@@ -699,7 +729,84 @@ export class SupportService {
                 recipientId: row.recipient_id,
                 recipientName: row.display_name,
             })),
+            isSupporter: (supporter.rowCount ?? 0) > 0,
+            recognition,
         };
+    }
+
+    private async recognitionFor(donorDid: string): Promise<SupporterRecognition> {
+        const result = await this.pool.query<{
+            badge_visible: boolean;
+            listed_publicly: boolean;
+            share_name_with_recipient: boolean;
+        }>(
+            `SELECT badge_visible, listed_publicly, share_name_with_recipient
+               FROM supporter_recognition WHERE donor_did = $1`,
+            [donorDid],
+        );
+        const row = result.rows[0];
+        return {
+            badgeVisible: row?.badge_visible ?? false,
+            listedPublicly: row?.listed_publicly ?? false,
+            shareNameWithRecipient: row?.share_name_with_recipient ?? false,
+        };
+    }
+
+    /** Every setting is opt-in and can be changed at any time, with or without a current gift. */
+    async updateRecognition(donorDid: string, body: unknown, now = new Date()): Promise<SupporterRecognition> {
+        const parsed = recognitionSchema.safeParse(body);
+        if (!parsed.success) throw new SupportServiceError('INVALID_SUPPORT_REQUEST');
+        const value = parsed.data;
+        await this.pool.query(
+            `INSERT INTO supporter_recognition (
+                donor_did, badge_visible, listed_publicly, share_name_with_recipient, updated_at
+            ) VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (donor_did) DO UPDATE SET
+                badge_visible = EXCLUDED.badge_visible,
+                listed_publicly = EXCLUDED.listed_publicly,
+                share_name_with_recipient = EXCLUDED.share_name_with_recipient,
+                updated_at = EXCLUDED.updated_at`,
+            [donorDid, value.badgeVisible, value.listedPublicly, value.shareNameWithRecipient, now],
+        );
+        return value;
+    }
+
+    /** DIDs, from the given list, that show a supporter badge now. */
+    async listBadgeHolders(dids: readonly string[]): Promise<string[]> {
+        const candidates = [...new Set(dids)].filter(did => didPattern.test(did) && did.length <= 2048).slice(0, 100);
+        if (candidates.length === 0) return [];
+        const result = await this.pool.query<{ donor_did: string }>(
+            `SELECT r.donor_did FROM supporter_recognition r
+              WHERE r.donor_did = ANY($1::text[]) AND r.badge_visible
+                AND EXISTS (
+                    SELECT 1 FROM supporter_subscriptions s
+                     WHERE s.donor_did = r.donor_did AND ${activeSupporterSubscriptionSql}
+                )
+              ORDER BY r.donor_did`,
+            [candidates],
+        );
+        return result.rows.map(row => row.donor_did);
+    }
+
+    /**
+     * Public list of general-fund monthly supporters who chose to be listed.
+     * Sorted by DID so the order reveals neither tier nor tenure.
+     */
+    async listPublicSupporters(limit = 200): Promise<string[]> {
+        const result = await this.pool.query<{ donor_did: string }>(
+            `SELECT r.donor_did FROM supporter_recognition r
+              WHERE r.listed_publicly
+                AND EXISTS (
+                    SELECT 1 FROM supporter_subscriptions s
+                     WHERE s.donor_did = r.donor_did
+                       AND s.recipient_id = $1
+                       AND ${activeSupporterSubscriptionSql}
+                )
+              ORDER BY r.donor_did
+              LIMIT $2`,
+            [GENERAL_FUND_RECIPIENT_ID, limit],
+        );
+        return result.rows.map(row => row.donor_did);
     }
 
     /**

@@ -21,6 +21,9 @@ describe('support HTTP boundary', () => {
         createPortalSession: vi.fn(),
         getAccountSupport: vi.fn(),
         listEligibleOrganizations: vi.fn(),
+        updateRecognition: vi.fn(),
+        listBadgeHolders: vi.fn(),
+        listPublicSupporters: vi.fn(),
     };
     const organizations = {
         getStatus: vi.fn(),
@@ -165,5 +168,33 @@ describe('support HTTP boundary', () => {
             expect(failed.status).toBe(statusCode);
             await expect(failed.json()).resolves.toMatchObject({ error: { code } });
         }
+    });
+
+    it('serves badges and the public supporters list without a session, and saves recognition with one', async () => {
+        service.listBadgeHolders.mockResolvedValue(['did:plc:b']);
+        service.listPublicSupporters.mockResolvedValue(['did:plc:c']);
+        const badges = await fetch(`${origin}/support/badges?did=did:plc:a&did=did:plc:b`);
+        await expect(badges.json()).resolves.toEqual({ supporterDids: ['did:plc:b'] });
+        expect(service.listBadgeHolders).toHaveBeenCalledWith(['did:plc:a', 'did:plc:b']);
+        const supporters = await fetch(`${origin}/support/supporters`);
+        await expect(supporters.json()).resolves.toEqual({ supporterDids: ['did:plc:c'] });
+        expect(authenticate).not.toHaveBeenCalled();
+
+        const recognition = { badgeVisible: true, listedPublicly: false, shareNameWithRecipient: true };
+        service.updateRecognition.mockResolvedValue(recognition);
+        const saved = await fetch(`${origin}/account/support/recognition`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(recognition),
+        });
+        await expect(saved.json()).resolves.toEqual({ recognition });
+        expect(service.updateRecognition).toHaveBeenCalledWith(donorDid, recognition);
+        authenticate.mockRejectedValueOnce(new PublicHttpError(401, 'AUTHENTICATION_REQUIRED', 'Sign in.'));
+        const unauthenticated = await fetch(`${origin}/account/support/recognition`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(recognition),
+        });
+        expect(unauthenticated.status).toBe(401);
     });
 });

@@ -167,3 +167,11 @@ Apply `0041_general_fund_checkout.sql` before the matching API. It adds checkout
 Connect webhook events apply only to the recipient that owns the delivering account, and objects are re-fetched from that account. `account.updated` mirrors charges, payouts and details-submitted, and activates an onboarding recipient once charges are enabled. Suspended and closed recipients keep their status. A sweep that runs with webhook processing pauses collection (`pause_collection[behavior]=void`) on active monthly gifts to ineligible organizations, recording `recipient-ineligible` or `recipient-suspended`. Eligibility returning does not resume them. Migration `0042_organization_payment_recipients.sql` closes a recipient before its organization is deleted, so payment history is kept and organization deletion still succeeds.
 
 Operator setup: enable Connect on the platform account, and subscribe the Connect webhook endpoint to the platform event list plus `account.updated`.
+
+### Supporter recognition (donations step 4)
+
+`PUT /account/support/recognition` takes exactly `{ badgeVisible, listedPublicly, shareNameWithRecipient }` as booleans. All three default to false. `GET /account/support` returns the current settings and `isSupporter`. A donor counts as a supporter while they have a monthly gift with status `active` or `trialing` that is not paused. Overdue, paused, cancelled and one-time gifts do not count.
+
+`GET /support/badges?did=…` (up to 100, public) returns the DIDs that show a badge now: the donor turned the badge on and has an active monthly gift to any recipient. `GET /support/supporters` (public, up to 200) returns opted-in general-fund monthly supporters, sorted by DID, so the order reveals neither tier nor tenure. Neither response contains amounts, tiers or recipients. `GET /organizations/payments` adds `namedSupporterDids`: donors who chose to share their name and who give monthly to that organization or gave to it in the last 12 months. Names are never paired with amounts.
+
+Badges are a server-side projection, not AT Protocol records, so a lapsed gift or a changed setting takes effect on the next read.

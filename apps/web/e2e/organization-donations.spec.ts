@@ -78,7 +78,7 @@ const mockApi = async (page: Page, input: { signedIn: boolean; payments?: Record
             return fulfill(input.payments ?? {
                 organizationId: eligibleId, status: 'not-started', verified: true, chargesEnabled: false,
                 payoutsEnabled: false, detailsSubmitted: false, eligible: false, dashboardUrl: null,
-                activeMonthlySupporters: 0, monthlyRecurringMinor: 0, months: [],
+                activeMonthlySupporters: 0, monthlyRecurringMinor: 0, months: [], namedSupporterDids: [],
             });
         }
         if (path === '/organizations/payments/onboarding') {
@@ -134,6 +134,7 @@ test('an active organization sees totals and a Stripe Dashboard link in Spanish'
             dashboardUrl: 'https://dashboard.stripe.com/',
             activeMonthlySupporters: 3, monthlyRecurringMinor: 4_500,
             months: [{ month: '2026-10', giftCount: 2, giftTotalMinor: 6_000 }],
+            namedSupporterDids: ['did:plc:named-donor'],
         },
     });
     await page.goto(`/organizations?payments=${eligibleId}&onboarding=return`);
@@ -142,6 +143,7 @@ test('an active organization sees totals and a Stripe Dashboard link in Spanish'
     await expect(panel).toContainText('Stripe aún no activa los pagos.');
     await expect(panel).toContainText('Donantes mensuales: 3');
     await expect(panel).toContainText('octubre de 2026');
+    await expect(panel).toContainText('Donantes que decidieron compartir su nombre: did:plc:named-donor');
     await expect(panel.getByRole('link', { name: 'Abrir el panel de Stripe' })).toHaveAttribute('href', 'https://dashboard.stripe.com/');
     await expect(panel.getByRole('button', { name: /Stripe/u })).toHaveCount(0);
 });

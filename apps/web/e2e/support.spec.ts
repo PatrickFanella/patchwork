@@ -79,7 +79,7 @@ const mockApi = async (
             return fulfill({ url: 'https://billing.stripe.test/session' });
         }
         if (path === '/account/support') {
-            return fulfill(input.accountSupport ?? { donations: [], subscriptions: [], manageable: [] });
+            return fulfill(input.accountSupport ?? { donations: [], subscriptions: [], manageable: [], isSupporter: false, recognition: { badgeVisible: false, listedPublicly: false, shareNameWithRecipient: false } });
         }
         return fulfill({ error: { code: 'NOT_FOUND', message: 'Not mocked.' } }, 404);
     });
@@ -128,6 +128,8 @@ test('a signed-in supporter starts monthly giving and manages it from Settings i
             donations: [{ donationId: 'd1', recipientName: 'Patchwork general fund', amountMinor: 2_500, currency: 'usd', status: 'refunded', createdAt: '2026-10-01T12:00:00Z' }],
             subscriptions: [{ subscriptionId: 's1', recipientName: 'Patchwork general fund', tierKey: 'tier-2', nameKey: 'support.tiers.tier2.name', amountMinor: 1_500, currency: 'usd', status: 'active', currentPeriodEnd: '2026-11-30T12:00:00Z', cancelAtPeriodEnd: true }],
             manageable: [{ recipientId: '00000000-0000-4000-8000-000000000001', recipientName: 'Patchwork general fund' }],
+            isSupporter: true,
+            recognition: { badgeVisible: false, listedPublicly: false, shareNameWithRecipient: false },
         },
     });
     await page.goto('/support');

@@ -2119,7 +2119,25 @@
             "stripeFailed": "Stripe could not be reached. Try again in a moment.",
             "monthly": "Monthly supporters: {{count}} ({{amount}} a month).",
             "month": "{{month}}: {{amount}} in one-time gifts ({{count}}).",
-            "noGifts": "No one-time gifts in the last 12 months."
+            "noGifts": "No one-time gifts in the last 12 months.",
+            "named": "Donors who chose to share their name: {{names}}",
+            "namedNone": "No donors have chosen to share their name."
+        },
+        "badge": "Monthly supporter",
+        "supporters": {
+            "title": "Monthly supporters",
+            "help": "People who give monthly to the general fund and chose to be listed. Amounts and tiers are never shown."
+        },
+        "recognition": {
+            "title": "Recognition",
+            "help": "All off unless you turn them on. Amounts are never shown to anyone.",
+            "badge": "Show a \"Monthly supporter\" badge on my volunteer profile while I give monthly",
+            "listed": "List my handle among general-fund monthly supporters on the support page",
+            "share": "Let organizations I give to see my handle (not the amount)",
+            "save": "Save recognition settings",
+            "saved": "Recognition settings saved.",
+            "failed": "Recognition settings could not be saved.",
+            "notActive": "These settings take effect while you have an active monthly gift."
         }
     }
 }

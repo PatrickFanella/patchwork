@@ -43,6 +43,7 @@ import {
     usePaginationFocus,
 } from '../features/shell-shared';
 import { Surface } from '../components/Surface';
+import { SupporterBadge, useSupporterBadges } from './support';
 import { PageHeader } from '../components/PageHeader';
 
 const volunteerCapabilityOptions: readonly VolunteerOnboardingDraft['capabilities'][number][] =
@@ -541,6 +542,7 @@ export const VolunteerRoute = ({
 }) => {
     const { t } = useLocale();
     const [profiles, setProfiles] = useState<VolunteerDiscoveryProfile[]>([]);
+    const supporterBadges = useSupporterBadges(profiles.map((profile) => profile.authorDid));
     const [discoveryStatus, setDiscoveryStatus] = useState(
         t('volunteer.loading'),
     );
@@ -746,6 +748,7 @@ export const VolunteerRoute = ({
                 <div className='mt-4 grid gap-3 sm:grid-cols-2'>
                     {profiles.map((profile) => (
                         <Surface as='article' tone='quiet' key={profile.uri} title={profile.displayName}>
+                            {supporterBadges.has(profile.authorDid) ? <SupporterBadge /> : null}
                             {profile.recordOrigin === 'synthetic' ? (
                                 <Badge tone='info'>
                                     {t('volunteer.synthetic')}

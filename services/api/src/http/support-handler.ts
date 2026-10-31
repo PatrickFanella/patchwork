@@ -23,6 +23,9 @@ const routes = new Map<string, readonly string[]>([
     ['/support/portal', ['POST']],
     ['/support/recipients', ['GET']],
     ['/account/support', ['GET']],
+    ['/account/support/recognition', ['PUT']],
+    ['/support/badges', ['GET']],
+    ['/support/supporters', ['GET']],
     ['/organizations/payments', ['GET']],
     ['/organizations/payments/onboarding', ['POST']],
 ]);
@@ -77,6 +80,9 @@ export const createSupportHandler = (dependencies: {
         | 'createPortalSession'
         | 'getAccountSupport'
         | 'listEligibleOrganizations'
+        | 'updateRecognition'
+        | 'listBadgeHolders'
+        | 'listPublicSupporters'
     >;
     organizations: Pick<OrganizationPaymentsService, 'getStatus' | 'startOnboarding'>;
     authenticate(request: IncomingMessage): Promise<AuthenticatedRequest>;
@@ -136,8 +142,35 @@ export const createSupportHandler = (dependencies: {
                 });
                 return;
             }
+            if (pathname === '/support/badges') {
+                writeJsonResponse(response, 200, {
+                    supporterDids: await dependencies.service.listBadgeHolders(
+                        requestUrl.searchParams.getAll('did'),
+                    ),
+                });
+                return;
+            }
+            if (pathname === '/support/supporters') {
+                writeJsonResponse(response, 200, {
+                    supporterDids: await dependencies.service.listPublicSupporters(),
+                });
+                return;
+            }
             const authenticated = await dependencies.authenticate(request);
             const actorDid = authenticated.principal.did;
+            if (pathname === '/account/support/recognition') {
+                writeJsonResponse(
+                    response,
+                    200,
+                    {
+                        recognition: await dependencies.service.updateRecognition(
+                            actorDid,
+                            await readJsonBody(request, 1_024),
+                        ),
+                    },
+                );
+                return;
+            }
             if (pathname === '/support/portal') {
                 const body = await optionalJsonBody(request);
                 const recipientId = typeof body['recipientId'] === 'string' ? body['recipientId'] : undefined;

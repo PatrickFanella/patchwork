@@ -361,7 +361,8 @@ describe('SupportService', () => {
         await expect(service.getCheckoutStatus('not-a-uuid')).rejects.toMatchObject({ code: 'CHECKOUT_NOT_FOUND' });
         await expect(service.getCheckoutStatus(randomUUID())).rejects.toMatchObject({ code: 'CHECKOUT_NOT_FOUND' });
         await expect(service.getAccountSupport(donorDid)).resolves.toEqual({
-            donations: [], subscriptions: [], manageable: [],
+            donations: [], subscriptions: [], manageable: [], isSupporter: false,
+            recognition: { badgeVisible: false, listedPublicly: false, shareNameWithRecipient: false },
         });
     });
 });
