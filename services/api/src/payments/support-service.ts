@@ -231,6 +231,7 @@ interface CheckoutRow {
     checkout_url: string | null;
     status: CheckoutStatus['status'];
     livemode: boolean;
+    donor_deactivated?: boolean;
 }
 
 export class SupportService {
@@ -378,12 +379,7 @@ export class SupportService {
             // Recheck on every attempt: eligibility can lapse between retries.
             const recipient = await this.recipientById(row.recipient_id, true);
             if (!recipient) throw new SupportServiceError('RECIPIENT_UNAVAILABLE');
-            const params = await this.checkoutParams(row, recipient);
-            session = await this.gateway.createCheckoutSession(
-                params,
-                `patchwork-checkout-${row.checkout_id}`,
-                { accountId: recipient.stripeAccountId },
-            );
+            session = await this.createSessionFor(row, recipient);
             if (!session.url || session.livemode !== this.livemode || session.status !== 'open') {
                 throw new StripeApiError('INVALID_RESPONSE', false);
             }
@@ -404,6 +400,45 @@ export class SupportService {
             [row.checkout_id, session.id, session.url, now],
         );
         return { checkoutId: row.checkout_id, url: session.url! };
+    }
+
+    /**
+     * The Stripe idempotency key covers the exact parameters, so a retry with
+     * the same parameters reuses the same Session and a retry whose parameters
+     * changed (a customer was recorded meanwhile) is not rejected as a key
+     * mismatch. A customer deleted or a Price archived in the organization's
+     * Dashboard is dropped and the request retried once.
+     */
+    private async createSessionFor(row: CheckoutRow, recipient: ResolvedRecipient): Promise<StripeCheckoutSession> {
+        const scope = { accountId: recipient.stripeAccountId };
+        let replacePrice = false;
+        for (let attempt = 0; ; attempt += 1) {
+            const params = await this.checkoutParams(row, recipient, replacePrice);
+            const paramsHash = createHash('sha256').update(JSON.stringify(params)).digest('hex').slice(0, 16);
+            try {
+                return await this.gateway.createCheckoutSession(
+                    params, `patchwork-checkout-${row.checkout_id}-${paramsHash}`, scope,
+                );
+            } catch (error) {
+                if (attempt > 0 || !(error instanceof StripeApiError) || error.code !== 'INVALID_REQUEST') throw error;
+                const customer = typeof params['customer'] === 'string' ? params['customer'] : undefined;
+                const lineItems = params['line_items'] as Array<Record<string, StripeFormValue>>;
+                const price = typeof lineItems[0]?.['price'] === 'string' ? lineItems[0]['price'] : undefined;
+                let recovered = false;
+                if (customer && !(await this.gateway.isReusable('customer', customer, scope))) {
+                    await this.pool.query(
+                        'DELETE FROM donor_accounts WHERE recipient_id = $1 AND stripe_customer_id = $2',
+                        [row.recipient_id, customer],
+                    );
+                    recovered = true;
+                }
+                if (price && !(await this.gateway.isReusable('price', price, scope))) {
+                    replacePrice = true;
+                    recovered = true;
+                }
+                if (!recovered) throw error;
+            }
+        }
     }
 
     /** Resolve a requested recipient that can receive new gifts now. */
@@ -500,6 +535,7 @@ export class SupportService {
     private async checkoutParams(
         row: CheckoutRow,
         recipient: ResolvedRecipient,
+        replacePrice = false,
     ): Promise<Record<string, StripeFormValue>> {
         const origin = this.options.publicWebOrigin;
         const metadata = {
@@ -538,7 +574,7 @@ export class SupportService {
                 payment_intent_data: { metadata },
             };
         }
-        const priceId = await this.ensureMonthlyPrice(row.tier_version_id!, recipient);
+        const priceId = await this.ensureMonthlyPrice(row.tier_version_id!, recipient, replacePrice);
         return {
             ...common,
             mode: 'subscription',
@@ -556,8 +592,18 @@ export class SupportService {
         return result.rows[0]?.stripe_customer_id;
     }
 
-    private async ensureMonthlyPrice(tierVersionId: string, recipient: ResolvedRecipient): Promise<string> {
+    private async ensureMonthlyPrice(
+        tierVersionId: string,
+        recipient: ResolvedRecipient,
+        replace = false,
+    ): Promise<string> {
         const { recipientId } = recipient;
+        if (replace) {
+            await this.pool.query(
+                'DELETE FROM supporter_tier_prices WHERE tier_version_id = $1 AND recipient_id = $2',
+                [tierVersionId, recipientId],
+            );
+        }
         const lookup = () =>
             this.pool.query<{ stripe_price_id: string }>(
                 `SELECT stripe_price_id FROM supporter_tier_prices
@@ -587,7 +633,8 @@ export class SupportService {
                     patchwork_recipient_id: recipientId,
                 },
             },
-            `patchwork-price-${tierVersionId}-${recipientId}`,
+            // A replacement needs its own key, or Stripe replays the archived Price.
+            `patchwork-price-${tierVersionId}-${recipientId}${replace ? `-r${Date.now()}` : ''}`,
             { accountId: recipient.stripeAccountId },
         );
         await this.pool.query(
@@ -835,6 +882,7 @@ export class SupportService {
             processors.set(type, scoped((event, client, recipient) => this.applyDispute(event, client, recipient)));
         }
         processors.set('account.updated', (event, client) => this.applyAccountUpdate(event, client));
+        processors.set('account.application.deauthorized', (event, client) => this.applyDeauthorization(event, client));
         return processors;
     }
 
@@ -856,9 +904,22 @@ export class SupportService {
             `UPDATE payment_recipients SET
                 charges_enabled = $2, payouts_enabled = $3, details_submitted = $4,
                 status = CASE WHEN status = 'onboarding' AND $2 THEN 'active' ELSE status END,
+                deauthorized_at = NULL,
                 account_synced_at = NOW(), updated_at = NOW()
               WHERE stripe_account_id = $1 AND kind = 'organization'`,
             [account.id, account.chargesEnabled, account.payoutsEnabled, account.detailsSubmitted],
+        );
+    }
+
+    /** The organization disconnected its account; it can no longer receive gifts. */
+    private async applyDeauthorization(event: StripeEvent, client: PoolClient): Promise<void> {
+        if (!event.account) return;
+        await client.query(
+            `UPDATE payment_recipients
+                SET charges_enabled = FALSE, payouts_enabled = FALSE,
+                    deauthorized_at = COALESCE(deauthorized_at, NOW()), updated_at = NOW()
+              WHERE stripe_account_id = $1 AND kind = 'organization'`,
+            [event.account],
         );
     }
 
@@ -986,7 +1047,7 @@ export class SupportService {
         const checkout = checkoutId && uuidPattern.test(checkoutId) ?
             (await client.query<CheckoutRow>(
                 `SELECT checkout_id, request_hash, recipient_id, mode, amount_minor,
-                        tier_version_id, donor_did, checkout_url, status, livemode
+                        tier_version_id, donor_did, checkout_url, status, livemode, donor_deactivated
                    FROM payment_checkout_sessions
                   WHERE checkout_id = $1 AND mode = 'monthly' AND recipient_id = $2`,
                 [checkoutId, recipient.recipientId],
@@ -1059,6 +1120,18 @@ export class SupportService {
                     subscription.livemode, fetchedAt, checkout.checkout_id,
                 ],
             );
+            if (checkout.donor_deactivated && !subscription.cancelAtPeriodEnd && subscription.status !== 'canceled') {
+                // The donor deactivated before this Checkout completed.
+                await client.query(
+                    `INSERT INTO payment_commands (
+                        command_id, kind, subscription_id, status, next_attempt_at, created_at
+                     )
+                     SELECT $1, 'cancel-at-period-end', subscription_id, 'pending', $3, $3
+                       FROM supporter_subscriptions WHERE stripe_subscription_id = $2
+                     ON CONFLICT (kind, subscription_id) DO NOTHING`,
+                    [randomUUID(), subscription.id, fetchedAt],
+                );
+            }
             await notifyEnding(written.rowCount);
             return;
         }

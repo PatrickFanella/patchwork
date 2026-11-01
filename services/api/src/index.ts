@@ -146,6 +146,7 @@ import { readJsonBody } from './http/json-body.js';
 import {
     authenticateOptionalRequest,
     authenticateRequest,
+    unauthorizedWhenSessionExpired,
 } from './http/authenticated-request.js';
 import { createDiscoveryHandler } from './http/discovery-handler.js';
 import { createGracefulShutdown } from './http/graceful-shutdown.js';
@@ -291,11 +292,15 @@ const atAuthRuntime =
         undefined
     :   createAtAuthRuntime(config, postgresPool!);
 
+const resolveBrowserSession = unauthorizedWhenSessionExpired(
+    (token: string) => atAuthRuntime!.service.current(token),
+);
+
 const authenticateSessionRequest =
     atAuthRuntime && roleRepository ?
         (request: IncomingMessage) =>
             authenticateRequest(request, {
-                resolveSession: token => atAuthRuntime.service.current(token),
+                resolveSession: resolveBrowserSession,
                 resolveRole: did => roleRepository.resolve(did),
             })
     :   undefined;
@@ -448,7 +453,7 @@ const authenticateOptionalApiRequest =
     atAuthRuntime && roleRepository ?
         (request: IncomingMessage) =>
             authenticateOptionalRequest(request, {
-                resolveSession: token => atAuthRuntime.service.current(token),
+                resolveSession: resolveBrowserSession,
                 resolveRole: did => roleRepository.resolve(did),
             })
     :   async () => undefined;

@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http';
+import { AtClientError } from '@patchwork/at-client';
 import type { PlatformRole } from '@patchwork/shared';
 import {
     createAuthorizationContext,
@@ -62,6 +63,28 @@ const cookieToken = (headers: IncomingHttpHeaders): string | undefined => {
         }
     }
     return undefined;
+};
+
+/**
+ * Wrap a session lookup so an expired, revoked or unknown session becomes a
+ * public 401. Otherwise routes that render errors generically answer 500,
+ * including optional-auth routes such as guest checkout with a stale cookie.
+ */
+export const unauthorizedWhenSessionExpired = <T>(
+    resolve: (token: string) => Promise<T>,
+) => async (token: string): Promise<T> => {
+    try {
+        return await resolve(token);
+    } catch (error) {
+        if (error instanceof AtClientError && error.code === 'SESSION_EXPIRED') {
+            throw new PublicHttpError(
+                401,
+                'SESSION_EXPIRED',
+                'The Patchwork browser session is missing or expired.',
+            );
+        }
+        throw error;
+    }
 };
 
 export const authenticateOptionalRequest = async (

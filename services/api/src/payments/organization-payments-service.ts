@@ -311,18 +311,22 @@ export class OrganizationPaymentsService {
             stripe_subscription_id: string;
             stripe_account_id: string;
             recipient_status: string;
+            updated_at: Date;
         }>(
             `SELECT s.subscription_id, s.stripe_subscription_id, r.stripe_account_id,
-                    r.status AS recipient_status
+                    r.status AS recipient_status, s.updated_at
                FROM supporter_subscriptions s
                JOIN payment_recipients r ON r.recipient_id = s.recipient_id
                LEFT JOIN organizations o ON o.organization_id = r.organization_id
               WHERE r.kind = 'organization'
                 AND r.stripe_account_id IS NOT NULL
+                AND r.deauthorized_at IS NULL
                 AND s.paused_reason IS NULL
                 AND s.status IN ('active', 'trialing', 'past_due')
                 AND NOT COALESCE(o.organization_id IS NOT NULL AND ${eligibleOrganizationRecipientSql}, FALSE)
-              ORDER BY s.created_at, s.subscription_id
+              -- A failed attempt touches updated_at, so rows that keep failing
+              -- move behind the rest instead of blocking every run.
+              ORDER BY s.updated_at, s.subscription_id
               LIMIT $1`,
             [limit],
         );
@@ -330,14 +334,22 @@ export class OrganizationPaymentsService {
         for (const row of candidates.rows) {
             const reason = row.recipient_status === 'suspended' ? 'recipient-suspended' : 'recipient-ineligible';
             try {
-                await this.gateway.pauseSubscriptionCollection(
+                // The key changes whenever the row does. A fixed key would make
+                // Stripe replay an earlier pause after the organization resumed
+                // collection, and nothing would be paused.
+                const paused = await this.gateway.pauseSubscriptionCollection(
                     row.stripe_subscription_id,
-                    `patchwork-pause-${row.subscription_id}-${reason}`,
+                    `patchwork-pause-${row.subscription_id}-${reason}-${row.updated_at.getTime()}`,
                     { accountId: row.stripe_account_id },
                 );
+                if (!paused.collectionPaused) throw new Error('PAUSE_NOT_APPLIED');
                 await this.recordPause(row.subscription_id, reason);
                 result.paused += 1;
             } catch {
+                await this.pool.query(
+                    'UPDATE supporter_subscriptions SET updated_at = NOW() WHERE subscription_id = $1',
+                    [row.subscription_id],
+                ).catch(() => undefined);
                 result.failed += 1;
             }
         }
@@ -351,7 +363,8 @@ export class OrganizationPaymentsService {
             const paused = await client.query<{ donor_did: string | null }>(
                 `UPDATE supporter_subscriptions
                     SET paused_reason = $2, updated_at = NOW()
-                  WHERE subscription_id = $1 AND paused_reason IS NULL
+                  -- The pause's own webhook may already have recorded it as 'donor'.
+                  WHERE subscription_id = $1 AND (paused_reason IS NULL OR paused_reason = 'donor')
                   RETURNING donor_did`,
                 [subscriptionId, reason],
             );

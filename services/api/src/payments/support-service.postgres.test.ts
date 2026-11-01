@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentWebhookService } from './payment-webhook-service.js';
-import type { StripeCheckoutSession, StripeEvent, StripeSubscription } from './stripe-gateway.js';
+import { StripeApiError, type StripeCheckoutSession, type StripeEvent, type StripeSubscription } from './stripe-gateway.js';
 import { FakeStripe } from './testing/fake-stripe.js';
 import { applyApiMigrations } from './testing/migrations.js';
 import { SupportService, type SupportServiceOptions } from './support-service.js';
@@ -83,7 +83,7 @@ describe('SupportService', () => {
         await pool.query(
             `TRUNCATE payment_webhook_events, payment_charge_states, donations, supporter_subscriptions,
                       donor_accounts, supporter_tier_prices, payment_checkout_sessions,
-                      payment_audit_events, notification_intents CASCADE`,
+                      payment_audit_events, notification_intents, payment_commands CASCADE`,
         );
         await pool.query(`DELETE FROM payment_recipients WHERE kind = 'organization'`);
         await pool.query('DELETE FROM organizations');
@@ -114,7 +114,7 @@ describe('SupportService', () => {
         const first = await service.createCheckout({ body, clientKey });
         expect(first.url).toMatch(/^https:\/\/checkout\.stripe\.test\//u);
         const call = stripe.checkoutCalls[0]!;
-        expect(call.idempotencyKey).toBe(`patchwork-checkout-${first.checkoutId}`);
+        expect(call.idempotencyKey).toMatch(new RegExp(`^patchwork-checkout-${first.checkoutId}-[0-9a-f]{16}$`, 'u'));
         expect(call.params).toMatchObject({
             mode: 'payment',
             submit_type: 'donate',
@@ -169,11 +169,61 @@ describe('SupportService', () => {
         await expect(service.createCheckout({ body, clientKey }))
             .rejects.toMatchObject({ code: 'CHECKOUT_UNAVAILABLE' });
         const retried = await service.createCheckout({ body, clientKey });
-        expect(stripe.checkoutCalls.map(call => call.idempotencyKey)).toEqual([
-            `patchwork-checkout-${retried.checkoutId}`,
-            `patchwork-checkout-${retried.checkoutId}`,
-        ]);
+        const keys = stripe.checkoutCalls.map(call => call.idempotencyKey);
+        expect(keys).toHaveLength(2);
+        expect(keys[0]).toMatch(new RegExp(`^patchwork-checkout-${retried.checkoutId}-`, 'u'));
+        expect(keys[1]).toBe(keys[0]);
         await expect(service.getCheckoutStatus(retried.checkoutId)).resolves.toMatchObject({ status: 'open' });
+    });
+
+    it('uses a new Stripe key when a retry has different parameters', async () => {
+        // The first attempt fails before any customer is known; the donor then
+        // gains a customer from another gift, so the retry names it.
+        const clientKey = randomUUID();
+        const body = { recipient: 'general-fund', mode: 'one-time', amountMinor: 1_000 };
+        stripe.failNextCheckout = true;
+        await expect(service.createCheckout({ body, clientKey, donorDid })).rejects.toMatchObject({ code: 'CHECKOUT_UNAVAILABLE' });
+        await pool.query(
+            `INSERT INTO donor_accounts (donor_account_id, donor_did, recipient_id, stripe_customer_id, created_at, updated_at)
+             VALUES ($1, $2, '00000000-0000-4000-8000-000000000001', 'cus_1Later', NOW(), NOW())`,
+            [randomUUID(), donorDid],
+        );
+        await expect(service.createCheckout({ body, clientKey, donorDid })).resolves.toBeDefined();
+        const [first, second] = stripe.checkoutCalls;
+        expect(second!.params['customer']).toBe('cus_1Later');
+        expect(second!.idempotencyKey).not.toBe(first!.idempotencyKey);
+    });
+
+    it('drops a customer deleted or a Price archived in Stripe and retries once', async () => {
+        await pool.query(
+            `INSERT INTO donor_accounts (donor_account_id, donor_did, recipient_id, stripe_customer_id, created_at, updated_at)
+             VALUES ($1, $2, '00000000-0000-4000-8000-000000000001', 'cus_1Deleted', NOW(), NOW())`,
+            [randomUUID(), donorDid],
+        );
+        const monthly = { recipient: 'general-fund', mode: 'monthly', tierKey: 'tier-1' };
+        // First Checkout records the Price, which the owner then archives.
+        await service.createCheckout({ body: monthly, clientKey: randomUUID() });
+        const archived = String((stripe.checkoutCalls[0]!.params['line_items'] as Array<Record<string, unknown>>)[0]!['price']);
+        stripe.unusable.add('cus_1Deleted');
+        stripe.unusable.add(archived);
+
+        await expect(service.createCheckout({ body: monthly, clientKey: randomUUID(), donorDid })).resolves.toBeDefined();
+        const retry = stripe.checkoutCalls.at(-1)!.params;
+        expect(retry['customer']).toBeUndefined();
+        const replacement = String((retry['line_items'] as Array<Record<string, unknown>>)[0]!['price']);
+        expect(replacement).not.toBe(archived);
+        await expect(pool.query('SELECT stripe_customer_id FROM donor_accounts WHERE donor_did = $1', [donorDid]))
+            .resolves.toMatchObject({ rowCount: 0 });
+        await expect(pool.query('SELECT stripe_price_id FROM supporter_tier_prices'))
+            .resolves.toMatchObject({ rows: [{ stripe_price_id: replacement }] });
+
+        // Any other rejection is not retried.
+        const before = stripe.checkoutCalls.length;
+        const rejecting = vi.spyOn(stripe, 'createCheckoutSession').mockRejectedValueOnce(new StripeApiError('INVALID_REQUEST', false));
+        await expect(service.createCheckout({ body: monthly, clientKey: randomUUID() })).rejects.toMatchObject({ code: 'CHECKOUT_UNAVAILABLE' });
+        expect(rejecting).toHaveBeenCalledTimes(1);
+        expect(stripe.checkoutCalls.length).toBe(before);
+        rejecting.mockRestore();
     });
 
     it('creates each monthly tier price once and rejects retired tiers', async () => {
@@ -349,6 +399,33 @@ describe('SupportService', () => {
             'support-receipt:in_1Abrupt',
             'support-ending:sub_1Abrupt:ended',
         ]);
+    });
+
+    it('ends a monthly gift whose Checkout completes after the donor deactivated', async () => {
+        const checkout = await service.createCheckout({
+            body: { recipient: 'general-fund', mode: 'monthly', tierKey: 'tier-1' },
+            clientKey: randomUUID(),
+            donorDid,
+        });
+        // Deactivation removes the DID and flags the donor's checkouts.
+        await pool.query(
+            `UPDATE payment_checkout_sessions SET donor_did = NULL, donor_deactivated = TRUE WHERE donor_did = $1`,
+            [donorDid],
+        );
+        stripe.setSubscription({
+            id: 'sub_1AfterDeactivation', status: 'active', livemode: false, customer: 'cus_1After',
+            cancelAtPeriodEnd: false, currentPeriodEnd: 1_796_000_000, collectionPaused: false,
+            metadata: { patchwork_checkout_id: checkout.checkoutId },
+        });
+        await deliver('customer.subscription.created', { id: 'sub_1AfterDeactivation' });
+        const queued = await pool.query(
+            `SELECT c.kind, c.status, s.donor_did FROM payment_commands c
+               JOIN supporter_subscriptions s ON s.subscription_id = c.subscription_id
+              WHERE s.stripe_subscription_id = 'sub_1AfterDeactivation'`,
+        );
+        expect(queued.rows).toEqual([{ kind: 'cancel-at-period-end', status: 'pending', donor_did: null }]);
+        await expect(pool.query('SELECT COUNT(*)::int AS count FROM donor_accounts')).resolves.toMatchObject({ rows: [{ count: 0 }] });
+        expect(await notifications()).toEqual([]);
     });
 
     it('applies full refunds and dispute outcomes to one-time gifts', async () => {
