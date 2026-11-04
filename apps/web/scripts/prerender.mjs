@@ -7,7 +7,7 @@ if (!body.includes('<h1') || !body.includes('<main')) throw new Error('Public in
 for (const [path, meta] of Object.entries(publicPageMeta)) {
     const folder = new URL(`../dist${path === '/' ? '' : path}/`, import.meta.url);
     const url = publicOrigin + path;
-    let html = template.replace('<title>Patchwork</title>', `<title>${escape(meta.title)}</title>`).replace('</head>', `<meta name="description" content="${escape(meta.description)}"><link rel="canonical" href="${url}"><meta property="og:type" content="website"><meta property="og:title" content="${escape(meta.title)}"><meta property="og:description" content="${escape(meta.description)}"><meta property="og:url" content="${url}"></head>`);
+    let html = template.replace('<title>Patchwork</title>', `<title>${escape(meta.title)}</title>`).replace('</head>', `<meta name="description" content="${escape(meta.description)}"><link rel="canonical" href="${url}"><meta property="og:type" content="website"><meta property="og:title" content="${escape(meta.title)}"><meta property="og:description" content="${escape(meta.description)}"><meta property="og:url" content="${url}"><meta name="twitter:title" content="${escape(meta.title)}"><meta name="twitter:description" content="${escape(meta.description)}"></head>`);
     if (path === '/') html = html.replace('<div id="root"></div>', `<div id="root">${body}</div>`);
     await mkdir(folder, { recursive: true });
     await writeFile(new URL('index.html', folder), html);
