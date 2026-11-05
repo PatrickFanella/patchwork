@@ -317,7 +317,7 @@ services:
             dockerfile: Dockerfile
             target: api-runtime
         restart: "no"
-        command: ['npm', 'run', 'db:migrate', '-w', '@patchwork/api']
+        command: ['node', '--import', 'tsx', 'services/api/src/db/migrate.ts']
         depends_on:
             postgres:
                 condition: service_healthy

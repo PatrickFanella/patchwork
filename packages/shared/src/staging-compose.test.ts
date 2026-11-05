@@ -111,8 +111,10 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
                 }
 
                 const { services } = renderCompose(filename);
+                expect(services['patchwork-api-migrations']?.command).toEqual([
+                    'node', '--import', 'tsx', 'services/api/src/db/migrate.ts',
+                ]);
                 for (const migration of [
-                    'patchwork-api-migrations',
                     'patchwork-indexer-migrations',
                     'patchwork-moderation-migrations',
                 ]) {
