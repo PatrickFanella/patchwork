@@ -242,7 +242,7 @@
         "resourcesAction": "Organizaciones y listados",
         "nearbyEyebrow": "Cerca de ti",
         "nearbyTitle": "¿Qué hace falta por aquí?",
-        "nearbyDescription": "Busca una necesidad, un servicio o un vecindario. Tú eliges un área aproximada antes de que se carguen resultados locales.",
+        "nearbyDescription": "Busca una necesidad, un servicio o un vecindario. La vista previa empieza en Chicago; cambia el área para explorar otro lugar.",
         "searchRequests": "Buscar solicitudes",
         "exploreMap": "Explorar el mapa",
         "trustEyebrow": "Quién ve qué",
@@ -267,7 +267,9 @@
         "excerptEmpty": "Aún no hay nada publicado en esta área.",
         "excerptExample": "Ejemplo",
         "excerptOpenMap": "Abrir el mapa",
-        "excerptDirectory": "Explorar el directorio"
+        "excerptDirectory": "Explorar el directorio",
+        "previewArea": "Chicago es el área predeterminada de la vista previa. Elige un código postal para ver otra área.",
+        "changeArea": "Cambiar área"
     },
     "discovery": {
         "title": "Filtros de descubrimiento",
@@ -528,7 +530,9 @@
         "urgencyHint": "1 significa que puede esperar unos días; 5 significa hoy.",
         "fixErrors": "Corrige esto antes de publicar:",
         "zipLabel": "Código postal donde se necesita ayuda",
-        "zipHelp": "Elige la zona postal de esta solicitud. Tu dirección permanece privada."
+        "zipHelp": "Elige la zona postal de esta solicitud. Tu dirección permanece privada.",
+        "resourceContext": "Solicitud a la comunidad sobre {{name}}",
+        "resourceContextHelp": "Tu solicitud se dirige a la comunidad de Patchwork. Contacta directamente a la organización para acceder a sus servicios."
     },
     "resources": {
         "nearestFirst": "Primero los más cercanos a la zona seleccionada. Las distancias son aproximadas.",
@@ -544,8 +548,8 @@
         "eligibilityUnavailable": "Detalles de elegibilidad no disponibles.",
         "openDetails": "Detalles",
         "openDetailsFor": "Detalles de {{name}}",
-        "startIntake": "Pedir ayuda aquí",
-        "startIntakeFor": "Pedir ayuda aquí: {{name}}",
+        "startIntake": "Preguntar a la comunidad",
+        "startIntakeFor": "Preguntar a la comunidad sobre {{name}}",
         "resourceDetailTitle": "Sobre este lugar",
         "close": "Cerrar",
         "staleResults": "Se muestran resultados cargados anteriormente; pueden estar desactualizados.",

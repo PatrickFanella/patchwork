@@ -132,7 +132,7 @@ export function DiscoveryControls({
                 </form>
             </div>
             {showResourceFilters && (
-                <details className='mh-resource-filter-disclosure' open={resourceFilters ? undefined : true}>
+                <details className='mh-resource-filter-disclosure'>
                     <summary>{t('resources.filtersLegend')}{resourceFilterCount ? ` · ${resourceFilterCount}` : ''}</summary>
                 <fieldset className='grid gap-3 sm:grid-cols-2'>
                     <legend className='sr-only'>{t('resources.filtersLegend')}</legend>

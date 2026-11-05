@@ -37,12 +37,13 @@ export function ResourceMap({ state, selectedUri, onSelect, onSearchArea, retry 
 
     useEffect(() => {
         if (!node.current) return;
+        const tileUrl = resolveMapTileUrl(import.meta.env, import.meta.env.PROD);
         const map = L.map(node.current, { scrollWheelZoom: false, zoomControl: false });
         instance.current = map;
         const center = initialState.current.center ?? { lat: 41.885, lng: -87.623 };
         map.setView([center.lat, center.lng], 11);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
-        const layer = leafletLayer({ url: resolveMapTileUrl(import.meta.env, import.meta.env.PROD), ...basemapTheme(locale), maxDataZoom: 10 });
+        const layer = leafletLayer({ url: tileUrl, ...basemapTheme(locale), maxDataZoom: 10 });
         layer.on('tileerror', () => setTileError(true));
         layer.addTo(map);
         const refresh = () => setView(v => v + 1);

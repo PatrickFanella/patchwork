@@ -38,6 +38,7 @@
     --mh-border: #172019;
     --mh-border-subtle: #d4cec1;
     --mh-border-soft: #aaa99f;
+    --mh-input-border: #85867c;
     --mh-focus: #0b62d6;
     --mh-focus-offset: #fffdf7;
 
@@ -495,7 +496,7 @@
 
 .mh-input {
     min-height: 44px;
-    border: 1px solid var(--mh-border-soft);
+    border: 1px solid var(--mh-input-border);
     border-radius: var(--mh-radius-input);
     background: var(--mh-surface);
     color: var(--mh-text);

@@ -379,6 +379,7 @@ test('resource categories query the whole directory and restore through Back', a
         });
     });
     await page.goto('/resources?lat=41.88&lng=-87.63&r=20000');
+    await page.locator('.mh-resource-filter-disclosure > summary').click();
     const legal = page.getByLabel('Type of place', { exact: true });
     await legal.selectOption('legal-aid');
     await expect(legal).toHaveValue('legal-aid');
@@ -410,6 +411,7 @@ test('resource filters survive directory-to-Nearby navigation, reload and reset'
         return route.fulfill({ json: { total: 0, page: 1, pageSize: 20, hasNextPage: false, results: [] } });
     });
     await page.goto('/resources?zip=60187');
+    await page.locator('.mh-resource-filter-disclosure > summary').click();
     await page.getByLabel('What do you need?', { exact: true }).selectOption('youth');
     await page.getByLabel('Service, organization, or keyword', { exact: true }).fill('nutrition');
     await expect.poll(() => queries.at(-1)?.searchParams.get('service')).toBe('youth');

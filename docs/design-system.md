@@ -60,7 +60,8 @@ introduce raw hex values or one-off shadows.
 | `--mh-warning` | `#8a5f00` | Warning text and borders |
 | `--mh-danger` | `#b93b2c` | Errors and destructive actions |
 | `--mh-border` | `#172019` | Ink outline |
-| `--mh-border-soft` | `#aaa99f` | Input borders, dividers |
+| `--mh-border-soft` | `#aaa99f` | Dividers and quiet outlines |
+| `--mh-input-border` | `#85867c` | Input boundaries with at least 3:1 contrast on the surface colour |
 | `--mh-border-subtle` | `#d4cec1` | Hairlines inside cards |
 | `--mh-focus` | `#0b62d6` | Focus ring (distinct from every brand colour) |
 

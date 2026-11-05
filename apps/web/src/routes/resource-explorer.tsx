@@ -1,4 +1,5 @@
 import { SaveSearchButton } from '../features/saved-discovery';
+import { MapErrorBoundary } from '../components/map/MapErrorBoundary';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { lookupPostalArea } from '@patchwork/at-lexicons';
 import { resourceServices, resourcePrograms, type ResourceService } from '@patchwork/shared';
@@ -114,7 +115,7 @@ export function ResourceExplorer({ state, onPatch }: { state: DiscoveryFilterSta
         <div className='pw-explorer__context'><p><strong>{selectedArea}</strong><span>{t('mapExplorer.within', { distance: fmt.distance(state.radiusMeters ?? 20000) })}</span></p><p>{t('mapExplorer.privacy')}</p></div>
         <div className='pw-explorer__mobile-switch' role='group' aria-label={t('mapExplorer.view')}><Button variant={mobileView === 'map' ? 'primary' : 'secondary'} aria-pressed={mobileView === 'map'} onClick={() => setMobileView('map')}>{t('mapExplorer.map')}</Button><Button variant={mobileView === 'list' ? 'primary' : 'secondary'} aria-pressed={mobileView === 'list'} onClick={() => setMobileView('list')}>{t('mapExplorer.list')}</Button></div>
         <div className='pw-explorer__workspace'>
-            <div className='pw-explorer__map'><Suspense fallback={<div className='pw-explorer__map-loading mh-skeleton' role='status'><span className='sr-only'>{t('mapExplorer.loadingMap')}</span></div>}><ResourceMap state={state} selectedUri={selectedUri} onSelect={setSelectedUri} onSearchArea={onPatch} retry={retry} /></Suspense></div>
+            <div className='pw-explorer__map'><MapErrorBoundary onShowList={() => setMobileView('list')}><Suspense fallback={<div className='pw-explorer__map-loading mh-skeleton' role='status'><span className='sr-only'>{t('mapExplorer.loadingMap')}</span></div>}><ResourceMap state={state} selectedUri={selectedUri} onSelect={setSelectedUri} onSearchArea={onPatch} retry={retry} /></Suspense></MapErrorBoundary></div>
             <section className='pw-explorer__results' aria-label={t('mapExplorer.results')} aria-busy={loading}>
                 <header><div><p className='mh-eyebrow'>{t('mapExplorer.results')}</p><p ref={count} tabIndex={-1} role='status' className='pw-explorer__count'>{error ? t('mapExplorer.listError') : loading && cards.length === 0 ? t('mapExplorer.loading') : t('mapExplorer.count', { count: total })}</p></div><span>{t('mapExplorer.nearest')}</span></header>
                 {error ? <div className='pw-explorer__empty' role='alert'><h2>{t('mapExplorer.listError')}</h2><Button onClick={() => setRetry(n => n + 1)}>{t('common.retry')}</Button></div> : !loading && cards.length === 0 ? <div className='pw-explorer__empty'><h2>{t('mapExplorer.empty')}</h2><p>{t('mapExplorer.emptyHelp')}</p><Button variant='secondary' onClick={() => onPatch({ text: undefined, resourceService: undefined, resourceCategory: undefined, resourceProgram: undefined, radiusMeters: 50000 })}>{t('mapExplorer.widen')}</Button></div> : null}

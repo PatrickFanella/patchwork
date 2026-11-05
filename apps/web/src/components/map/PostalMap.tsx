@@ -78,6 +78,7 @@ export function PostalMap(props: Props) {
 
     useEffect(() => {
         if (!container.current) return;
+        const tileUrl = resolveMapTileUrl(import.meta.env, import.meta.env.PROD);
         const initial = callbacks.current.center;
         const reducedMotion = window.matchMedia(
             '(prefers-reduced-motion: reduce)',
@@ -93,7 +94,7 @@ export function PostalMap(props: Props) {
         mapRef.current = map;
         map.createPane('postalLabels').style.zIndex = '450';
         leafletLayer({
-            url: resolveMapTileUrl(import.meta.env, import.meta.env.PROD),
+            url: tileUrl,
             ...basemapTheme('en'),
             maxDataZoom: 10,
         })

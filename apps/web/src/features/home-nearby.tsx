@@ -1,6 +1,8 @@
 import { useEffect, useState, type MouseEvent } from 'react';
+import { lookupPostalArea } from '@patchwork/at-lexicons';
 import {
     defaultDiscoveryFilterState,
+    serializeDiscoveryFilterState,
     type DiscoveryFilterState,
 } from '../discovery-filters';
 import {
@@ -9,6 +11,8 @@ import {
 } from '../resource-directory-ux';
 import { webDataMode } from '../app/runtime';
 import { Badge } from '../components/Badge';
+import { Button } from '../components/Button';
+import { Input } from '../components/Input';
 import { TextLink } from '../components/TextLink';
 import { useLocale } from '../i18n';
 import {
@@ -31,6 +35,7 @@ interface NearbyExcerpt {
 
 interface HomeNearbyProps {
     discoveryState: DiscoveryFilterState;
+    onPatchDiscovery: (patch: Partial<DiscoveryFilterState>) => void;
     onOpenMap: (event: MouseEvent<HTMLAnchorElement>) => void;
 }
 
@@ -38,7 +43,11 @@ interface HomeNearbyProps {
  * A short, live excerpt of what is listed around the visitor's area, so the
  * home page shows real requests and places instead of describing them.
  */
-export const HomeNearby = ({ discoveryState, onOpenMap }: HomeNearbyProps) => {
+export const HomeNearby = ({
+    discoveryState,
+    onPatchDiscovery,
+    onOpenMap,
+}: HomeNearbyProps) => {
     const { t, fmt } = useLocale();
     const center = discoveryState.center ?? defaultCenter;
     const radiusMeters = discoveryState.radiusMeters ?? defaultRadiusMeters;
@@ -47,6 +56,9 @@ export const HomeNearby = ({ discoveryState, onOpenMap }: HomeNearbyProps) => {
         : t('mapExplorer.chicago');
     const [excerpt, setExcerpt] = useState<NearbyExcerpt>();
     const [failed, setFailed] = useState(false);
+    const [zip, setZip] = useState(discoveryState.postalCode ?? '');
+    const [zipError, setZipError] = useState(false);
+    const directoryParams = new URLSearchParams(serializeDiscoveryFilterState(discoveryState));
 
     useEffect(() => {
         const controller = new AbortController();
@@ -111,6 +123,50 @@ export const HomeNearby = ({ discoveryState, onOpenMap }: HomeNearbyProps) => {
             <h2 id='home-nearby-heading' className='mh-nearby-card__title'>
                 {t('dashboard.excerptTitle', { area })}
             </h2>
+            {!discoveryState.center && (
+                <p className='mh-nearby-card__note'>{t('dashboard.previewArea')}</p>
+            )}
+            <details className='mh-filter-disclosure mt-3'>
+                <summary>{t('dashboard.changeArea')}</summary>
+                <form
+                    className='mt-2 grid gap-2'
+                    onSubmit={event => {
+                        event.preventDefault();
+                        if (!lookupPostalArea(zip.trim())) {
+                            setZipError(true);
+                            return;
+                        }
+                        setZipError(false);
+                        onPatchDiscovery({
+                            postalCode: zip.trim(),
+                            areaLabel: t('mapExplorer.zipArea', { zip: zip.trim() }),
+                            radiusMeters: discoveryState.radiusMeters ?? defaultRadiusMeters,
+                            feedTab: 'nearby',
+                        });
+                    }}
+                >
+                    <label htmlFor='home-area-zip' className='mh-field-label'>
+                        {t('mapExplorer.zipLabel')}
+                    </label>
+                    <Input
+                        id='home-area-zip'
+                        inputMode='numeric'
+                        autoComplete='postal-code'
+                        maxLength={5}
+                        pattern='[0-9]{5}'
+                        required
+                        value={zip}
+                        onChange={event => {
+                            setZip(event.target.value);
+                            setZipError(false);
+                        }}
+                        errorMessage={zipError ? t('mapExplorer.zipError') : undefined}
+                    />
+                    <Button type='submit' size='sm'>
+                        {t('experience.findArea')}
+                    </Button>
+                </form>
+            </details>
 
             {failed ? (
                 <p className='mh-nearby-card__note'>
@@ -185,7 +241,7 @@ export const HomeNearby = ({ discoveryState, onOpenMap }: HomeNearbyProps) => {
                                         className='mh-nearby-card__row'
                                     >
                                         <TextLink
-                                            href={`/resources?resource=${encodeURIComponent(place.uri)}`}
+                                            href={`/resources?${new URLSearchParams({ ...Object.fromEntries(directoryParams), resource: place.uri })}`}
                                         >
                                             {place.name}
                                         </TextLink>
@@ -211,6 +267,8 @@ export const HomeNearby = ({ discoveryState, onOpenMap }: HomeNearbyProps) => {
                                                         'dashboard.excerptExample',
                                                     )}
                                                 </Badge>
+                                            ) : place.recordOrigin === 'sourced-public' ? (
+                                                <Badge tone='neutral'>{t('resources.publicSource')}</Badge>
                                             ) : null}
                                         </p>
                                     </li>
@@ -231,7 +289,7 @@ export const HomeNearby = ({ discoveryState, onOpenMap }: HomeNearbyProps) => {
                 <TextLink href='/map' onClick={onOpenMap}>
                     {t('dashboard.excerptOpenMap')}
                 </TextLink>
-                <TextLink href='/resources'>
+                <TextLink href={`/resources?${directoryParams}`}>
                     {t('dashboard.excerptDirectory')}
                 </TextLink>
             </div>

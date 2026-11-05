@@ -57,6 +57,7 @@ export const PostingRoute = ({
     onCreateViaApi,
 }: PostingRouteProps) => {
     const { t } = useLocale();
+    const resourceName = new URLSearchParams(window.location.search).get('resourceName');
     const [saved] = useState(() => loadPostingDraft(sessionStorage));
     const [postalCode, setPostalCode] = useState(saved?.postalCode ?? new URLSearchParams(window.location.search).get('zip') ?? '');
     const [countyInstead, setCountyInstead] = useState(saved?.countyInstead ?? false);
@@ -230,7 +231,11 @@ export const PostingRoute = ({
             <PageHeader
                 title={t('posting.heading')}
                 description={t('posting.description')}
-            />
+            >
+                {resourceName && <Banner tone='info' title={t('posting.resourceContext', { name: resourceName })}>
+                    <p>{t('posting.resourceContextHelp')}</p>
+                </Banner>}
+            </PageHeader>
 
             <Surface aria-label={String(t('posting.formTitle'))}>
                 <form className='grid gap-5' onSubmit={handleSubmit}>

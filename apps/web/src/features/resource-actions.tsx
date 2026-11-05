@@ -6,6 +6,13 @@ import { useLocale } from '../i18n';
 import { currentExactPublicAddress, type ResourceDetail } from '../resource-directory-ux';
 import { TravelPlanner } from './travel-planner';
 
+export function resourcePostingHref(resource: Pick<ResourceDetail, 'uri' | 'name'>) {
+    const query = new URLSearchParams(window.location.search);
+    query.set('resource', resource.uri);
+    query.set('resourceName', resource.name);
+    return `/posting?${query}`;
+}
+
 export function resourceContactLinks(resource: ResourceDetail) {
     if (resource.recordOrigin === 'synthetic') return {};
     let website: string | undefined;
@@ -27,9 +34,6 @@ export function ResourceActions({ resource }: { resource: ResourceDetail }) {
     if (resource.recordOrigin === 'synthetic') return <p className='text-sm'>{t('handoff.demoResource')}</p>;
     const links = resourceContactLinks(resource);
     const address = currentExactPublicAddress(resource);
-    const query = new URLSearchParams(window.location.search);
-    query.set('resource', resource.uri);
-    query.set('resourceName', resource.name);
     const linkClass = 'mh-button inline-flex px-3 py-2 text-sm';
     return <div className='space-y-2'>
         {address && <p className='font-bold'>{address.streetAddress}</p>}
@@ -48,7 +52,7 @@ export function ResourceActions({ resource }: { resource: ResourceDetail }) {
             {links.website && <a className={linkClass} href={links.website} target='_blank' rel='noopener noreferrer'>{t('handoff.visitWebsite')}</a>}
             {links.telephone && <a className={linkClass} href={links.telephone}>{t('handoff.callResource', { phone: resource.contact.phone! })}</a>}
             {links.directions && <a className={linkClass} href={links.directions} target='_blank' rel='noopener noreferrer'>{t('handoff.directions')}</a>}
-            <a className={linkClass} href={`/posting?${query.toString()}`}>{t('handoff.askCommunity')}</a>
+            <a className={linkClass} href={resourcePostingHref(resource)}>{t('handoff.askCommunity')}</a>
         </div>
         <SaveDiscoveryButton input={{kind:'resource',resourceUri:resource.uri}} />
         {address && <TravelPlanner key={`travel:${resource.uri}`} resourceUri={resource.uri} />}
