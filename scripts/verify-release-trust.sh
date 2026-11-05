@@ -82,7 +82,12 @@ for service in api indexer moderation web; do
                         and .predicate.buildType == ($repo + "/src/branch/main/.github/workflows/deploy-staging.yml")
                         and any(.predicate.materials[]; .uri == $source and .digest.sha1 == $sha)
                         and (.predicate.builder.id | test("^https://git\\.subcult\\.tv/subculture-collective/patchwork/actions/runs/[1-9][0-9]*$"))
-                        and .predicate.metadata.buildInvocationId == .predicate.builder.id) |
+                        # Cosign 2.5.2 serializes the SLSA field as buildInvocationID.
+                        # Every present spelling must bind to the same builder.
+                        and (.predicate.builder.id as $builder |
+                          [.predicate.metadata.buildInvocationId, .predicate.metadata.buildInvocationID] |
+                          map(select(. != null)) |
+                          length > 0 and all(. == $builder))) |
                       .predicate.builder.id] | unique | select(length == 1) | .[0]
                 ' <<< "$verified") || {
                     echo "Verified provenance does not bind the requested source, service and image: ${service}." >&2
