@@ -23,7 +23,7 @@ Configure the following under the repository's **Settings → Actions → Secret
 and **Variables**. Do not paste values into issues or chat. The built-in
 `GITEA_TOKEN` reads repository metadata; a separate package token authenticates
 the registry. Repository/owner token settings must permit `contents: read` and
-`actions: read` for the job token.
+`actions: write` for dispatch; deployment jobs request only `actions: read`.
 
 | Secret | Purpose |
 | --- | --- |
@@ -34,9 +34,10 @@ the registry. Repository/owner token settings must permit `contents: read` and
 | `STAGING_SSH_KNOWN_HOSTS` | Host keys verified independently for the exact staging SSH hostname |
 | `STAGING_SSH_USER`, `STAGING_SSH_HOST` | Staging SSH account and hostname or IPv4 address, using port 22 |
 
-All browser fixture secrets in the table below are also required before any
-image build, including the maintainer storage state. The workflow reports
-missing names without printing their values.
+All browser fixture inputs below are also required before any image build.
+Preflight obtains fresh requester, helper, and maintainer OAuth sessions from
+the dedicated staging accounts. It reports missing names without printing
+their values.
 
 | Variable | Purpose |
 | --- | --- |
@@ -121,21 +122,42 @@ first configured end-to-end run and its exact deployed digests separately.
 
 ## Protected browser-lifecycle inputs
 
-The deploy workflow has two non-mocked browser suites.  They run only in the
-Gitea deployment job after the digest deployment has passed readiness.
-These values are **test credentials and disposable fixtures**, not application
-configuration. Store them as access-controlled repository secrets/variables; never commit a
-Playwright storage-state file.
+The deploy workflow has two non-mocked browser suites. They run in the Gitea
+deployment job after the digest deployment has passed readiness. These values
+are **test credentials and disposable fixtures**, not application configuration.
+Never commit a Playwright storage-state file.
 
 | Value | Protection | Purpose |
 | --- | --- | --- |
-| `STAGING_E2E_REQUESTER_STATE_B64` | Secret | OAuth storage state for the disposable request owner |
-| `STAGING_E2E_HELPER_STATE_B64` | Secret | OAuth storage state for the second disposable account |
-| `STAGING_E2E_MAINTAINER_STATE_B64` | Secret | Fresh OAuth state (less than five minutes old when a drill is enabled) for a dedicated staging-only maintenance operator |
+| `STAGING_E2E_REQUESTER_STATE_B64` | Generated masked job environment | Fresh OAuth storage state for the disposable request owner |
+| `STAGING_E2E_HELPER_STATE_B64` | Generated masked job environment | Fresh OAuth storage state for the second disposable account |
+| `STAGING_E2E_MAINTAINER_STATE_B64` | Generated masked job environment | Fresh OAuth state for a dedicated staging-only maintenance operator |
 | `STAGING_E2E_EXACT_LATITUDE`, `STAGING_E2E_EXACT_LONGITUDE` | Secret | Disposable approximate discovery point; never a real address |
 | `STAGING_E2E_PRIVATE_MARKER` | Secret | Unique private string used by redaction assertions |
 | `STAGING_ARTIFACT_REDACTION_TERMS` | Secret | Terms the browser-artifact scrubber must reject |
 | `STAGING_E2E_EXERCISE_MAINTENANCE` | Protected variable, default `false` | Enables the declare/resume transition only during an announced isolated drill |
+
+`scripts/bootstrap-staging-sessions.sh` reads the existing root-owned
+`/etc/patchwork/e2e-accounts/accounts.json` over the deployment SSH identity,
+using its configured noninteractive sudo when required. The file must be mode
+`0600`, owned by root, and contain `requester`, `helper`, and `maintainer`
+objects with a handle, password, DID, purpose, and `review_by` date. All three
+must be distinct approved accounts with purpose exactly `Patchwork deployment
+browser tests` and a review date that has not passed. Rotate their credentials
+and review their ownership before that date; an expired review blocks release.
+Passwords stay in the host store and private runner scratch space, which is
+removed on exit. They are never added to repository secrets or artifacts.
+
+The bootstrap uses the controlled `pds.subcult.tv` provider, completes Patchwork
+OAuth, verifies each DID, and accepts the repository's current policy only for
+these disposable test accounts. Provision the maintainer's `admin` role using
+the [operator procedure](platform-role-provisioning.md) and retain its audit
+record; the bootstrap checks that role without changing it. It exports only
+the secure Patchwork session and CSRF cookies, excluding provider cookies and
+local storage. Preflight verifies the accounts before image builds; deployment
+refreshes them again immediately before the browser suites. Static session
+secrets are no longer consumed because application sessions expire after
+twelve hours. TLS validation remains enabled throughout.
 
 The lifecycle suite creates a group, invitation, group-room conversation, one
 message, and a declined offer under the disposable accounts. It redacts the

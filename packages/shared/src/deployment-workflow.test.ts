@@ -21,7 +21,12 @@ describe('immutable staging deployment contract', () => {
         ]) {
             expect(workflow).toContain(`target: ${target}`);
         }
-        expect(workflow).toContain('aquasecurity/trivy-action');
+        const scan = workflow.split('- name: Scan before publication')[1]?.split('- name:')[0] ?? '';
+        expect(scan).toMatch(/aquasec\/trivy@sha256:[a-f0-9]{64}/);
+        expect(scan).toContain('set -euo pipefail');
+        expect(scan).toContain('image --image-src docker --scanners vuln,secret');
+        expect(scan).toContain('--severity HIGH,CRITICAL --exit-code 1');
+        expect(workflow.indexOf('- name: Scan before publication')).toBeLessThan(workflow.indexOf('docker push'));
         expect(workflow).toContain('cosign sign --yes --key env://COSIGN_PRIVATE_KEY');
         expect(workflow).toContain('cosign verify --key cosign.pub');
         expect(workflow).toContain('docker push');

@@ -57,14 +57,16 @@ Pull requests and GitHub mirror runs cannot trigger deployment. A manual
 dispatch on Gitea `main` remains available for retrying an accepted revision.
 The deployment workflow runs:
 
-1. Preflight: exact-SHA CI status checks, required configuration, signing-key
-   agreement, registry login, and read-only SSH prerequisite checks.
+1. Preflight: exact-SHA CI status checks, fresh dedicated-account OAuth
+   sessions, required configuration, signing-key agreement, registry login,
+   and read-only SSH prerequisite checks.
 2. Four image builds: vulnerability scan, SBOM, Gitea provenance, registry push,
    digest resolution, Cosign key signatures, and attestation verification.
 3. Digest-manifest assembly using Gitea-compatible artifact upload/download.
 4. Another main/CI check, then SSH transfer into a per-run directory and locked
    digest deployment using the existing staging Compose project identity.
-5. Readiness and revision checks, followed by both credentialed browser suites.
+5. Readiness and revision checks, fresh OAuth sessions, then both credentialed
+   browser suites.
 
 A host lock serializes deployment and immediate rollback. The wrapper verifies
 release trust before invoking the deploy script. A failed deployment rolls back
