@@ -242,7 +242,7 @@
         "resourcesAction": "Organizations and listings",
         "nearbyEyebrow": "Around you",
         "nearbyTitle": "What's needed nearby?",
-        "nearbyDescription": "Search for a need, a service or a neighborhood. You pick an approximate area before any local results load.",
+        "nearbyDescription": "Search for a need, a service or a neighborhood. The preview starts in Chicago; change the area to explore somewhere else.",
         "searchRequests": "Search requests",
         "exploreMap": "Explore the map",
         "trustEyebrow": "Who sees what",
@@ -267,7 +267,9 @@
         "excerptEmpty": "Nothing is listed in this area yet.",
         "excerptExample": "Example",
         "excerptOpenMap": "Open the map",
-        "excerptDirectory": "Browse the directory"
+        "excerptDirectory": "Browse the directory",
+        "previewArea": "Chicago is the default preview area. Choose a ZIP code to see another area.",
+        "changeArea": "Change area"
     },
     "discovery": {
         "title": "Discovery filters",
@@ -528,7 +530,9 @@
         "urgencyHint": "1 means it can wait a few days; 5 means today.",
         "fixErrors": "Please fix these before publishing:",
         "zipLabel": "ZIP code where help is needed",
-        "zipHelp": "Choose the ZIP area for this request. Your street address stays private."
+        "zipHelp": "Choose the ZIP area for this request. Your street address stays private.",
+        "resourceContext": "Community request about {{name}}",
+        "resourceContextHelp": "Your request goes to the Patchwork community. Contact the organization directly for its services."
     },
     "resources": {
         "nearestFirst": "Closest to the selected area first. Distances are approximate.",
@@ -544,8 +548,8 @@
         "eligibilityUnavailable": "Eligibility details unavailable.",
         "openDetails": "Details",
         "openDetailsFor": "Details for {{name}}",
-        "startIntake": "Ask for help here",
-        "startIntakeFor": "Ask for help here: {{name}}",
+        "startIntake": "Ask the community",
+        "startIntakeFor": "Ask the community about {{name}}",
         "resourceDetailTitle": "About this place",
         "close": "Close",
         "staleResults": "Showing previously loaded results; they may be stale.",

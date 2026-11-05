@@ -1,4 +1,4 @@
-import { ResourceActions } from '../features/resource-actions';
+import { ResourceActions, resourcePostingHref } from '../features/resource-actions';
 import { useMapSelection } from '../features/use-map-selection';
 import {
     useCallback,
@@ -24,7 +24,7 @@ import {
     type DirectoryResourceDraft,
 } from '../directory-resource-form';
 import { Badge } from '../components/Badge';
-import { Button } from '../components/Button';
+import { Button, ButtonLink } from '../components/Button';
 import { Input } from '../components/Input';
 import { Banner } from '../components/Banner';
 import { EmptyState } from '../components/EmptyState';
@@ -42,9 +42,6 @@ import {
     updateAtDirectoryResourceViaApi,
 } from '../features/api-client';
 import { useLocale } from '../i18n';
-import {
-    type AppRoute,
-} from '../app/routes';
 import {
     dataOriginLabel,
     nowIso,
@@ -642,7 +639,6 @@ const DirectoryResourceManager = ({
 interface ResourceRouteProps {
     discoveryState: DiscoveryFilterState;
     onPatchDiscovery: (patch: Partial<DiscoveryFilterState>) => void;
-    onNavigate: (route: AppRoute) => void;
     isLoading: boolean;
     errorMessage?: string;
     dataOrigin: ApiDataOrigin;
@@ -657,7 +653,6 @@ interface ResourceRouteProps {
 export const ResourceRoute = ({
     discoveryState,
     onPatchDiscovery,
-    onNavigate,
     isLoading,
     errorMessage,
     dataOrigin,
@@ -905,19 +900,17 @@ export const ResourceRoute = ({
                                         >
                                             {t('resources.openDetails')}
                                         </Button>
-                                        <Button
+                                        <ButtonLink
                                             variant='neutral'
                                             size='sm'
                                             aria-label={t(
                                                 'resources.startIntakeFor',
                                                 { name: card.name },
                                             )}
-                                            onClick={() =>
-                                                onNavigate('/posting')
-                                            }
+                                            href={resourcePostingHref(card)}
                                         >
                                             {t('resources.startIntake')}
-                                        </Button>
+                                        </ButtonLink>
                                         {isOwnListing(card) ? (
                                             <Button
                                                 variant='ghost'

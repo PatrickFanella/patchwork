@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { type DiscoveryFilterState } from '../discovery-filters';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -7,13 +8,6 @@ import { useLocale } from '../i18n';
 import {
     type AppRoute,
 } from '../app/routes';
-
-const buildNearbyPatch = (): Partial<DiscoveryFilterState> => ({
-    center: undefined,
-    areaLabel: undefined,
-    radiusMeters: undefined,
-    feedTab: 'nearby',
-});
 
 interface DashboardRouteProps {
     onNavigate: (route: AppRoute) => void;
@@ -27,6 +21,11 @@ export const DashboardRoute = ({
     onPatchDiscovery,
 }: DashboardRouteProps) => {
     const { t } = useLocale();
+    const [search, setSearch] = useState(discoveryState.text ?? '');
+    useEffect(() => {
+        setSearch(current => current.trim() === (discoveryState.text ?? '')
+            ? current : discoveryState.text ?? '');
+    }, [discoveryState.text]);
     return (
         <>
             <header className='mh-landing-hero'>
@@ -41,7 +40,7 @@ export const DashboardRoute = ({
                     <div className='mt-7 flex flex-wrap gap-3'>
                         <Button
                             onClick={() => {
-                                onPatchDiscovery(buildNearbyPatch());
+                                onPatchDiscovery({ feedTab: 'nearby' });
                                 onNavigate('/map');
                             }}
                         >
@@ -62,9 +61,10 @@ export const DashboardRoute = ({
 
                 <HomeNearby
                     discoveryState={discoveryState}
+                    onPatchDiscovery={onPatchDiscovery}
                     onOpenMap={(event) => {
                         event.preventDefault();
-                        onPatchDiscovery(buildNearbyPatch());
+                        onPatchDiscovery({ feedTab: 'nearby' });
                         onNavigate('/map');
                     }}
                 />
@@ -94,7 +94,7 @@ export const DashboardRoute = ({
                         type='button'
                         className='mh-path-card mh-path-card--needs'
                         onClick={() => {
-                            onPatchDiscovery(buildNearbyPatch());
+                            onPatchDiscovery({ feedTab: 'nearby' });
                             onNavigate('/feed');
                         }}
                     >
@@ -154,7 +154,11 @@ export const DashboardRoute = ({
                         {t('dashboard.nearbyDescription')}
                     </p>
                 </div>
-                <div className='mh-nearby-band__search'>
+                <form className='mh-nearby-band__search' onSubmit={event => {
+                    event.preventDefault();
+                    onPatchDiscovery({ feedTab: 'nearby' });
+                    onNavigate('/map');
+                }}>
                     <label htmlFor='search-requests' className='sr-only'>
                         {t('dashboard.searchRequests')}
                     </label>
@@ -163,8 +167,9 @@ export const DashboardRoute = ({
                         name='searchRequests'
                         autoComplete='off'
                         placeholder={String(t('discovery.searchPlaceholder'))}
-                        value={discoveryState.text ?? ''}
+                        value={search}
                         onChange={(event) => {
+                            setSearch(event.target.value);
                             const nextValue = event.target.value.trim();
                             onPatchDiscovery({
                                 text:
@@ -174,15 +179,10 @@ export const DashboardRoute = ({
                             });
                         }}
                     />
-                    <Button
-                        onClick={() => {
-                            onPatchDiscovery(buildNearbyPatch());
-                            onNavigate('/map');
-                        }}
-                    >
+                    <Button type='submit'>
                         {t('dashboard.exploreMap')}
                     </Button>
-                </div>
+                </form>
             </section>
 
             <section

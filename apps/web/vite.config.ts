@@ -3,9 +3,12 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
 import { resolveWebDataMode } from './src/features/data-mode';
+import { resolveMapTileUrl } from './src/config';
 
 export default defineConfig(({ command, mode }) => {
-    resolveWebDataMode(loadEnv(mode, process.cwd(), ''), { command, mode });
+    const env = loadEnv(mode, process.cwd(), '');
+    resolveWebDataMode(env, { command, mode });
+    if (command === 'build') resolveMapTileUrl(env, mode !== 'development');
     const apiProxy = {
         ...(process.env.PATCHWORK_DEV_TILE_TARGET ? { '/tiles': { target: process.env.PATCHWORK_DEV_TILE_TARGET, changeOrigin: true } } : {}),
         '/api': {

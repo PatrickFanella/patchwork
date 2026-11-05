@@ -1,3 +1,4 @@
+import { MapErrorBoundary } from '../components/map/MapErrorBoundary';
 import {lookupCountyArea} from '@patchwork/at-lexicons';
 import { SaveSearchButton } from './saved-discovery';
 import { haversineDistanceMeters } from '../geo-utils';
@@ -421,7 +422,7 @@ export const MapRoute = ({
                     </div>
                 ) : null}
                 {
-                    <Suspense
+                    <MapErrorBoundary onShowList={() => setMobileView('list')}><Suspense
                         fallback={<div className='mh-skeleton h-96 w-full' />}
                     >
                         <LazyPostalMap
@@ -456,7 +457,7 @@ export const MapRoute = ({
                             onSelectResource={setSelectedResourceUri}
                             onTilesFailed={setTileError}
                         />
-                    </Suspense>
+                    </Suspense></MapErrorBoundary>
                 }
             </section>
 

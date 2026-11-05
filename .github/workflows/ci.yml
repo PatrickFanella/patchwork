@@ -13,6 +13,8 @@ jobs:
     quality-gates:
         runs-on: ubuntu-latest
         timeout-minutes: 25
+        env:
+            VITE_MAP_TILE_URL: ${{ vars.STAGING_VITE_MAP_TILE_URL }}
 
         steps:
             - name: Checkout
@@ -144,6 +146,7 @@ jobs:
                     -t patchwork-api:ci .
                   echo "api-id=$(cat "$RUNNER_TEMP/patchwork-api-image-id")" >> "$GITHUB_OUTPUT"
                   docker build --target web-runtime \
+                    --build-arg VITE_MAP_TILE_URL="$VITE_MAP_TILE_URL" \
                     --iidfile "$RUNNER_TEMP/patchwork-web-image-id" \
                     --build-arg GIT_SHA=${{ steps.image-tag.outputs.sha }} \
                     --build-arg GIT_BRANCH=${{ github.ref_name }} \

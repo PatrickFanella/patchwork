@@ -792,6 +792,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
         }
         if (requiresAuthentication && !auth.session) {
             const gateKey = gateCopyKeys[currentRoute];
+            const resourceName = currentRoute === '/posting'
+                ? new URLSearchParams(window.location.search).get('resourceName')
+                : null;
             return (
                 <>
                     <PageHeader
@@ -806,7 +809,7 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                         title={t('runtime.signInRequired')}
                         actions={
                             <ButtonLink
-                                href={`/login?returnTo=${encodeURIComponent(currentRoute)}`}
+                                href={`/login?returnTo=${encodeURIComponent(`${currentRoute}${window.location.search}`)}`}
                             >
                                 {t('runtime.signInContinue')}
                             </ButtonLink>
@@ -817,6 +820,9 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                                 ? t(`runtime.gate.${gateKey}.help`)
                                 : t('runtime.signInHelp')}
                         </p>
+                        {resourceName && (
+                            <p className='mt-2'>{t('posting.resourceContext', { name: resourceName })}</p>
+                        )}
                     </EmptyState>
                 </>
             );
@@ -1020,7 +1026,6 @@ export const FrontendShell = ({ appTitle }: FrontendShellProps) => {
                     <ResourceRoute
                         discoveryState={discoveryState}
                         onPatchDiscovery={patchDiscoveryState}
-                        onNavigate={navigate}
                         isLoading={isDirectoryLoading}
                         errorMessage={directoryErrorMessage}
                         dataOrigin={directoryDataOrigin}
