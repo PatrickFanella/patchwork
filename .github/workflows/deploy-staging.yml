@@ -196,11 +196,14 @@ jobs:
                     --build-arg VITE_MAP_TILE_URL="$STAGING_VITE_MAP_TILE_URL" \
                     -t "$image" .
             - name: Scan before publication
-              uses: aquasecurity/trivy-action@v0.36.0
-              with:
-                  image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ env.SOURCE_SHA }}
-                  severity: HIGH,CRITICAL
-                  exit-code: '1'
+              run: |
+                  set -euo pipefail
+                  image="${REGISTRY}/${{ matrix.image }}:${SOURCE_SHA}"
+                  docker run --rm \
+                    --volume /var/run/docker.sock:/var/run/docker.sock \
+                    aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e \
+                    image --image-src docker --scanners vuln,secret \
+                    --severity HIGH,CRITICAL --exit-code 1 --format table "$image"
             - name: Generate SBOM and provenance predicates
               run: |
                   set -euo pipefail
