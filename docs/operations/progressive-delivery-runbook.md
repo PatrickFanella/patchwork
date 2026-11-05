@@ -27,9 +27,11 @@ it must not be represented as the current Gitea deployment evidence. See
    digests, signed with the scoped Cosign key, accompanied by SPDX SBOM and
    Gitea source provenance attestations, and
    recorded in `artifact-digests.json`.
-5. The manually dispatched Gitea workflow rechecks the full current `main` SHA
-   and its successful CI run. A separate reviewer must accept promotion;
-   Gitea does not enforce GitHub environment approvals.
+5. The CI dispatcher starts the protected Gitea workflow after both main push
+   gates pass. The dispatcher and deployment workflow each recheck the full
+   current `main` SHA and its successful CI run. Manual dispatch remains a
+   retry option. Automatic staging delivery does not replace independent
+   review or authorize a public-service launch.
 6. The host pulls those exact digests, applies all migration jobs, and starts
    services with `--no-build`.
 7. Deep readiness and revision checks establish deployment success. A failed

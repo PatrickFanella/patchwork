@@ -9,8 +9,11 @@ do not commit resolved Compose output or an environment file.
 `.github/workflows/deploy-staging.yml` targets
 `git.subcult.tv/subculture-collective/patchwork`. Gitea loads the existing
 `.github/workflows` directory; do not introduce a second workflow directory
-that shadows CI. Dispatch it from `main`, supplying the full current main SHA
-as `source_sha`. The workflow requires the dispatch revision to match that SHA
+that shadows CI. After both push CI gates pass, `CI / deploy-staging` uses the
+job token with `actions: write` to dispatch the current main SHA as `source_sha`.
+The dispatcher rechecks main and both successful push statuses before its
+request. Manual dispatch from `main` remains available for retries.
+The workflow requires the dispatch revision to match that SHA
 and checks the latest `CI / quality-gates (push)` and
 `CI / e2e-production (push)` statuses from the same Gitea run. It checks main
 again before deployment; if main advances while images build, dispatch the new
@@ -86,7 +89,7 @@ records signing evidence, including image identity and the public key. This
 pipeline does not introduce a private transparency log.
 
 Gitea ignores GitHub's `environment: staging` gate. This workflow therefore uses
-repository-scoped values and a manual dispatch restricted to this Gitea
+repository-scoped values and a dispatch restricted to this Gitea
 repository's `main` revision. That is **not** a protected-environment approval
 mechanism: repository writers and runner administrators are trusted with these
 credentials. Restrict write/dispatch access and protect main before configuring

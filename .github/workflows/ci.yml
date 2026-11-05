@@ -323,3 +323,21 @@ jobs:
                     "${PATCHWORK_CI_CLAMAV_CONTAINER:-patchwork-ci-clamav-${GITHUB_RUN_ID}-${GITHUB_JOB}}" \
                     "${PATCHWORK_CI_POSTGRES_CONTAINER:-patchwork-ci-postgres-${GITHUB_RUN_ID}-${GITHUB_JOB}}" \
                     >/dev/null 2>&1 || true
+
+    deploy-staging:
+        needs: [quality-gates, e2e-production]
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.server_url == 'https://git.subcult.tv'
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        permissions:
+            contents: read
+            actions: write
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+            - name: Dispatch protected deployment of the accepted main commit
+              env:
+                  GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+                  SOURCE_SHA: ${{ github.sha }}
+              run: bash scripts/dispatch-staging.sh
