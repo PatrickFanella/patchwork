@@ -326,7 +326,8 @@ jobs:
 
     deploy-staging:
         needs: [quality-gates, e2e-production]
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.server_url == 'https://git.subcult.tv'
+        # The workflow only accepts main pushes; the script rechecks canonical source and CI.
+        if: github.event_name == 'push'
         runs-on: ubuntu-latest
         timeout-minutes: 5
         permissions:
