@@ -41,6 +41,14 @@ if [[ "$1" == verify-attestation && "$*" == *'--type slsaprovenance'* ]]; then
         elif $mode == "wrong-type" then .predicateType = "https://example.org/not-provenance"
         elif $mode == "wrong-builder" then .predicate.builder.id = "https://other.test/actions/runs/42"
         elif $mode == "wrong-invocation" then .predicate.metadata.buildInvocationId = "another-run"
+        elif $mode == "cosign-v2" then .predicate.metadata |= {buildInvocationID:.buildInvocationId}
+        elif $mode == "matching-invocations" then .predicate.metadata.buildInvocationID = .predicate.metadata.buildInvocationId
+        elif $mode == "missing-invocation" then .predicate.metadata = {}
+        elif $mode == "wrong-cosign-invocation" then .predicate.metadata = {buildInvocationID:"another-run"}
+        elif $mode == "conflicting-invocations" then .predicate.metadata.buildInvocationID = "another-run"
+        elif $mode == "conflicting-standard-invocation" then
+            .predicate.metadata.buildInvocationID = .predicate.metadata.buildInvocationId |
+            .predicate.metadata.buildInvocationId = "another-run"
         elif $mode == "split-run" and .predicate.invocation.parameters.service == "web" then
             .predicate.builder.id |= sub("42$"; "43") |
             .predicate.metadata.buildInvocationId = .predicate.builder.id
@@ -90,7 +98,7 @@ grep -q -- '--key .*public.pem' "$tmpdir/calls"
 grep -q -- '--allow-insecure-registry' "$tmpdir/calls"
 grep -q -- '--insecure-ignore-tlog' "$tmpdir/calls"
 
-for format in array ndjson; do
+for format in array ndjson cosign-v2 matching-invocations; do
     FAKE_PROVENANCE_CASE="$format" PATCHWORK_RELEASE_VERIFY_MODE=key \
         PATCHWORK_COSIGN_PUBLIC_KEY="$tmpdir/public.pem" \
         bash "$repo_root/scripts/verify-release-trust.sh" "$tmpdir/manifest.json" >/dev/null
@@ -102,7 +110,7 @@ if FAKE_COSIGN_REJECT=true PATCHWORK_RELEASE_VERIFY_MODE=key \
     exit 1
 fi
 
-for invalid in empty malformed wrong-source wrong-material wrong-service wrong-digest wrong-image wrong-repo wrong-type wrong-builder wrong-invocation split-run; do
+for invalid in empty malformed wrong-source wrong-material wrong-service wrong-digest wrong-image wrong-repo wrong-type wrong-builder wrong-invocation missing-invocation wrong-cosign-invocation conflicting-invocations conflicting-standard-invocation split-run; do
     if FAKE_PROVENANCE_CASE="$invalid" PATCHWORK_RELEASE_VERIFY_MODE=key \
         PATCHWORK_COSIGN_PUBLIC_KEY="$tmpdir/public.pem" \
         bash "$repo_root/scripts/verify-release-trust.sh" "$tmpdir/manifest.json" >/dev/null 2>&1; then

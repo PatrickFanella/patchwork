@@ -63,6 +63,12 @@ The supported Gitea workflow emits SLSA v0.2 provenance. Admission requires:
 - The build type names the repository's staging workflow. Builder identity and
   invocation identity agree on one Gitea Actions run, shared by all four images.
 
+Cosign 2.5.2 serializes the invocation metadata as `buildInvocationID` rather
+than the [SLSA v0.2 field](https://slsa.dev/spec/v0.2/provenance#metadata)
+`buildInvocationId`. Admission accepts either spelling in the verified payload,
+requires at least one, and requires every present value to equal the builder
+identity. Conflicting values are rejected.
+
 Empty, malformed or mismatched verified provenance is rejected before image
 pulls, migration, release-state retention or rollback. Gitea key-based admission
 cannot disable the required attestations through
