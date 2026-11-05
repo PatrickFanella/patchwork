@@ -13,15 +13,23 @@ flock -n 9 || { echo 'Another staging deployment holds the host lock.' >&2; exit
 ./verify-release-trust.sh artifact-digests.json
 current="$state_dir/current-artifact-digests.json"
 previous="$state_dir/previous-artifact-digests.json"
-baseline=$(mktemp)
-trap 'rm -f "$baseline"' EXIT
+scratch=$(mktemp -d)
+baseline="$scratch/baseline.json"
+runtime_change="$scratch/runtime-changes-started"
+trap 'rm -rf -- "$scratch"' EXIT
 if [[ -f "$current" ]]; then
     (cd "$state_dir" && sha256sum -c current-artifact-digests.json.sha256)
     cp "$current" "$baseline"
 fi
 
-if ./deploy-staging-digests.sh artifact-digests.json "$env_file" docker-compose.staging.yml; then
+if PATCHWORK_DEPLOY_RUNTIME_CHANGE_MARKER="$runtime_change" \
+    ./deploy-staging-digests.sh artifact-digests.json "$env_file" docker-compose.staging.yml; then
     exit 0
+fi
+
+if [[ ! -e "$runtime_change" ]]; then
+    echo 'Deployment stopped before application-runtime changes; leaving application runtimes in place. Review migration output.' >&2
+    exit 1
 fi
 
 # The deploy script retains current as previous before its first Compose change.

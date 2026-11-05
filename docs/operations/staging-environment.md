@@ -69,9 +69,12 @@ The deployment workflow runs:
    browser suites.
 
 A host lock serializes deployment and immediate rollback. The wrapper verifies
-release trust before invoking the deploy script. A failed deployment rolls back
-only when the retained previous manifest matches the current release captured
-at entry. A trust rejection does not roll a healthy service back. A first
+release trust before invoking the deploy script. Digest pulls run serially and
+retry up to three times, with five seconds between attempts. A pull failure
+leaves application runtimes in place. Rollback is attempted only after runtime
+changes start and when the retained previous manifest matches the current
+release captured at entry. A trust rejection does not roll a healthy service
+back. A first
 deployment without a retained baseline requires operator recovery on failure.
 Browser-suite failures fail the workflow and require investigation; they do not
 automatically roll back database migrations or their disposable test records.
