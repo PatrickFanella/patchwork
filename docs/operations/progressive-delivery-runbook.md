@@ -35,7 +35,7 @@ it must not be represented as the current Gitea deployment evidence. See
 6. The host pulls those exact digests, applies all migration jobs, and starts
    services with `--no-build`.
 7. Deep readiness and revision checks establish deployment success. A failed
-   deployment invokes rollback only when the retained previous manifest matches
+   runtime replacement invokes rollback only when the retained previous manifest matches
    the release captured at entry. Both credentialed browser suites then qualify
    the deployed application; a browser failure fails the workflow and requires
    investigation rather than automatic migration or test-data rollback.
@@ -45,6 +45,13 @@ Before any pull or release-state change, the host runs
 verifies the signature plus both attestations using the scoped staging public
 key. The verifier also retains a GitHub OIDC mode for that separate path;
 its existence does not qualify Gitea promotion.
+
+Digest pulls run serially with at most three attempts and five-second pauses.
+If download or migration preparation fails before application-runtime changes,
+the wrapper leaves those runtimes in place rather than restarting an older
+release. A private per-run marker enables the existing matching-baseline rollback
+only once runtime changes start. Migrations may already have committed at that
+point; application rollback does not downgrade the database schema.
 
 ### Source-bound Gitea admission
 

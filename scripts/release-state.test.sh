@@ -15,6 +15,16 @@ if [[ "$1" == inspect ]]; then
 fi
 if [[ "$1" == compose ]]; then
     printf '%s\n' "$*" >> "$DOCKER_CALLS"
+    if [[ " $* " == *' pull '* && -n "${FAKE_PULL_COUNTER:-}" ]]; then
+        count=0
+        [[ ! -r "$FAKE_PULL_COUNTER" ]] || read -r count < "$FAKE_PULL_COUNTER"
+        count=$((count + 1))
+        printf '%s\n' "$count" > "$FAKE_PULL_COUNTER"
+        if [[ "$count" -le "${FAKE_PULL_FAILURES:-0}" ]]; then
+            echo 'Registry connection reset by peer.' >&2
+            exit 1
+        fi
+    fi
     if [[ "${FAKE_INFRASTRUCTURE_PULL_UNAVAILABLE:-false}" == true && "${!#}" == pull ]]; then
         echo 'Object-store image is unavailable; application images remain pullable.' >&2
         exit 1
@@ -34,6 +44,8 @@ fi
 exit 2
 EOF
 chmod +x "$tmpdir/bin/docker"
+printf '#!/bin/sh\nexit 0\n' > "$tmpdir/bin/sleep"
+chmod +x "$tmpdir/bin/sleep"
 
 cat > "$tmpdir/verify" <<'EOF'
 #!/usr/bin/env bash
@@ -106,3 +118,29 @@ if FAKE_REVISION="$new_sha" bash "$repo_root/scripts/deploy-staging-digests.sh" 
     "$tmpdir/new.json" "$tmpdir/env" "$tmpdir/compose.yml" >/dev/null 2>&1; then
     exit 1
 fi
+
+# A transient registry reset can recover without starting application services early.
+manifest "$old_sha" "$tmpdir/state/current-artifact-digests.json"
+sha256sum "$tmpdir/state/current-artifact-digests.json" \
+    > "$tmpdir/state/current-artifact-digests.json.sha256"
+export FAKE_REVISION="$new_sha"
+export FAKE_PULL_COUNTER="$tmpdir/pull-count"
+export PATCHWORK_DEPLOY_RUNTIME_CHANGE_MARKER="$tmpdir/runtime-started"
+: > "$DOCKER_CALLS"
+FAKE_PULL_FAILURES=2 bash "$repo_root/scripts/deploy-staging-digests.sh" \
+    "$tmpdir/new.json" "$tmpdir/env" "$tmpdir/compose.yml" >/dev/null
+[[ $(cat "$FAKE_PULL_COUNTER") -eq 3 && -e "$PATCHWORK_DEPLOY_RUNTIME_CHANGE_MARKER" ]]
+grep -q -- '--parallel 1 pull' "$DOCKER_CALLS"
+cmp -s "$tmpdir/new.json" "$tmpdir/state/current-artifact-digests.json"
+
+# Exhaustion fails after three attempts, before migrations or runtime changes.
+rm "$FAKE_PULL_COUNTER" "$PATCHWORK_DEPLOY_RUNTIME_CHANGE_MARKER"
+: > "$DOCKER_CALLS"
+cp "$tmpdir/state/current-artifact-digests.json" "$tmpdir/before.json"
+if FAKE_PULL_FAILURES=99 bash "$repo_root/scripts/deploy-staging-digests.sh" \
+    "$tmpdir/new.json" "$tmpdir/env" "$tmpdir/compose.yml" >/dev/null 2>&1; then
+    exit 1
+fi
+[[ $(cat "$FAKE_PULL_COUNTER") -eq 3 && ! -e "$PATCHWORK_DEPLOY_RUNTIME_CHANGE_MARKER" ]]
+if grep -Eq ' (up|run|stop) ' "$DOCKER_CALLS"; then exit 1; fi
+cmp -s "$tmpdir/before.json" "$tmpdir/state/current-artifact-digests.json"

@@ -238,6 +238,9 @@ echo deploy >> calls
 if [[ ${RETAIN:-true} == true ]]; then
     cp "$PATCHWORK_RELEASE_STATE_DIR/current-artifact-digests.json" "$PATCHWORK_RELEASE_STATE_DIR/previous-artifact-digests.json"
 fi
+if [[ ${RUNTIME_CHANGE:-true} == true && -n ${PATCHWORK_DEPLOY_RUNTIME_CHANGE_MARKER:-} ]]; then
+    touch "$PATCHWORK_DEPLOY_RUNTIME_CHANGE_MARKER"
+fi
 exit ${DEPLOY_EXIT:-0}
 """)
         self.executable(self.root / "rollback-staging-digests.sh", "#!/bin/bash\necho rollback >> calls\n")
@@ -262,6 +265,15 @@ exit ${DEPLOY_EXIT:-0}
         result = self.run_script("run-staging-release.sh", "runtime.env", "deploy.lock")
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / "calls").exists())
+
+    def test_pre_runtime_failure_does_not_rollback_matching_baseline(self):
+        state = self.release_setup()
+        before = (state / "current-artifact-digests.json").read_bytes()
+        self.env.update(DEPLOY_EXIT="1", RUNTIME_CHANGE="false")
+        result = self.run_script("run-staging-release.sh", "runtime.env", "deploy.lock")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.root / "calls").read_text(), "deploy\n")
+        self.assertEqual((state / "current-artifact-digests.json").read_bytes(), before)
 
     def test_verified_but_wrong_source_provenance_leaves_release_state_unchanged(self):
         state = self.release_setup()

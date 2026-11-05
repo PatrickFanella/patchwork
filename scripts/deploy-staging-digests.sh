@@ -70,11 +70,20 @@ if [[ -n "${PATCHWORK_COMPOSE_OVERRIDE_FILE:-}" ]]; then
     [[ -r "$PATCHWORK_COMPOSE_OVERRIDE_FILE" ]]
     compose+=(-f "$PATCHWORK_COMPOSE_OVERRIDE_FILE")
 fi
-"${compose[@]}" pull \
-    patchwork-api patchwork-api-migrations \
-    patchwork-spool patchwork-v2-backfill patchwork-v2-shadow patchwork-indexer-migrations \
-    patchwork-thimble patchwork-moderation-migrations \
-    patchwork-web
+for attempt in 1 2 3; do
+    if "${compose[@]}" --parallel 1 pull \
+        patchwork-api patchwork-api-migrations \
+        patchwork-spool patchwork-v2-backfill patchwork-v2-shadow patchwork-indexer-migrations \
+        patchwork-thimble patchwork-moderation-migrations \
+        patchwork-web; then
+        break
+    fi
+    if [[ "$attempt" -eq 3 ]]; then
+        echo 'Image pulls failed after three attempts; application runtimes were not changed.' >&2
+        exit 1
+    fi
+    sleep 5
+done
 if [[ "${PATCHWORK_DEPLOY_EXTERNAL_POSTGRES:-false}" != 'true' ]]; then
     "${compose[@]}" up -d --wait postgres
 fi
@@ -95,7 +104,11 @@ if [[ "$projection_mode" == 'v2-shadow' ]]; then
     runtime_services+=(patchwork-v2-shadow)
     revision_services+=(patchwork-v2-shadow)
     health_probes+=('patchwork-v2-shadow:4101')
-else
+fi
+if [[ -n "${PATCHWORK_DEPLOY_RUNTIME_CHANGE_MARKER:-}" ]]; then
+    : > "$PATCHWORK_DEPLOY_RUNTIME_CHANGE_MARKER"
+fi
+if [[ "$projection_mode" != 'v2-shadow' ]]; then
     "${compose[@]}" stop patchwork-v2-shadow >/dev/null 2>&1 || true
 fi
 "${compose[@]}" up -d --no-build --wait "${runtime_services[@]}"
