@@ -61,7 +61,7 @@ remote SSH command.
 ### Host prerequisites and signing
 
 Provision the staging account and runtime configuration before dispatch. The
-account needs Docker access, Docker Compose v2, Bash, `jq`, `flock`, `sha256sum`,
+account needs Docker access, Docker Compose v2, Bash, Python 3, `jq`, `flock`, `sha256sum`,
 and Cosign compatible with the workflow's pinned v2.5.2. It must be able to read
 the runtime environment and public key and write the deployment directory and
 `/var/lib/patchwork/releases`. With `STAGING_SSH_USE_SUDO=true`, those reads and
@@ -137,6 +137,10 @@ Never commit a Playwright storage-state file.
 | `STAGING_ARTIFACT_REDACTION_TERMS` | Secret | Terms the browser-artifact scrubber must reject |
 | `STAGING_E2E_EXERCISE_MAINTENANCE` | Protected variable, default `false` | Enables the declare/resume transition only during an announced isolated drill |
 
+Keep the disposable coordinates within 100 km of the lifecycle suite's New
+York feed origin (40.7128, -74.006), consistent with its default request ZIP
+`10001`. The suite rejects an out-of-area point before publishing a record.
+
 `scripts/bootstrap-staging-sessions.sh` reads the existing root-owned
 `/etc/patchwork/e2e-accounts/accounts.json` over the deployment SSH identity,
 using its configured noninteractive sudo when required. The file must be mode
@@ -159,9 +163,27 @@ refreshes them again immediately before the browser suites. Static session
 secrets are no longer consumed because application sessions expire after
 twelve hours. TLS validation remains enabled throughout.
 
-The lifecycle suite creates a group, invitation, group-room conversation, one
-message, and a declined offer under the disposable accounts. It redacts the
-message and closes the group in `finally`; the retained audit trail is expected
+The AT-record browser suite resets its disposable helper/requester block before
+and after the test. `scripts/reset-staging-test-blocks.sh` uses the deployment
+SSH identity to run the Python helper on NUC. The helper requires the root-owned
+account store, current fixture approvals, and the expected staging database
+container. It marks only that pair's known test block deleted and retains its
+previous row under `/var/lib/patchwork/releases/e2e-block-cleanup/` in a
+root-owned, mode-0700 directory. The recovery record is written before the
+change; block rows remain in the database. This keeps repeated discovery and
+coordination checks independent of the preceding block assertion.
+
+The artifact checker combines the required configured redaction terms with
+active fixture coordinates, the private marker, and cookie values from the
+three protected storage-state files. A match blocks publication without
+printing the matched value. Missing configured terms or unreadable protected
+state also block the artifact check.
+
+The lifecycle suite creates a disposable volunteer profile, group, invitation,
+group-room conversation, one message, and a declined offer under the dedicated
+accounts. It waits for the active volunteer profile's projection before offering
+help. It deletes that profile, redacts the message, and closes the group in
+`finally`; the retained audit trail is expected
 durable test evidence. It does not submit verification evidence, make a real
 verification decision, send email, or register browser push: those require
 separately authorized provider and reviewer exercises. The maintenance

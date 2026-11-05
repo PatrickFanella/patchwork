@@ -137,13 +137,11 @@ describe('lifecycle HTTP boundary with PostgreSQL', () => {
         await pool.end();
     });
 
-    it('persists an authenticated transition across HTTP server restart', async () => {
+    it('persists a browser-shaped authenticated transition across HTTP server restart', async () => {
         const request = {
             commandId: 'http-transition-1',
             postUri: 'at://did:plc:alice/app.patchwork.aid.post/http-1',
             targetStatus: 'resolved',
-            actorDid: 'did:plc:mallory',
-            actorRole: 'admin',
             now: '2026-07-10T23:30:00.000Z',
         };
         const first = await startServer(pool);

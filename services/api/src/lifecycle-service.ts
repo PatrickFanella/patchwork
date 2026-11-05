@@ -151,6 +151,12 @@ const transitionInputSchema = z.object({
 
 type TransitionInput = z.infer<typeof transitionInputSchema>;
 
+const authenticatedLifecycleRole = (auth: AuthorizationContext): LifecycleRole =>
+    auth.role === 'volunteer' ? 'volunteer'
+    : auth.role === 'moderator' ? 'moderator'
+    : auth.role === 'admin' || auth.role === 'super_admin' ? 'admin'
+    : 'requester';
+
 const assignmentInputSchema = z.object({
     commandId: z.string().min(1).max(200).optional(),
     postUri: z
@@ -242,7 +248,10 @@ export class LifecycleService {
         let input: TransitionInput;
 
         try {
-            input = transitionInputSchema.parse(body);
+            const command = authCtx && typeof body === 'object' && body !== null && !Array.isArray(body)
+                ? { ...body, actorDid: authCtx.actorDid, actorRole: authenticatedLifecycleRole(authCtx) }
+                : body;
+            input = transitionInputSchema.parse(command);
         } catch (error) {
             if (error instanceof ZodError) {
                 return {
@@ -1444,11 +1453,7 @@ export class LifecycleService {
             };
         }
 
-        const actorRole: LifecycleRole =
-            authCtx.role === 'volunteer' ? 'volunteer'
-            : authCtx.role === 'moderator' ? 'moderator'
-            : authCtx.role === 'admin' || authCtx.role === 'super_admin' ? 'admin'
-            : 'requester';
+        const actorRole = authenticatedLifecycleRole(authCtx);
         const now = input.now ?? new Date().toISOString();
         let workflow = await repository.get(input.postUri);
         if (!workflow) {

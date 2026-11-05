@@ -118,7 +118,7 @@ jobs:
                   # shellcheck disable=SC2087
                   ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "$remote" \
                     "$remote_shell" <<REMOTE
-                  for command in docker jq cosign flock sha256sum; do command -v "\$command" >/dev/null; done
+                  for command in docker jq cosign flock sha256sum python3; do command -v "\$command" >/dev/null; done
                   docker compose version >/dev/null
                   docker info >/dev/null
                   test -r '$STAGING_ENV_FILE'
@@ -353,6 +353,8 @@ jobs:
               run: |
                   set -euo pipefail
                   umask 077
+                  bash scripts/reset-staging-test-blocks.sh
+                  trap 'bash scripts/reset-staging-test-blocks.sh' EXIT
                   printf '%s' "$STAGING_E2E_REQUESTER_STATE_B64" | base64 -d > requester-state.json
                   printf '%s' "$STAGING_E2E_HELPER_STATE_B64" | base64 -d > helper-state.json
                   export PATCHWORK_E2E_REQUESTER_STATE="$PWD/requester-state.json"

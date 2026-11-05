@@ -91,6 +91,8 @@ test.describe('staging release lifecycle (non-mocked)', () => {
         const marker = `staging-${Date.now().toString(36)}`;
         let requestUri: string | undefined;
         let requestCid: string | undefined;
+        let volunteerUri: string | undefined;
+        let volunteerCid: string | undefined;
         let groupId: string | undefined;
         let maintenanceEnabled = false;
 
@@ -101,6 +103,43 @@ test.describe('staging release lifecycle (non-mocked)', () => {
                 expect(session.status).toBe(200);
                 expect(object(session.body)).toHaveProperty('session');
             }
+
+            const volunteerName = `Disposable release helper ${marker}`;
+            const volunteer = await request(helperPage, '/at/volunteer-profile', {
+                method: 'POST',
+                body: {
+                    profile: {
+                        displayName: volunteerName,
+                        bio: 'Automated release fixture; removed after verification.',
+                        capabilities: ['food-delivery'],
+                        availability: 'within-24h',
+                        contactPreference: 'chat-only',
+                        languages: ['en'],
+                    },
+                    privateProfile: {
+                        contactEmail: null,
+                        contactPhone: null,
+                        availabilityWindows: [],
+                        matchingPreferences: {
+                            preferredCategories: ['food'],
+                            preferredUrgencies: ['medium'],
+                            maxDistanceKm: 20,
+                            acceptsLateNight: false,
+                        },
+                    },
+                },
+            });
+            expect(volunteer.status).toBe(201);
+            volunteerUri = id(volunteer.body, 'uri');
+            volunteerCid = id(volunteer.body, 'cid');
+            await expect.poll(async () => {
+                const result = await request(helperPage,
+                    `/query/volunteers?searchText=${encodeURIComponent(volunteerName)}&page=1&pageSize=100`);
+                const results = object(result.body)['results'];
+                return result.status === 200 && Array.isArray(results) && results.some(item =>
+                    object(item)['uri'] === volunteerUri,
+                );
+            }, { timeout: 60_000, intervals: [2_000, 5_000, 10_000] }).toBe(true);
 
             const createdRequest = await request(requesterPage, '/at/aid-posts', {
                 method: 'POST',
@@ -170,7 +209,7 @@ test.describe('staging release lifecycle (non-mocked)', () => {
                 body: { groupId, inviteeDid: id(object((await request(helperPage, '/auth/session')).body)['session'], 'did'), role: 'member' },
             });
             expect(invitation.status).toBe(201);
-            const invitationToken = id(invitation.body, 'token');
+            const invitationToken = id(object(invitation.body)['invitation'], 'token');
             const accepted = await request(helperPage, '/groups/invitation-responses', {
                 method: 'POST', body: { token: invitationToken, action: 'accept' },
             });
@@ -244,6 +283,17 @@ test.describe('staging release lifecycle (non-mocked)', () => {
                     const deleted = await request(requesterPage, '/at/aid-posts', {
                         method: 'DELETE',
                         body: { uri: requestUri, expectedCid: requestCid },
+                    });
+                    expect(deleted.status).toBe(204);
+                } catch (error) {
+                    cleanupError ??= error;
+                }
+            }
+            if (volunteerUri && volunteerCid) {
+                try {
+                    const deleted = await request(helperPage, '/at/volunteer-profile', {
+                        method: 'DELETE',
+                        body: { uri: volunteerUri, expectedCid: volunteerCid },
                     });
                     expect(deleted.status).toBe(204);
                 } catch (error) {
