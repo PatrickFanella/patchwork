@@ -222,15 +222,18 @@ describe.each(['docker-compose.yml', 'docker-compose.staging.yml'])(
 it('builds runtime images on the AT dependency supported Node major', () => {
     const dockerfile = readFileSync(resolve(repositoryRoot, 'Dockerfile'), 'utf8');
     expect(dockerfile).toMatch(
-        /FROM node:22\.[0-9.]+-alpine@sha256:[0-9a-f]{64} AS deps/,
+        /FROM node:22\.[0-9.]+-alpine@sha256:[0-9a-f]{64} AS base/,
     );
     expect(dockerfile).not.toContain('FROM node:20');
 });
 
 it('removes development-only dependencies from Node runtime images', () => {
     const dockerfile = readFileSync(resolve(repositoryRoot, 'Dockerfile'), 'utf8');
-    expect(dockerfile).toContain('FROM source AS runtime-base');
+    expect(dockerfile).toContain('FROM source AS runtime-files');
     expect(dockerfile).toContain('npm prune --omit=dev');
+    expect(dockerfile).toContain('FROM base AS runtime-base');
+    expect(dockerfile).toContain('COPY --from=runtime-files /runtime-node-modules /app/node_modules');
+    expect(dockerfile).toContain('COPY --from=runtime-files /app /app');
     for (const target of [
         'api-runtime',
         'indexer-runtime',

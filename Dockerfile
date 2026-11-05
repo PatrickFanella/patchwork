@@ -7,7 +7,7 @@ ARG GIT_BRANCH=unknown
 ARG BUILD_VERSION=0.0.0
 ARG CI_RUN_ID=local
 
-FROM node:22.22.2-alpine@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f AS deps
+FROM node:22.22.2-alpine@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f AS base
 
 WORKDIR /app
 
@@ -63,6 +63,8 @@ RUN test -n "$ALPINE_SECURITY_REFRESH" \
     && rm -rf /tmp/tar /tmp/tar.tgz \
     && npm --version
 
+FROM base AS deps
+
 COPY package.json package-lock.json ./
 COPY vendor/decode-uri-component ./vendor/decode-uri-component
 COPY apps/mobile/package.json ./apps/mobile/package.json
@@ -81,9 +83,16 @@ FROM deps AS source
 WORKDIR /app
 COPY . .
 
-FROM source AS runtime-base
+FROM source AS runtime-files
 
-RUN npm prune --omit=dev --no-audit --no-fund
+RUN npm prune --omit=dev --no-audit --no-fund \
+    && mv node_modules /runtime-node-modules
+
+# Copy the pruned filesystem without inheriting dependency-install/cache layers.
+FROM base AS runtime-base
+
+COPY --from=runtime-files /runtime-node-modules /app/node_modules
+COPY --from=runtime-files /app /app
 
 FROM runtime-base AS api-runtime
 
