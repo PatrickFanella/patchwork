@@ -64,82 +64,138 @@ test.describe('real two-account AT record lifecycle', () => {
             });
         }
 
-        const postingArea = new URLSearchParams({
-            tab: 'nearby',
-            r: '20000',
-            lat: exactLatitude!,
-            lng: exactLongitude!,
-            area: 'Disposable staging area',
-        });
-        await requester.goto(`/posting?${postingArea.toString()}`);
-        await expect(requester.locator('.mh-auth-control').getByText(/^@/)).toBeVisible();
-        await requester.getByLabel('ZIP code where help is needed').fill(postalCode);
-        await requester
-            .getByLabel('What do you need?', { exact: true })
-            .fill(title);
-        await requester
-            .getByLabel('How can a neighbor help?', { exact: true })
-            .fill('Disposable integration record. No private handoff data.');
-        await expect(requester.getByLabel('Latitude')).toHaveCount(0);
-        await expect(requester.getByLabel('Longitude')).toHaveCount(0);
-        await expect(requester.getByLabel('Precision meters')).toHaveCount(0);
-        await requester.getByRole('button', { name: 'Publish request' }).click();
-        await expect(requester.getByText(/persisted via API\/DB/)).toBeVisible();
+        let createdPost: { uri: string; expectedCid: string } | undefined;
+        try {
+            const postingArea = new URLSearchParams({
+                tab: 'nearby',
+                r: '20000',
+                lat: exactLatitude!,
+                lng: exactLongitude!,
+                area: 'Disposable staging area',
+            });
+            await requester.goto(`/posting?${postingArea.toString()}`);
+            await expect(requester.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
+            await requester.getByLabel('ZIP code where help is needed').fill(postalCode);
+            await requester
+                .getByLabel('Title', { exact: true })
+                .fill(title);
+            await requester
+                .getByLabel('Description', { exact: true })
+                .fill('Disposable integration record. No private handoff data.');
+            await expect(requester.getByLabel('Latitude')).toHaveCount(0);
+            await expect(requester.getByLabel('Longitude')).toHaveCount(0);
+            await expect(requester.getByLabel('Precision meters')).toHaveCount(0);
+            const publication = requester.waitForResponse(response =>
+                response.request().method() === 'POST' &&
+                new URL(response.url()).pathname === '/api/at/aid-posts',
+            );
+            await requester.getByRole('button', { name: 'Publish request' }).click();
+            const published = await publication;
+            expect(published.status()).toBe(201);
+            const source = await published.json();
+            expect(typeof source.uri).toBe('string');
+            expect(typeof source.cid).toBe('string');
+            createdPost = { uri: source.uri, expectedCid: source.cid };
+            await expect(requester.getByText(/was saved, and a preview is in the Feed/)).toBeVisible();
 
-        await helper.goto(`/nearby?zip=${encodeURIComponent(postalCode)}`, { waitUntil: 'networkidle' });
-        await expect
-            .poll(async () => {
-                await helper.reload({ waitUntil: 'networkidle' });
-                return helper.getByText(title).count();
-            }, { timeout: 60_000, intervals: [2_000, 5_000, 10_000] })
-            .toBe(1);
-        await helper.getByRole('button', { name: new RegExp(`^Report ${title}, item \\d+ of \\d+$`) }).click();
-        await helper.getByLabel('Report reason').selectOption('other');
-        await helper.getByLabel('Private report details').fill(privateDetails);
-        await helper.getByRole('button', { name: 'Submit report' }).click();
-        await expect(helper.getByText('Report submitted.')).toBeVisible();
-        await helper
-            .getByRole('button', { name: new RegExp(`^Block author of ${title}, item \\d+ of \\d+$`) })
-            .click();
-        await helper.getByRole('button', { name: 'Confirm block author' }).click();
-        await expect(helper.getByText('Author blocked.')).toBeVisible();
+            await helper.goto(`/feed?tab=nearby&zip=${encodeURIComponent(postalCode)}`, { waitUntil: 'networkidle' });
+            await expect
+                .poll(async () => {
+                    await helper.reload({ waitUntil: 'networkidle' });
+                    return helper.getByText(title).count();
+                }, { timeout: 60_000, intervals: [2_000, 5_000, 10_000] })
+                .toBe(1);
+            await helper.getByRole('button', { name: new RegExp(`^Report ${title}, item \\d+ of \\d+$`) }).click();
+            await helper.getByLabel('Report reason').selectOption('other');
+            await helper.getByLabel('Private report details').fill(privateDetails);
+            await helper.getByRole('button', { name: 'Submit report' }).click();
+            await expect(helper.getByText('Report submitted.')).toBeVisible();
+            await helper
+                .getByRole('button', { name: new RegExp(`^Block author of ${title}, item \\d+ of \\d+$`) })
+                .click();
+            await helper.getByRole('button', { name: 'Confirm block author' }).click();
+            await expect(helper.getByText('Author blocked.')).toBeVisible();
 
-        await requester.goto(`/nearby?zip=${encodeURIComponent(postalCode)}`, { waitUntil: 'networkidle' });
-        await expect
-            .poll(async () => {
-                await requester.reload({ waitUntil: 'networkidle' });
-                return requester.getByText(title).count();
-            }, { timeout: 60_000, intervals: [2_000, 5_000, 10_000] })
-            .toBe(1);
-        await requester
-            .getByRole('button', { name: `Resolve request "${title}"` })
-            .click();
-        await expect(requester.getByText('Resolved').first()).toBeVisible();
-        await requester
-            .getByRole('button', { name: `Close ${title.toLowerCase()}` })
-            .click();
-        await expect(requester.getByText('Request closed.')).toBeVisible();
-        await requester
-            .getByRole('button', { name: `Delete ${title.toLowerCase()}` })
-            .click();
-        await requester
-            .getByRole('button', { name: 'Confirm delete request' })
-            .click();
-        await expect(requester.getByText(title)).toHaveCount(0);
+            await requester.goto(`/feed?tab=nearby&zip=${encodeURIComponent(postalCode)}`, { waitUntil: 'networkidle' });
+            await expect
+                .poll(async () => {
+                    await requester.reload({ waitUntil: 'networkidle' });
+                    return requester.getByText(title).count();
+                }, { timeout: 60_000, intervals: [2_000, 5_000, 10_000] })
+                .toBe(1);
+            const resolution = requester.waitForResponse(response =>
+                response.request().method() === 'POST' &&
+                new URL(response.url()).pathname === '/api/aid/post/transition',
+            );
+            const synchronization = requester.waitForResponse(response =>
+                response.request().method() === 'POST' &&
+                new URL(response.url()).pathname === '/api/at/aid-posts/status/reconcile',
+            ).catch(() => undefined);
+            await requester
+                .getByRole('button', { name: new RegExp(`^Resolve request "${title}", item \\d+ of \\d+$`) })
+                .click();
+            expect((await resolution).status()).toBe(200);
+            const synchronized = await synchronization;
+            expect(synchronized?.status()).toBe(200);
+            const synchronizedPost = await synchronized!.json();
+            expect(typeof synchronizedPost.cid).toBe('string');
+            createdPost.expectedCid = synchronizedPost.cid;
+            await expect(requester.getByText('Resolved').first()).toBeVisible();
+            const closure = requester.waitForResponse(response =>
+                response.request().method() === 'POST' &&
+                new URL(response.url()).pathname === '/api/at/aid-posts/close',
+            );
+            await requester
+                .getByRole('button', { name: new RegExp(`^Close ${title}, item \\d+ of \\d+$`) })
+                .click();
+            const closed = await (await closure).json();
+            expect(typeof closed.cid).toBe('string');
+            createdPost.expectedCid = closed.cid;
+            await expect(requester.getByText('Request closed.')).toBeVisible();
+            await requester
+                .getByRole('button', { name: new RegExp(`^Delete ${title}, item \\d+ of \\d+$`) })
+                .click();
+            const deletion = requester.waitForResponse(response =>
+                response.request().method() === 'DELETE' &&
+                new URL(response.url()).pathname === '/api/at/aid-posts',
+            );
+            await requester
+                .getByRole('button', { name: 'Confirm delete request' })
+                .click();
+            expect((await deletion).status()).toBe(204);
+            createdPost = undefined;
+            await expect(requester.getByText(title)).toHaveCount(0);
 
-        const observable = [
-            requester.url(),
-            helper.url(),
-            await requester.locator('body').innerText(),
-            await helper.locator('body').innerText(),
-            ...responseBodies,
-        ].join('\n');
-        expect(observable).not.toContain(exactLatitude!);
-        expect(observable).not.toContain(exactLongitude!);
-        expect(observable).not.toContain(privateDetails);
-        expect(observable).not.toMatch(/access_token|refresh_token|id_token/i);
-
-        await requesterContext.close();
-        await helperContext.close();
+            const observable = [
+                requester.url(),
+                helper.url(),
+                await requester.locator('body').innerText(),
+                await helper.locator('body').innerText(),
+                ...responseBodies,
+            ].join('\n');
+            expect(observable).not.toContain(exactLatitude!);
+            expect(observable).not.toContain(exactLongitude!);
+            expect(observable).not.toContain(privateDetails);
+            expect(observable).not.toMatch(/access_token|refresh_token|id_token/i);
+        } finally {
+            try {
+                if (createdPost) {
+                    const origin = new URL(process.env['PATCHWORK_E2E_BASE_URL']!).origin;
+                    const csrf = (await requesterContext.cookies(origin))
+                        .find(cookie => cookie.name === 'patchwork_csrf')?.value;
+                    const cleanup = await requesterContext.request.delete(`${origin}/api/at/aid-posts`, {
+                        headers: {
+                            Origin: origin,
+                            'x-csrf-token': decodeURIComponent(csrf ?? ''),
+                            'idempotency-key': crypto.randomUUID(),
+                        },
+                        data: createdPost,
+                    });
+                    expect(cleanup.status()).toBe(204);
+                }
+            } finally {
+                await Promise.all([requesterContext.close(), helperContext.close()]);
+            }
+        }
     });
 });
