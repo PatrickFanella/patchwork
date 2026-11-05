@@ -40,6 +40,9 @@ set -euo pipefail
 case "${!#}" in
   */branches/main) cat "$FIXTURES/branch.json" ;;
   */status?limit=100) cat "$FIXTURES/status.json" ;;
+  */actions/workflows/deploy-staging.yml/dispatches)
+    [[ ${DISPATCH_FAIL:-false} != true ]] || exit 22
+    printf '%s\\n' "$@" > "$FIXTURES/dispatch-args.txt" ;;
   *) exit 90 ;;
 esac
 """)
@@ -65,6 +68,52 @@ esac
 
     def test_same_run_success(self):
         self.source_result()
+
+    def dispatch_result(self):
+        (self.root / "status.json").write_text(json.dumps(self.status))
+        self.env.update(
+            GITEA_TOKEN="fixture-do-not-log", GITHUB_SHA=SHA,
+            GITHUB_REF="refs/heads/main", GITHUB_EVENT_NAME="push",
+        )
+        return self.run_script("dispatch-staging.sh")
+
+    def test_dispatch_accepted_push(self):
+        result = self.dispatch_result()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = (self.root / "dispatch-args.txt").read_text().splitlines()
+        self.assertEqual(args[args.index("--request") + 1], "POST")
+        self.assertEqual(json.loads(args[args.index("--data") + 1]), {
+            "ref": "main", "inputs": {"source_sha": SHA},
+        })
+        self.assertNotIn(self.env["GITEA_TOKEN"], result.stdout + result.stderr)
+
+    def test_dispatch_refuses_failed_ci(self):
+        self.status["statuses"][0]["status"] = "failure"
+        self.assertNotEqual(self.dispatch_result().returncode, 0)
+        self.assertFalse((self.root / "dispatch-args.txt").exists())
+
+    def test_dispatch_refuses_superseded_main(self):
+        (self.root / "branch.json").write_text(json.dumps({"commit": {"id": "b" * 40}}))
+        self.assertNotEqual(self.dispatch_result().returncode, 0)
+        self.assertFalse((self.root / "dispatch-args.txt").exists())
+
+    def test_dispatch_api_failure_is_not_success(self):
+        self.env["DISPATCH_FAIL"] = "true"
+        self.assertNotEqual(self.dispatch_result().returncode, 0)
+
+    def test_dispatch_refuses_other_events_refs_and_commits(self):
+        self.dispatch_result()
+        for key, value in [("GITHUB_EVENT_NAME", "pull_request"),
+                           ("GITHUB_REF", "refs/heads/feature"),
+                           ("GITHUB_SHA", "b" * 40)]:
+            with self.subTest(key=key):
+                previous = self.env[key]
+                self.env[key] = value
+                (self.root / "dispatch-args.txt").unlink(missing_ok=True)
+                result = self.run_script("dispatch-staging.sh")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((self.root / "dispatch-args.txt").exists())
+                self.env[key] = previous
 
     def test_non_success_gates(self):
         for state in ["pending", "failure", "error", "skipped", "cancelled"]:

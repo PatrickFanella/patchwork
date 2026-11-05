@@ -51,8 +51,11 @@ Parity is enforced programmatically by `checkStagingParity()` in
 
 ## Deployment workflow
 
-`.github/workflows/deploy-staging.yml` is manually dispatched on Gitea `main`
-with the full current main SHA. It runs:
+After both main push CI jobs pass, `CI / deploy-staging` dispatches
+`.github/workflows/deploy-staging.yml` with the full accepted main SHA.
+Pull requests and GitHub mirror runs cannot trigger deployment. A manual
+dispatch on Gitea `main` remains available for retrying an accepted revision.
+The deployment workflow runs:
 
 1. Preflight: exact-SHA CI status checks, required configuration, signing-key
    agreement, registry login, and read-only SSH prerequisite checks.
@@ -74,8 +77,8 @@ automatically roll back database migrations or their disposable test records.
 Configure the repository secrets, variables, host trust root, registry pull
 credentials, and existing Compose project name using
 [staging-secrets.md](staging-secrets.md). Gitea does not enforce GitHub environment
-approvals; this workflow's manual dispatch and branch checks are not a substitute
-for a separate reviewer gate.
+approvals. Automatic staging delivery and branch checks do not replace the
+independent review and launch qualification required by the acceptance baseline.
 
 This describes the port's implementation, not a completed Gitea deployment.
 The authorized NUC home-staging exercise published, signed, deployed, rolled
