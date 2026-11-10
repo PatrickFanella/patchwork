@@ -48,6 +48,8 @@ export interface AidRecordSummary {
     authorDid: string;
     title: string;
     summary: string;
+    /** Absent in responses from before offers existed; treat as a request. */
+    postType?: 'request' | 'offer';
     status: 'open' | 'in-progress' | 'resolved' | 'closed';
     category:
         | 'food'

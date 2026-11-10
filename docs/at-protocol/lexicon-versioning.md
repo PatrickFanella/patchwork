@@ -20,7 +20,7 @@ The schema catalog contains:
 
 Revision map:
 
-- `app.patchwork.aid.post`: `1.0.0`
+- `app.patchwork.aid.post`: `3.1.0`
 - `app.patchwork.volunteer.profile`: `1.1.0`
 - `app.patchwork.conversation.meta`: `1.0.0`
 - `app.patchwork.moderation.report`: `1.0.0`
@@ -49,6 +49,17 @@ Key constraints:
 - `urgency`: `low | medium | high | critical`
 - `status`: `open | in-progress | resolved | closed`
 - `location.precisionKm`: 1..50 for the alpha public-location policy
+- `postType` (optional, `3.1.0`): `request | offer`. Absent means `request`.
+
+Revision `3.1.0` adds `postType` so a neighbor can post an offer ("spare
+crib, pick up this week") instead of only answering requests (#135). Offers
+use the same record and NSID as requests, not a new collection, because the
+response flow is the same in reverse: the author accepts one responder, and
+blocks, moderation, lifecycle and coordination already key on aid-post URIs.
+A strict pre-`3.1.0` validator rejects a record that carries `postType`, so an
+older reader drops an offer rather than showing it as a request. The API
+refuses edits that change `postType`, and the indexer keeps the type it first
+projected for a URI.
 
 ### `app.patchwork.volunteer.profile`
 

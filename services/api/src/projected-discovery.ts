@@ -12,6 +12,7 @@ const queryInput = (params: URLSearchParams) => ({
     latitude: number(params, 'latitude'), longitude: number(params, 'longitude'), radiusKm: number(params, 'radiusKm'),
     service: params.get('service') || undefined, program: params.get('program') || undefined,
     category: params.get('category') || undefined, status: params.get('status') || undefined,
+    postType: params.get('postType') || undefined,
     includeLibraries: params.has('includeLibraries') ? params.get('includeLibraries') === 'true' ? true : params.get('includeLibraries') === 'false' ? false : params.get('includeLibraries') : undefined,
     urgency: params.get('urgency') || undefined, minimumUrgency: params.get('minimumUrgency') || undefined, operationalStatus: params.get('operationalStatus') || undefined,
     freshnessHours: number(params, 'freshnessHours'), searchText: params.get('searchText') || undefined,
@@ -37,6 +38,7 @@ export async function readProjectionPage<T extends QueryResultRow>(pool: Pick<Po
     }
     if (uri) where.push(`p.uri = ${bind(uri)}`);
     if (input.category) where.push(`p.category = ${bind(input.category)}`);
+    if (kind !== 'directory' && 'postType' in input && input.postType) where.push(`p.post_type = ${bind(input.postType)}`);
     if (kind === 'directory' && !uri && raw.includeLibraries !== true && input.category !== 'library') where.push("p.category <> 'library'");
     if (input.status) where.push(`p.${kind === 'directory' ? 'verification_status' : 'status'} = ${bind(input.status)}`);
     if (kind !== 'directory' && raw.urgency) where.push(`p.urgency = ${bind(raw.urgency)}`);
@@ -156,7 +158,7 @@ export async function queryProjected(pool: Pick<Pool,'query'>, params: URLSearch
             const countyArea = row.county_id ? lookupCountyArea(String(row.county_id)) : undefined;
             const geo = kind !== 'directory' ? (countyArea ? {latitude:countyArea.latitude,longitude:countyArea.longitude,precisionKm:countyArea.precisionKm} : postalArea ? { latitude: postalArea.latitude, longitude: postalArea.longitude, precisionKm: 1 } : undefined) : row.latitude !== null && row.longitude !== null && row.precision_km !== null ? { latitude: Number(row.latitude), longitude: Number(row.longitude), precisionKm: Number(row.precision_km) } : undefined;
             return kind === 'directory' ? { ...common(row), name: row.name, category: row.category, serviceArea: row.service_area, status: row.verification_status, contact: row.contact, ...(geo ? { approximateGeo: geo } : {}), ...(row.open_hours ? { openHours: row.open_hours } : {}), ...(row.eligibility_notes ? { eligibilityNotes: row.eligibility_notes } : {}), operationalStatus: row.operational_status } : {
-                ...common(row), ...(row.county_id ? {countyId:row.county_id} : {}), ...(row.postal_code ? { postalCode: row.postal_code } : {}), title: row.title, summary: row.description, category: row.category, urgency: row.urgency, status: row.status,
+                ...common(row), ...(row.county_id ? {countyId:row.county_id} : {}), ...(row.postal_code ? { postalCode: row.postal_code } : {}), title: row.title, summary: row.description, postType: row.post_type ?? 'request', category: row.category, urgency: row.urgency, status: row.status,
                 ...(geo ? { approximateGeo: geo } : {}), ...(row.distance_km !== null ? { distanceKm: Number(row.distance_km) } : {}),
                 ranking: computeDiscoveryRank({ distanceKm: row.distance_km === null ? Infinity : Number(row.distance_km), createdAt: iso(row.record_created_at), trustScore: .5, nowIso: result.now }),
             };

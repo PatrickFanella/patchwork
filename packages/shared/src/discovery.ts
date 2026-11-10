@@ -1,6 +1,6 @@
 import { resourceServices, resourcePrograms, categoryServices } from './resource-services.js';
 import { z } from 'zod';
-import { type AidPostRecord } from '@patchwork/at-lexicons';
+import { aidPostTypeValues, type AidPostRecord, type AidPostType } from '@patchwork/at-lexicons';
 import {
     type ApproximateGeoPoint,
     type NormalizedAidPost,
@@ -35,6 +35,8 @@ export interface AidQueryInput extends PaginationInput {
     latitude: number;
     longitude: number;
     radiusKm: number;
+    /** Absent returns requests and offers together. */
+    postType?: AidPostType;
     category?: AidPostRecord['category'];
     urgency?: AidPostRecord['urgency'];
     minimumUrgency?: AidPostRecord['urgency'];
@@ -80,6 +82,7 @@ export interface RankedAidCard {
     cid?: string;
     title: string;
     summary: string;
+    postType: AidPostType;
     category: AidPostRecord['category'];
     urgency: AidPostRecord['urgency'];
     status: AidPostRecord['status'];
@@ -449,6 +452,7 @@ export class DiscoveryIndexStore {
             ...(entry.record.cid ? { cid: entry.record.cid } : {}),
             title: entry.record.title,
             summary: entry.record.description,
+            postType: entry.record.postType,
             category: entry.record.category,
             urgency: entry.record.urgency,
             status: entry.record.status,
@@ -486,6 +490,7 @@ export class DiscoveryIndexStore {
                 ...(record.cid ? { cid: record.cid } : {}),
                 title: record.title,
                 summary: record.description,
+                postType: record.postType,
                 category: record.category,
                 urgency: record.urgency,
                 status: record.status,
@@ -541,7 +546,8 @@ export class DiscoveryIndexStore {
 
         return [...uriSet]
             .map(uri => this.aidRecords.get(uri))
-            .filter((value): value is IndexedAidRecord => Boolean(value));
+            .filter((value): value is IndexedAidRecord => value !== undefined
+                && (!input.postType || value.postType === input.postType));
     }
 
     private collectDirectoryCandidates(
@@ -739,6 +745,7 @@ const aidQueryFields = {
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
     radiusKm: z.number().positive().max(250),
+    postType: z.enum(aidPostTypeValues).optional(),
     category: z
         .enum(['food', 'shelter', 'medical', 'transport', 'childcare', 'other'])
         .optional(),

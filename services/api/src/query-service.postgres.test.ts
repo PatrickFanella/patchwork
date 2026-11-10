@@ -58,6 +58,21 @@ describe('PostgresProjectionQueryService', () => {
         expect(map).toMatchObject({ body: { total: 3 } });
     });
 
+    it('labels each post with its type and filters requests, offers or both', async () => {
+        const service = new PostgresProjectionQueryService(pool);
+        const offerUri = `at://did:plc:alice/${recordNsid.aidPost}/a`;
+        await pool.query("UPDATE indexer_aid_post_projections SET post_type = 'offer' WHERE uri = $1", [offerUri]);
+        const both = await service.queryFeed(new URLSearchParams());
+        expect(both).toMatchObject({ body: { total: 3 } });
+        const types = Object.fromEntries((both.body as unknown as { results: { uri: string; postType: string }[] }).results.map(row => [row.uri, row.postType]));
+        expect(types[offerUri]).toBe('offer');
+        expect(Object.values(types).filter(type => type === 'request')).toHaveLength(2);
+        expect(await service.queryFeed(new URLSearchParams({ postType: 'offer' }))).toMatchObject({ body: { total: 1, results: [{ uri: offerUri, postType: 'offer' }] } });
+        expect(await service.queryFeed(new URLSearchParams({ postType: 'request' }))).toMatchObject({ body: { total: 2 } });
+        expect(await service.queryMap(new URLSearchParams({ latitude: '41.88', longitude: '-87.63', radiusKm: '50', postType: 'offer' }))).toMatchObject({ body: { total: 1 } });
+        expect((await service.queryFeed(new URLSearchParams({ postType: 'gift' }))).statusCode).toBe(400);
+    });
+
     it('keeps bounded pages stable across equal timestamps and handles dateline searches', async () => {
         const service = new PostgresProjectionQueryService(pool);
         const first = await service.queryFeed(new URLSearchParams({ pageSize: '2' }));

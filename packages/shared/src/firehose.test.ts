@@ -44,6 +44,18 @@ describe('P3.1 firehose consumer + normalization', () => {
         });
     });
 
+    it('normalizes the post type, treating records without one as requests', () => {
+        const base = { seq: 130, receivedAt: '2026-11-09T12:00:00.000Z', action: 'create' as const,
+            uri: 'at://did:plc:giver/app.patchwork.aid.post/crib', collection: recordNsid.aidPost };
+        const record = { $type: recordNsid.aidPost, version: '2.0.0', title: 'Spare crib', description: 'Pick up this week.',
+            category: 'childcare', urgency: 'low', status: 'open', location: { countryCode: 'US', postalCode: '60614' },
+            createdAt: '2026-11-09T12:00:00.000Z' };
+        expect(normalizeFirehoseEvent({ ...base, record: { ...record, postType: 'offer' } }))
+            .toMatchObject({ success: true, event: { payload: { kind: 'aid-post', postType: 'offer' } } });
+        expect(normalizeFirehoseEvent({ ...base, record }))
+            .toMatchObject({ success: true, event: { payload: { kind: 'aid-post', postType: 'request' } } });
+    });
+
     it('ingests fixture streams with deterministic normalized output', () => {
         const consumer = new FirehoseConsumer();
         const fixtures = buildPhase3FixtureFirehoseEvents();

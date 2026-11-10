@@ -24,6 +24,7 @@ const event = (cid: string, seq: number): NormalizedFirehoseEvent => ({
     receivedAt: '2026-08-14T12:00:00.000Z',
     payload: {
         kind: 'aid-post',
+        postType: 'request',
         title: 'Food support needed',
         description: 'Shelf-stable groceries requested.',
         category: 'food',

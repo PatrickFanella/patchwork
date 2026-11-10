@@ -1,5 +1,6 @@
 import {
     aidPostSchema,
+    aidPostTypeOf,
     countyLocationSchema,
     type AidPostRecord,
 } from '@patchwork/at-lexicons';
@@ -170,6 +171,13 @@ export class AidPostCommandService {
         if (!(record.location.countyId && record.version === '3.0.0') && (!record.location.postalCode || record.version !== '2.0.0')) {
             throw new PublicHttpError(400, 'POSTAL_CODE_REQUIRED', 'Choose a five-digit ZIP code before editing this request.');
         }
+        const client = await this.clientFactory(sessionToken);
+        // People respond to an offer by asking for it and to a request by offering help.
+        // Flipping the type would change what they agreed to, so it is fixed at creation.
+        const current = await client.get(command.uri);
+        if (aidPostTypeOf(current.record) !== aidPostTypeOf(record)) {
+            throw new PublicHttpError(400, 'POST_TYPE_FIXED', 'A request cannot become an offer, or an offer a request. Close this post and publish a new one.');
+        }
         if (this.safetyGate) {
             if (!idempotencyKey) {
                 throw new PublicHttpError(
@@ -187,7 +195,6 @@ export class AidPostCommandService {
                 idempotencyKey: `aid-post:update:${idempotencyKey}`,
             });
         }
-        const client = await this.clientFactory(sessionToken);
         return client.update(
             command.uri,
             command.expectedCid,
