@@ -205,7 +205,7 @@ jobs:
   e2e-production:
     if: github.repository == 'subculture-collective/patchwork'
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 30
     env:
       NODE_ENV: production
       API_DATA_SOURCE: postgres
