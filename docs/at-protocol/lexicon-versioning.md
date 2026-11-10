@@ -61,6 +61,22 @@ older reader drops an offer rather than showing it as a request. The API
 refuses edits that change `postType`, and the indexer keeps the type it first
 projected for a URI.
 
+Rollout order for `3.1.0`: run API migration `0046` and `0047` and indexer
+migration `0017`, then deploy the indexer, then the API, then the web app.
+`scripts/deploy-staging-digests.sh` already runs every migration before it
+starts services. A single-service `--no-deps` release must keep this order:
+
+- The new API reads `post_type` from the indexer projection. Before indexer
+  migration `0017`, feed and map queries fail.
+- An indexer older than `3.1.0` rejects records that carry `postType`. Offers
+  published before the new indexer is running go to dead letters and stay
+  unlisted.
+
+Rolling back past this release is not clean once offers exist. Older API and
+indexer builds reject those records, so posters cannot close their offers
+through the old API and the old indexer drops their updates. Roll forward
+instead, or accept that existing offers freeze until the new build returns.
+
 ### `app.patchwork.volunteer.profile`
 
 Required fields:

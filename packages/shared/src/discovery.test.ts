@@ -52,6 +52,16 @@ describe('P3.2/P3.3 discovery indexing + query APIs', () => {
         );
     });
 
+    it('filters the in-memory feed by post type and labels fixture records as requests', () => {
+        const store = buildStore();
+        const all = store.queryFeed(validateAidFeedQueryInput({}));
+        expect(all.items.length).toBe(2);
+        expect(all.items.every(item => item.postType === 'request')).toBe(true);
+        expect(store.queryFeed(validateAidFeedQueryInput({ postType: 'request' })).total).toBe(2);
+        expect(store.queryFeed(validateAidFeedQueryInput({ postType: 'offer' })).total).toBe(0);
+        expect(() => validateAidFeedQueryInput({ postType: 'gift' })).toThrow();
+    });
+
     it('never exposes exact coordinates in map query output', () => {
         const store = buildStore();
 

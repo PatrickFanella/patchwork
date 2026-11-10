@@ -59,9 +59,11 @@ export const PostingRoute = ({
     const { t } = useLocale();
     const resourceName = new URLSearchParams(window.location.search).get('resourceName');
     const [saved] = useState(() => loadPostingDraft(sessionStorage));
-    // /posting?type=offer opens the offer form; a saved draft keeps its own type.
-    const [postType, setPostType] = useState<'request' | 'offer'>(
-        saved?.postType ?? (new URLSearchParams(window.location.search).get('type') === 'offer' ? 'offer' : 'request'));
+    // An explicit ?type= in the link wins; otherwise a saved draft keeps its own type.
+    const [postType, setPostType] = useState<'request' | 'offer'>(() => {
+        const linked = new URLSearchParams(window.location.search).get('type');
+        return linked === 'offer' || linked === 'request' ? linked : (saved?.postType ?? 'request');
+    });
     const isOffer = postType === 'offer';
     const [postalCode, setPostalCode] = useState(saved?.postalCode ?? new URLSearchParams(window.location.search).get('zip') ?? '');
     const [countyInstead, setCountyInstead] = useState(saved?.countyInstead ?? false);
@@ -208,10 +210,10 @@ export const PostingRoute = ({
                         `Created post ${localId}. ${uploaded} attachment(s) were accepted.`,
                     );
                     setApiError(
-                        `The request is public, but a private attachment upload failed: ${attachment.error}`,
+                        `The post is public, but a private attachment upload failed: ${attachment.error}`,
                     );
                     setAttachmentStatus(
-                        'Attachment upload stopped. Selected files remain available to retry on a new request.',
+                        'Attachment upload stopped. Selected files remain available to retry on a new post.',
                     );
                     return;
                 }
@@ -224,7 +226,7 @@ export const PostingRoute = ({
                     : undefined,
             );
             setSuccessMessage(
-                t('posting.publicationPending', { id: localId }),
+                t(isOffer ? 'posting.offerPublicationPending' : 'posting.publicationPending', { id: localId }),
             );
         } finally {
             setIsSubmitting(false);
@@ -399,7 +401,7 @@ export const PostingRoute = ({
                         title={t('posting.privacySummary')}
                     >
                         <ul className='list-disc space-y-1 pl-5 text-sm'>
-                            <li>{t('posting.publicSummary')}</li>
+                            <li>{t(isOffer ? 'posting.offerPublicSummary' : 'posting.publicSummary')}</li>
                             <li>{t('posting.privateSummary')}</li>
                             <li>{t('posting.neverSummary')}</li>
                         </ul>

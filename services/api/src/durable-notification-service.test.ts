@@ -35,6 +35,14 @@ describe('notification delivery providers', () => {
             body: 'Someone offered to help with your request.',
         });
     });
+    it('translates ask notifications by their English title, not their shared type', () => {
+        expect(localizedNotificationCopy('offer_received', 'es', {
+            title: 'Someone asked for your offer',
+            body: 'A neighbor asked for what you offered. Their identity stays private until you accept.',
+        })).toMatchObject({ title: 'Alguien pidió lo que ofreciste' });
+        expect(localizedNotificationCopy('offer_declined', 'es', { title: 'Ask closed', body: 'x' }))
+            .toMatchObject({ title: 'Pedido cerrado' });
+    });
     it('sends provider-neutral email with bounded content and stable idempotency', async () => {
         const fetchImpl = vi.fn().mockResolvedValue(
             new Response(JSON.stringify({ id: 'provider-message-one' }), {

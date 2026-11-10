@@ -263,12 +263,36 @@ const spanishNotificationCopy: Readonly<
     },
 };
 
+/**
+ * Asks on offers (#135) share the offer notification types, so their Spanish
+ * copy is chosen by the English title the trigger wrote (migration 0047).
+ */
+const spanishCopyByEnglishTitle: Readonly<Record<string, NotificationCopy>> = {
+    'Someone asked for your offer': {
+        title: 'Alguien pidió lo que ofreciste',
+        body: 'Una persona vecina pidió lo que ofreciste. Su identidad permanece privada hasta que aceptes.',
+    },
+    'Ask accepted': {
+        title: 'Pedido aceptado',
+        body: 'Tu pedido fue aceptado. Abre la coordinación para ver los siguientes pasos.',
+    },
+    'Ask declined': { title: 'Pedido rechazado', body: 'Tu pedido fue rechazado.' },
+    'Ask closed': {
+        title: 'Pedido cerrado',
+        body: 'La persona que publicó aceptó a otra persona para esta oferta.',
+    },
+    'Ask expired': { title: 'Pedido vencido', body: 'Tu pedido venció antes de ser aceptado.' },
+    'Offer closed': { title: 'Oferta cerrada', body: 'Esta solicitud ya no necesita tu oferta.' },
+};
+
 export const localizedNotificationCopy = (
     type: NotificationType,
     locale: string | null | undefined,
     fallback: NotificationCopy,
 ): NotificationCopy =>
-    locale === 'es' ? (spanishNotificationCopy[type] ?? fallback) : fallback;
+    locale === 'es'
+        ? (spanishCopyByEnglishTitle[fallback.title] ?? spanishNotificationCopy[type] ?? fallback)
+        : fallback;
 
 export interface NotificationListResult {
     items: Notification[];

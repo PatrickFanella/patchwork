@@ -11,6 +11,11 @@ describe('saved discovery privacy contract', () => {
             search: { postalCode: '01001', resourceProgram: 'wic' },
         });
     });
+    it('keeps a requests-or-offers filter and rejects unknown post types', () => {
+        expect(savedDiscoveryInputSchema.parse({ kind: 'search', search: { nearbyIntent: 'requests', postType: 'offer' } }))
+            .toMatchObject({ search: { postType: 'offer' } });
+        expect(savedDiscoveryInputSchema.safeParse({ kind: 'search', search: { postType: 'gift' } }).success).toBe(false);
+    });
     it('rejects precise coordinates, eligibility profiles and unknown fields instead of persisting them', () => {
         for (const search of [
             { center: { lat: 41.123456, lng: -87.654321 } },

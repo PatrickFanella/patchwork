@@ -816,7 +816,7 @@ export class CoordinationService {
             w.pickup_configured AS configured, w.current_status AS status,
             (SELECT count(*)::int FROM coordination_connections c WHERE c.request_uri=w.post_uri AND c.status IN ('active','completed')) AS occupied,
             (SELECT count(*)::int FROM coordination_connections c WHERE c.request_uri=w.post_uri AND c.status='active') AS active
-            FROM request_workflows w WHERE w.requester_did=$1 ORDER BY w.created_at DESC LIMIT 100`, [actorDid]);
+            FROM request_workflows w WHERE w.requester_did=$1 AND w.post_type='request' ORDER BY w.created_at DESC LIMIT 100`, [actorDid]);
         return {
             pickups: pickups.rows,
             offers: offers.rows.map((row) => this.renderOffer(row, actorDid)),
@@ -1611,8 +1611,20 @@ export class CoordinationService {
                     visibility <> 'visible'
                     OR queue_status = 'queued'
                     OR appeal_state IN ('pending', 'under-review')
+               )
+             UNION ALL
+             -- Askers on an offer need no volunteer profile, so the profile check
+             -- above cannot see them. An account hold, or posts of their own that
+             -- moderators hid, count instead.
+             SELECT 1
+             FROM moderation_queue_items
+             WHERE $3::boolean
+               AND (
+                    (subject_uri = $4 AND (visibility <> 'visible' OR queue_status = 'queued'
+                        OR appeal_state IN ('pending', 'under-review')))
+                    OR (starts_with(subject_uri, $5) AND visibility <> 'visible')
                )`,
-            [workflow.post_uri, hash(helperDid)],
+            [workflow.post_uri, hash(helperDid), workflow.post_type === 'offer', helperDid, `at://${helperDid}/`],
         );
         if (moderation.rowCount) {
             throw new PublicHttpError(

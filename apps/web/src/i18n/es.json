@@ -111,8 +111,7 @@
         "processing": "Procesando",
         "under-review": "En revisión",
         "upheld": "Aceptada",
-        "rejected": "Rechazada",
-        "request": "Solicitud"
+        "rejected": "Rechazada"
     },
     "route": {
         "home": "Inicio",
@@ -546,7 +545,9 @@
         "offerDescription": "Ofrece un objeto o un favor puntual, como una cuna que ya no usas o un viaje el domingo. Tus vecinos ven la oferta y una zona amplia, y la piden. Tú eliges quién la recibe.",
         "offerZipLabel": "Código postal donde puedes entregarlo",
         "offerZipHelp": "Elige el código postal de esta oferta. Tu dirección sigue siendo privada.",
-        "publishOffer": "Publicar oferta"
+        "publishOffer": "Publicar oferta",
+        "offerPublicationPending": "La oferta {{id}} se guardó y ya hay una vista previa en Noticias. Las demás personas la verán cuando termine de publicarse.",
+        "offerPublicSummary": "Público y visible en otras aplicaciones compatibles con Bluesky: título, descripción, categoría, etiquetas de accesibilidad, franja horaria y el área aproximada."
     },
     "resources": {
         "nearestFirst": "Primero los más cercanos a la zona seleccionada. Las distancias son aproximadas.",
@@ -898,8 +899,8 @@
         "note": "Nota de coordinación opcional",
         "offerHelp": "Ofrecer ayuda",
         "offerHelpFor": "Ofrecer ayuda para {{title}}",
-        "offers": "Ofertas",
-        "noOffers": "Aún no hay ofertas.",
+        "offers": "Ofertas y pedidos",
+        "noOffers": "Aún no hay ofertas ni pedidos.",
         "expires": "Vence {{date}}",
         "requester": "Solicitante: {{did}}",
         "helper": "Ayudante: {{did}}",

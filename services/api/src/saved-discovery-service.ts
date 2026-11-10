@@ -185,6 +185,7 @@ export class SavedDiscoveryService {
                           includeLibraries: search.includeLibraries,
                       }
                     : {
+                          postType: search.postType,
                           category: search.category,
                           status: search.status,
                           minimumUrgency: search.minUrgency
