@@ -96,6 +96,9 @@ describe('authenticated account privacy HTTP boundary', () => {
             '0017_verification_and_exact_public_addresses.sql',
             '0018_coordination_offers_inbox_outcomes.sql',
             '0020_durable_notification_outbox.sql',
+            // 0020 redefines notify_coordination_offer_event. Replay its newer
+            // definition too, or later test files see the pre-offer trigger.
+            '0047_offer_ask_notifications.sql',
         ]) {
             await pool.query(
                 await readFile(
