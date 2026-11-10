@@ -121,6 +121,37 @@ describe('durable notification outbox', () => {
         await pool.end();
     });
 
+    it('words notifications about an offer as asks and tells responders who were not chosen', async () => {
+        const offerId = randomUUID();
+        const event = (action: string, actorDid: string | null) => pool.query(
+            `INSERT INTO coordination_offer_events (offer_id, actor_did, action, next_status, public_summary, private_details, occurred_at)
+             VALUES ($1, $2, $3, 'pending', 'Event.', '{}', NOW())`, [offerId, actorDid, action]);
+        const intents = async () => (await pool.query<{ recipient_did: string; notification_type: string; title: string }>(
+            'SELECT recipient_did, notification_type, title FROM notification_intents ORDER BY title')).rows;
+        await pool.query(`INSERT INTO coordination_offers (offer_id, request_uri, requester_did, offerer_did, note, status, offered_at, expires_at, updated_at)
+            VALUES ($1, $2, $3, $4, NULL, 'pending', NOW(), NOW() + INTERVAL '1 hour', NOW())`, [offerId, requestUri, ownerDid, helperDid]);
+
+        await event('offered', helperDid);
+        await event('cancelled', helperDid); // a responder withdrawing their own offer is not sent
+        expect(await intents()).toEqual([
+            { recipient_did: ownerDid, notification_type: 'offer_received', title: 'New offer' },
+        ]);
+        await event('cancelled', null);
+        expect(await intents()).toHaveLength(2);
+        expect(await intents()).toContainEqual({ recipient_did: helperDid, notification_type: 'offer_declined', title: 'Offer closed' });
+
+        await pool.query('DELETE FROM notification_intents');
+        await pool.query("UPDATE request_workflows SET post_type = 'offer' WHERE post_uri = $1", [requestUri]);
+        await event('offered', helperDid);
+        await event('cancelled', null);
+        await event('expired', null);
+        expect(await intents()).toEqual(expect.arrayContaining([
+            { recipient_did: ownerDid, notification_type: 'offer_received', title: 'Someone asked for your offer' },
+            { recipient_did: helperDid, notification_type: 'offer_declined', title: 'Ask closed' },
+            { recipient_did: helperDid, notification_type: 'offer_expired', title: 'Ask expired' },
+        ]));
+    });
+
     it('commits domain events and deduplicated notification intents atomically across restart', async () => {
         const offerId = randomUUID();
         await pool.query(

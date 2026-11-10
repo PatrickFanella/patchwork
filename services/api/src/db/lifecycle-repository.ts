@@ -215,8 +215,10 @@ export class PostgresLifecycleRepository implements LifecycleRepository {
         const result = await this.pool.query(
             `INSERT INTO request_workflows (
                 post_uri, requester_did, current_status, create_command_id,
-                retention_until, created_at, updated_at
-             ) VALUES ($1, $2, 'open', $3, $4, $5, $5)
+                retention_until, created_at, updated_at, post_type
+             ) VALUES ($1, $2, 'open', $3, $4, $5, $5,
+                -- Offers registered outside the authoring receipt keep their type.
+                COALESCE((SELECT post_type FROM indexer_aid_post_projections WHERE uri = $1), 'request'))
              ON CONFLICT (create_command_id) DO NOTHING`,
             [
                 input.postUri,

@@ -111,8 +111,7 @@
         "processing": "Processing",
         "under-review": "Under review",
         "upheld": "Upheld",
-        "rejected": "Rejected",
-        "request": "Request"
+        "rejected": "Rejected"
     },
     "route": {
         "home": "Home",
@@ -546,7 +545,9 @@
         "offerDescription": "Offer an item or a one-off favor, like a spare crib or a ride on Sunday. Neighbors see the offer and a broad area, and ask for it. You choose who gets it.",
         "offerZipLabel": "ZIP code where you can hand it over",
         "offerZipHelp": "Choose the ZIP area for this offer. Your street address stays private.",
-        "publishOffer": "Publish offer"
+        "publishOffer": "Publish offer",
+        "offerPublicationPending": "Offer {{id}} was saved, and a preview is in the Feed. Other people will see it once it finishes publishing.",
+        "offerPublicSummary": "Public, and visible to other Bluesky-compatible apps: title, description, category, accessibility tags, time window and the approximate area."
     },
     "resources": {
         "nearestFirst": "Closest to the selected area first. Distances are approximate.",
@@ -898,8 +899,8 @@
         "note": "Optional coordination note",
         "offerHelp": "Offer help",
         "offerHelpFor": "Offer help for {{title}}",
-        "offers": "Offers",
-        "noOffers": "No offers yet.",
+        "offers": "Offers and asks",
+        "noOffers": "No offers or asks yet.",
         "expires": "Expires {{date}}",
         "requester": "Requester: {{did}}",
         "helper": "Helper: {{did}}",

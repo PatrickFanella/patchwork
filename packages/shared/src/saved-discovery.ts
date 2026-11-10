@@ -23,6 +23,8 @@ export const savedSearchSchema = z
             .strict()
             .optional(),
         radiusMeters: z.number().int().min(1000).max(250000).optional(),
+        /** Absent saves both requests and offers. */
+        postType: z.enum(['request', 'offer']).optional(),
         category: z
             .enum([
                 'food',

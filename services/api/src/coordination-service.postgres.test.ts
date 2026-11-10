@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AccountPrivacyService } from './account-privacy-service.js';
 import { CoordinationService } from './coordination-service.js';
+import { PostgresLifecycleRepository } from './db/lifecycle-repository.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const requesterDid = 'did:plc:coordination-requester';
@@ -204,6 +205,35 @@ describe('CoordinationService PostgreSQL boundary', () => {
             .rejects.toMatchObject({ code: 'PICKUP_NOT_FOR_OFFERS' });
         await expect(service.matchRequest(requesterDid, { requestUri: offerUri, requiredLanguages: [], accessibilityNeeds: [] }, pickupTime))
             .rejects.toMatchObject({ code: 'MATCH_NOT_FOR_OFFERS' });
+    });
+
+    it('keeps offers out of pickups and registers late workflows with the projected type', async () => {
+        await pool.query("UPDATE request_workflows SET post_type = 'offer' WHERE post_uri = $1", [secondRequestUri]);
+        const mine = await new CoordinationService(pool).listMine(requesterDid, pickupTime) as { pickups: { requestUri: string }[] };
+        expect(mine.pickups.map(pickup => pickup.requestUri)).toEqual([requestUri]);
+        await pool.query('DELETE FROM request_workflows WHERE post_uri = $1', [secondRequestUri]);
+        await pool.query("UPDATE indexer_aid_post_projections SET post_type = 'offer' WHERE uri = $1", [secondRequestUri]);
+        await new PostgresLifecycleRepository(pool).register({ commandId: 'register-late-offer', postUri: secondRequestUri,
+            requesterDid, createdAt: pickupTime.toISOString() });
+        expect((await pool.query('SELECT post_type FROM request_workflows WHERE post_uri = $1', [secondRequestUri])).rows)
+            .toEqual([{ post_type: 'offer' }]);
+    });
+
+    it('refuses asks from an account under a hold or with moderator-hidden posts', async () => {
+        const service = new CoordinationService(pool);
+        const askerDid = 'did:plc:offer-asker-moderated';
+        await pool.query("UPDATE request_workflows SET post_type = 'offer' WHERE post_uri = $1", [secondRequestUri]);
+        for (const [subject, visibility] of [[askerDid, 'visible'], [`at://${askerDid}/app.patchwork.aid.post/hidden`, 'suspended']] as const) {
+            await pool.query(`INSERT INTO moderation_queue_items (subject_uri, queue_id, subject_type, latest_reason, visibility)
+                VALUES ($1, $1, 'other', 'ask-test', $2)`, [subject, visibility]);
+            await expect(service.createOffer(askerDid, { requestUri: secondRequestUri, note: null }, pickupTime))
+                .rejects.toMatchObject({ code: 'COORDINATION_QUARANTINED' });
+            await pool.query('DELETE FROM moderation_queue_items');
+        }
+        await pool.query(`INSERT INTO moderation_queue_items (subject_uri, queue_id, subject_type, latest_reason)
+            VALUES ($1, $1, 'aid-post', 'reported but not actioned')`, [`at://${askerDid}/app.patchwork.aid.post/reported`]);
+        await expect(service.createOffer(askerDid, { requestUri: secondRequestUri, note: null }, pickupTime))
+            .resolves.toMatchObject({ offer: { status: 'pending' } });
     });
 
     it('words an expired ask on an offer as an ask', async () => {
