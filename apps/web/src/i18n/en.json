@@ -111,7 +111,8 @@
         "processing": "Processing",
         "under-review": "Under review",
         "upheld": "Upheld",
-        "rejected": "Rejected"
+        "rejected": "Rejected",
+        "request": "Request"
     },
     "route": {
         "home": "Home",
@@ -336,7 +337,12 @@
         "searchQuery": "Search: “{{text}}”",
         "showingCount": "Showing {{loaded}} of {{total}}",
         "resultCount_one": "{{count}} result",
-        "resultCount_other": "{{count}} results"
+        "resultCount_other": "{{count}} results",
+        "postType": "Show",
+        "postTypes": {
+            "request": "Requests",
+            "offer": "Offers"
+        }
     },
     "map": {
         "aggregateHelp": "{{count}} matching requests across the map. Choose a ZIP to narrow the list.",
@@ -532,7 +538,15 @@
         "zipLabel": "ZIP code where help is needed",
         "zipHelp": "Choose the ZIP area for this request. Your street address stays private.",
         "resourceContext": "Community request about {{name}}",
-        "resourceContextHelp": "Your request goes to the Patchwork community. Contact the organization directly for its services."
+        "resourceContextHelp": "Your request goes to the Patchwork community. Contact the organization directly for its services.",
+        "postTypeLabel": "What are you posting?",
+        "postTypeRequest": "I need help",
+        "postTypeOffer": "I can give something",
+        "offerHeading": "Offer something",
+        "offerDescription": "Offer an item or a one-off favor, like a spare crib or a ride on Sunday. Neighbors see the offer and a broad area, and ask for it. You choose who gets it.",
+        "offerZipLabel": "ZIP code where you can hand it over",
+        "offerZipHelp": "Choose the ZIP area for this offer. Your street address stays private.",
+        "publishOffer": "Publish offer"
     },
     "resources": {
         "nearestFirst": "Closest to the selected area first. Distances are approximate.",
@@ -937,7 +951,11 @@
         "savingOutcome": "Saving outcome…",
         "markingRead": "Marking item read…",
         "offerTitle": "{{direction}} offer",
-        "connectionTitle": "Connection · {{status}}"
+        "connectionTitle": "Connection · {{status}}",
+        "askTitle": "{{direction}} ask",
+        "offeredBy": "Offered by: {{did}}",
+        "askedBy": "Asked by: {{did}}",
+        "withdrawAsk": "Withdraw ask"
     },
     "organizations": {
         "heading": "Organizations",
@@ -2170,5 +2188,26 @@
                 "closed": "Closed"
             }
         }
+    },
+    "offers": {
+        "offered": "What is offered",
+        "locationPrivacy": "Private addresses are not shown here. Agree on pickup details after an ask is accepted.",
+        "updates": "Offer updates",
+        "manage": "Manage your offer",
+        "next": "How to ask for it",
+        "ownerHelp": "Review who asked and accept one neighbor. Accepting one closes the other asks. The handoff continues in My activity.",
+        "askHelp": "Say why this would help and when you could pick it up. The person who posted it chooses one neighbor.",
+        "askPrivacy": "The poster sees your note, not your name, until they accept your ask.",
+        "askNote": "Why would this help, and when could you pick it up?",
+        "askForThis": "Ask for this",
+        "signInAsk": "Sign in to ask for this",
+        "askSent": "Your ask was sent. You can follow it in My activity.",
+        "askFailed": "Your ask was not confirmed. Retry to check or send the same ask.",
+        "notAccepting": "This offer is not taking new asks.",
+        "reviewAsks": "Review asks and arrange a handoff",
+        "demo": "This offer is fictional. Real asks are unavailable.",
+        "postOwn": "Post your own offer",
+        "share": "Copy offer link",
+        "sequence": "Ask for it → the poster accepts → message and agree on a time → complete the handoff."
     }
 }

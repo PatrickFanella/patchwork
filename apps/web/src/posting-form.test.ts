@@ -36,6 +36,22 @@ describe('posting form', () => {
         expect(payload.metadata.accessibilityTags).toEqual(['wheelchair']);
     });
 
+    it('publishes an offer with a fixed low urgency and keeps requests free of postType', () => {
+        const base = {
+            title: 'Spare crib', description: 'Pick up this week.', category: 'childcare' as const,
+            accessibilityTags: [], location: { postalCode: '60614', lat: 41.92, lng: -87.65, precisionMeters: 1000 },
+        };
+        const offer = buildAidPostCreatePayload({ ...base, postType: 'offer' }, { now: '2026-11-09T12:00:00.000Z', id: 'offer-1' });
+        expect(offer.record).toMatchObject({ postType: 'offer', urgency: 'low' });
+        expect(aidPostSchema.safeParse(offer.record).success).toBe(true);
+        expect(validatePostingDraft({ ...base, urgency: undefined }).ok).toBe(false);
+        const request = buildAidPostCreatePayload({ ...base, urgency: 4 }, { now: '2026-11-09T12:00:00.000Z', id: 'request-1' });
+        expect(request.record).not.toHaveProperty('postType');
+        expect(toPostingDraftFromRecord(offer.record).postType).toBe('offer');
+        const edited = buildAidPostEditPayload({ existingRecord: offer.record, draft: { ...toPostingDraftFromRecord(offer.record), title: 'Spare crib, still here' } });
+        expect(edited.record).toMatchObject({ postType: 'offer', title: 'Spare crib, still here' });
+    });
+
     it('reports validation failures for invalid taxonomy and time window', () => {
         const result = validatePostingDraft({
             title: '',

@@ -86,6 +86,8 @@ export interface FeedAttachmentPreview {
 
 export interface FeedAidCard {
     id: string;
+    /** Absent on cards from before offers existed; treat as a request. */
+    postType?: 'request' | 'offer';
     title: string;
     description: string;
     category: AidCategory;
@@ -353,6 +355,7 @@ const toPresentation = (card: FeedAidCard): FeedCardPresentation => {
 
 export function createFeedCard(input: {
     id: string;
+    postType?: 'request' | 'offer';
     title: string;
     description: string;
     category: AidCategory;
@@ -367,6 +370,7 @@ export function createFeedCard(input: {
 
     return {
         id: input.id,
+        postType: input.postType ?? 'request',
         title: input.title,
         description: input.description,
         category: input.category,
@@ -391,6 +395,10 @@ export function buildFeedViewModel(
 
     const filtered = cards.filter(card => {
         if (query.text && !cardMatchesText(card, query.text)) {
+            return false;
+        }
+
+        if (query.postType && (card.postType ?? 'request') !== query.postType) {
             return false;
         }
 

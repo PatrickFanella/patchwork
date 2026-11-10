@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { useLocale } from '../i18n';
+import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { fetchAccountRequestsViaApi, type OwnedRequestReceipt } from './api-client';
 import { RequestLifecycleActions } from './request-actions';
@@ -43,7 +44,10 @@ export function MyRequests() {
     useVisiblePoll(load, 15_000, Boolean(session));
     return <Surface title={t('myRequests.heading')}>
         <div className='flex flex-wrap items-center justify-between gap-3'>
-            <a className='font-bold underline' href='/posting'>{t('myRequests.newRequest')}</a>
+            <span className='flex flex-wrap gap-4'>
+                <a className='font-bold underline' href='/posting'>{t('myRequests.newRequest')}</a>
+                <a className='font-bold underline' href='/posting?type=offer'>{t('posting.offerHeading')}</a>
+            </span>
             <Button variant='neutral' disabled={busy} onClick={() => void load()}>{t('myRequests.refresh')}</Button>
         </div>
         {error && <p role='alert' className='mt-3'>{t('myRequests.error')}</p>}
@@ -51,12 +55,13 @@ export function MyRequests() {
         {loaded && items.length === 0 && <p className='mt-3'>{t('myRequests.empty')}</p>}
         <ul className='mt-4 space-y-4'>
             {items.map(item => <li key={item.uri} className='rounded-2xl border border-mh-borderSoft p-4'>
+                {item.postType === 'offer' && <Badge tone='success'>{t('labels.offer')}</Badge>}
                 <h2 className='font-heading text-xl font-bold'>{item.title}</h2>
                 <p className='mt-2'>{t(`labels.${item.status}`)}</p>
                 <p className='mt-2 text-sm text-mh-textMuted'>{t(item.publication === 'pending' ? 'myRequests.pending' : 'myRequests.published')}</p>
                 <div className='mt-3 flex flex-wrap gap-4'>
                     {item.publication === 'projected' && <a className='underline' href={`/requests/view?uri=${encodeURIComponent(item.uri)}`}>{t('myRequests.view')}</a>}
-                    <a className='underline' href={`/inbox?uri=${encodeURIComponent(item.uri)}#request-offers`}>{t('handoff.reviewOffers')}</a>
+                    <a className='underline' href={`/inbox?uri=${encodeURIComponent(item.uri)}#request-offers`}>{t(item.postType === 'offer' ? 'offers.reviewAsks' : 'handoff.reviewOffers')}</a>
                 </div>
                 {session && <RequestLifecycleActions record={{ aidPostUri: item.uri, recipientDid: session.did,
                     cid: item.sourceCid ?? undefined, card: { title: item.title } }} onRefresh={() => void load()} />}

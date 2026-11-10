@@ -68,7 +68,7 @@ export function RequestDetail() {
         setBusy(false);
         if (result.ok) setSent(true);
         else {
-            setError(t('handoff.offerFailed'));
+            setError(t(k('handoff.offerFailed', 'offers.askFailed')));
             if (result.code === 'ACTIVE_VOLUNTEER_PROFILE_REQUIRED') {
                 setProfileRequired(true);
                 command.current = undefined;
@@ -91,6 +91,9 @@ export function RequestDetail() {
         resourceParams.set('r', '20000');
     }
     const owner = session?.did === record?.recipientDid;
+    // On an offer the visitor asks for the item; the poster accepts one neighbor.
+    const isOffer = record?.card.postType === 'offer';
+    const k = (requestKey: string, offerKey: string) => (isOffer ? offerKey : requestKey);
     return (
         <section className='mx-auto max-w-5xl space-y-5'>
             <div className='flex flex-wrap items-center justify-between gap-3'>
@@ -115,7 +118,7 @@ export function RequestDetail() {
                                 );
                         }}
                     >
-                        {t(copied ? 'requestPage.copied' : 'requestPage.share')}
+                        {t(copied ? 'requestPage.copied' : k('requestPage.share', 'offers.share'))}
                     </Button>
                 )}
             </div>
@@ -149,6 +152,9 @@ export function RequestDetail() {
                             >
                                 {t(`labels.${record.card.status}`)}
                             </Badge>
+                            {isOffer ? (
+                                <Badge tone='success'>{t('labels.offer')}</Badge>
+                            ) : (
                             <Badge
                                 tone={
                                     record.card.urgency >= 4
@@ -160,6 +166,7 @@ export function RequestDetail() {
                                     level: record.card.urgency,
                                 })}
                             </Badge>
+                            )}
                             {record.recordOrigin === 'synthetic' && (
                                 <Badge tone='neutral'>
                                     {t('feed.synthetic')}
@@ -170,7 +177,7 @@ export function RequestDetail() {
                     </header>
                     <div className='grid items-start gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(260px,1fr)]'>
                         <div className='space-y-5'>
-                            <Surface title={t('requestPage.needed')}>
+                            <Surface title={t(k('requestPage.needed', 'offers.offered'))}>
                                 <p className='whitespace-pre-wrap text-base leading-relaxed'>
                                     {record.card.description}
                                 </p>
@@ -180,7 +187,7 @@ export function RequestDetail() {
                                     {countyArea ? countyArea.areaLabel : postalArea ? `ZIP ${postalArea.postalCode} · ${postalArea.stateName}` : 'The author has not supplied a ZIP code.'}
                                 </p>
                                 <p className='mt-2 text-sm text-mh-textMuted'>
-                                    {t('requestPage.locationPrivacy')}
+                                    {t(k('requestPage.locationPrivacy', 'offers.locationPrivacy'))}
                                 </p>
                                 <div className='mt-3 flex flex-wrap gap-3'>
                                     {area && (
@@ -199,7 +206,7 @@ export function RequestDetail() {
                                     </a>
                                 </div>
                             </Surface>
-                            <Surface title={t('requestPage.updates')}>
+                            <Surface title={t(k('requestPage.updates', 'offers.updates'))}>
                                 <dl className='grid grid-cols-2 gap-3 text-sm'>
                                     <div>
                                         <dt className='font-bold'>
@@ -235,13 +242,13 @@ export function RequestDetail() {
                         <Surface
                             title={t(
                                 owner
-                                    ? 'requestPage.manage'
-                                    : 'requestPage.next',
+                                    ? k('requestPage.manage', 'offers.manage')
+                                    : k('requestPage.next', 'offers.next'),
                             )}
                         >
                             {owner ? (
                                 <div className='space-y-4'>
-                                    <p>{t('requestPage.ownerHelp')}</p>
+                                    <p>{t(k('requestPage.ownerHelp', 'offers.ownerHelp'))}</p>
                                     <RequestLifecycleActions
                                         record={record}
                                         onRefresh={() =>
@@ -252,32 +259,32 @@ export function RequestDetail() {
                                         className='mh-button inline-flex px-3 py-2'
                                         href={`/activity?uri=${encodeURIComponent(uri)}`}
                                     >
-                                        {t('handoff.reviewOffers')}
+                                        {t(k('handoff.reviewOffers', 'offers.reviewAsks'))}
                                     </a>
                                 </div>
                             ) : record.recordOrigin === 'synthetic' ? (
                                 <div className='space-y-4'>
-                                    <p>{t('handoff.demoRequest')}</p>
+                                    <p>{t(k('handoff.demoRequest', 'offers.demo'))}</p>
                                     <a
-                                        href='/posting'
+                                        href={isOffer ? '/posting?type=offer' : '/posting'}
                                         className='mh-button inline-flex px-3 py-2'
                                     >
-                                        {t('requestPage.ask')}
+                                        {t(k('requestPage.ask', 'offers.postOwn'))}
                                     </a>
                                 </div>
                             ) : !session ? (
                                 <div className='space-y-4'>
-                                    <p>{t('requestPage.helperHelp')}</p>
+                                    <p>{t(k('requestPage.helperHelp', 'offers.askHelp'))}</p>
                                     <a
                                         className='mh-button inline-flex px-3 py-2'
                                         href={`/login?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`}
                                     >
-                                        {t('handoff.signInOffer')}
+                                        {t(k('handoff.signInOffer', 'offers.signInAsk'))}
                                     </a>
                                 </div>
                             ) : sent ? (
                                 <div role='status'>
-                                    <p>{t('handoff.offerSent')}</p>
+                                    <p>{t(k('handoff.offerSent', 'offers.askSent'))}</p>
                                     <a
                                         href={`/activity?uri=${encodeURIComponent(uri)}`}
                                         className='underline'
@@ -286,15 +293,15 @@ export function RequestDetail() {
                                     </a>
                                 </div>
                             ) : record.card.status !== 'open' ? (
-                                <p>{t('handoff.notAcceptingOffers')}</p>
+                                <p>{t(k('handoff.notAcceptingOffers', 'offers.notAccepting'))}</p>
                             ) : (
                                 <form
                                     className='space-y-3'
                                     onSubmit={(event) => void offer(event)}
                                 >
-                                    <p>{t('requestPage.helperHelp')}</p>
+                                    <p>{t(k('requestPage.helperHelp', 'offers.askHelp'))}</p>
                                     <p className='text-sm text-mh-textMuted'>
-                                        {t('handoff.offerPrivacy')}
+                                        {t(k('handoff.offerPrivacy', 'offers.askPrivacy'))}
                                     </p>
                                     {profileRequired && (
                                         <p role='status'>
@@ -310,7 +317,7 @@ export function RequestDetail() {
                                         </p>
                                     )}
                                     <label className='block'>
-                                        {t('handoff.offerNote')}
+                                        {t(k('handoff.offerNote', 'offers.askNote'))}
                                         <textarea
                                             className='mh-input mt-2 min-h-28 w-full p-3'
                                             maxLength={1000}
@@ -324,13 +331,13 @@ export function RequestDetail() {
                                         {t(
                                             busy
                                                 ? 'handoff.saving'
-                                                : 'handoff.offerHelp',
+                                                : k('handoff.offerHelp', 'offers.askForThis'),
                                         )}
                                     </Button>
                                 </form>
                             )}
                             <p className='mt-5 border-t border-mh-borderSoft pt-3 text-sm text-mh-textMuted'>
-                                {t('requestPage.sequence')}
+                                {t(k('requestPage.sequence', 'offers.sequence'))}
                             </p>
                         </Surface>
                     </div>

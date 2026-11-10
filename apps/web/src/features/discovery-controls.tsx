@@ -1,5 +1,5 @@
 import { resourceServices, resourceServiceLabels, resourcePrograms, resourceProgramLabels } from '@patchwork/shared';
-import { directoryCategories } from '../discovery-filters';
+import { aidPostTypes, directoryCategories } from '../discovery-filters';
 import { useEffect, useState } from 'react';
 import { nearbyResourceIntent } from '../discovery-filters';
 import { lookupPostalArea } from '@patchwork/at-lexicons';
@@ -47,7 +47,7 @@ export function DiscoveryControls({
         onPatch({ text: value.trim() || undefined });
     };
     const filtersActive = Boolean(
-        state.category || state.status || state.minUrgency || state.since,
+        state.postType || state.category || state.status || state.minUrgency || state.since,
     );
     const showResourceFilters = resourceMode || (resourceFilters && nearbyResourceIntent(state));
     const resourceFilterCount = [state.resourceService, state.resourceProgram, state.resourceCategory, state.includeLibraries].filter(Boolean).length;
@@ -255,6 +255,21 @@ export function DiscoveryControls({
                         :   ''}
                     </summary>
                     <div className='mh-filter-grid'>
+                        <fieldset>
+                            <legend>{t('discovery.postType')}</legend>
+                            <div className='flex flex-wrap gap-2'>
+                                {aidPostTypes.map((postType) => (
+                                    <Button
+                                        key={postType}
+                                        aria-pressed={state.postType === postType}
+                                        variant={state.postType === postType ? 'primary' : 'neutral'}
+                                        onClick={() => onPatch({ postType: state.postType === postType ? undefined : postType })}
+                                    >
+                                        {t(`discovery.postTypes.${postType}`)}
+                                    </Button>
+                                ))}
+                            </div>
+                        </fieldset>
                         {(
                             [
                                 [
@@ -309,6 +324,7 @@ export function DiscoveryControls({
                                 setSearch('');
                                 onPatch({
                                     text: undefined,
+                                    postType: undefined,
                                     category: undefined,
                                     status: undefined,
                                     minUrgency: undefined,

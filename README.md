@@ -20,8 +20,10 @@ yet.
 ## Around the neighborhood
 
 - **Requests and offers.** Sign in with an AT Protocol account (a Bluesky
-  account works) to post a request or offer help on someone else's. Accepted
-  offers continue in the inbox.
+  account works) to ask for help, offer help on someone else's request, or
+  post an offer of your own ("spare crib, pick up this week"). Neighbors ask
+  for an offer and the poster picks one. Accepted offers and asks continue in
+  the inbox.
 - **Map, feed and directory.** Browse requests, offers and organization
   listings without an account.
 - **Scheduling, groups and chat.** People with an accepted connection can agree
