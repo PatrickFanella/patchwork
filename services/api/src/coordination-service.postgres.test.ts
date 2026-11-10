@@ -155,6 +155,67 @@ describe('CoordinationService PostgreSQL boundary', () => {
     const accept = async (service: CoordinationService, offerId: string) =>
         ((await service.decideOffer(requesterDid,{offerId,decision:'accept'},pickupTime)) as {connection:{id:string}}).connection.id;
 
+    it('lets neighbors ask for an offer, conceals them until one is accepted and closes the rest', async () => {
+        const service = new CoordinationService(pool);
+        const offerUri = secondRequestUri;
+        const askerDid = 'did:plc:offer-asker-without-profile';
+        await pool.query("UPDATE request_workflows SET post_type = 'offer' WHERE post_uri = $1", [offerUri]);
+        await pool.query("UPDATE indexer_aid_post_projections SET post_type = 'offer' WHERE uri = $1", [offerUri]);
+        await expect(service.createOffer(requesterDid, { requestUri: offerUri, note: null }, pickupTime))
+            .rejects.toMatchObject({ code: 'SELF_ASK_FORBIDDEN' });
+        // Asking does not need a volunteer profile; offering help on a request still does.
+        await expect(service.createOffer(askerDid, { requestUri, note: null }, pickupTime))
+            .rejects.toMatchObject({ code: 'ACTIVE_VOLUNTEER_PROFILE_REQUIRED' });
+        const ask = (did: string) => service.createOffer(did, { requestUri: offerUri, note: "I could pick it up Tuesday." }, pickupTime) as Promise<{ offer: { id: string } }>;
+        const first = (await ask(askerDid)).offer.id;
+        const second = (await ask(helperDid)).offer.id;
+        await expect(ask(askerDid)).rejects.toMatchObject({ code: 'OFFER_ALREADY_OPEN', message: 'You already asked for this offer.' });
+
+        const posterView = await service.listMine(requesterDid, pickupTime) as { offers: Record<string, unknown>[] };
+        expect(posterView.offers).toHaveLength(2);
+        for (const offer of posterView.offers) {
+            expect(offer).toMatchObject({ postType: 'offer', direction: 'received', status: 'pending' });
+            expect(offer).not.toHaveProperty('helperDid');
+        }
+        expect(JSON.stringify(posterView)).not.toContain(askerDid);
+        expect(await service.listInbox(requesterDid)).toMatchObject({ items: expect.arrayContaining([
+            expect.objectContaining({ title: 'Someone asked for your offer' }),
+        ]) });
+
+        // Two acceptances race: exactly one wins and the other ask is closed with a notice.
+        const results = await Promise.allSettled([first, second].map(offerId =>
+            service.decideOffer(requesterDid, { offerId, decision: 'accept' }, pickupTime)));
+        expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+        expect(results.find(result => result.status === 'rejected')).toMatchObject({ reason: { code: 'OFFER_NOT_PENDING' } });
+        const connections = await pool.query('SELECT helper_did FROM coordination_connections WHERE request_uri = $1', [offerUri]);
+        expect(connections.rows).toHaveLength(1);
+        const winner = connections.rows[0].helper_did as string;
+        const loser = winner === askerDid ? helperDid : askerDid;
+        expect(await service.listInbox(winner)).toMatchObject({ items: expect.arrayContaining([
+            expect.objectContaining({ title: 'Ask accepted' }),
+        ]) });
+        expect(await service.listInbox(loser)).toMatchObject({ items: expect.arrayContaining([
+            expect.objectContaining({ title: 'Ask closed', summary: 'The poster accepted someone else for this offer.' }),
+        ]) });
+        const winnerView = await service.listMine(winner, pickupTime) as { connections: Record<string, unknown>[] };
+        expect(winnerView.connections).toEqual([expect.objectContaining({ postType: 'offer', counterpartDid: requesterDid })]);
+
+        await expect(service.updatePickup(requesterDid, { action: 'set-capacity', requestUri: offerUri, helperCapacity: 3 }, pickupTime))
+            .rejects.toMatchObject({ code: 'PICKUP_NOT_FOR_OFFERS' });
+        await expect(service.matchRequest(requesterDid, { requestUri: offerUri, requiredLanguages: [], accessibilityNeeds: [] }, pickupTime))
+            .rejects.toMatchObject({ code: 'MATCH_NOT_FOR_OFFERS' });
+    });
+
+    it('words an expired ask on an offer as an ask', async () => {
+        const service = new CoordinationService(pool);
+        await pool.query("UPDATE request_workflows SET post_type = 'offer' WHERE post_uri = $1", [secondRequestUri]);
+        await service.createOffer(helperDid, { requestUri: secondRequestUri, note: null }, pickupTime);
+        await service.runExpirySweep(new Date(pickupTime.getTime() + 8 * 24 * 60 * 60 * 1000));
+        expect(await service.listInbox(helperDid)).toMatchObject({ items: expect.arrayContaining([
+            expect.objectContaining({ title: 'Ask expired', summary: 'An ask expired without being accepted.' }),
+        ]) });
+    });
+
     it('uses the county representative point for advisory matching and labels its distance origin', async () => {
         const area=lookupCountyArea('17031')!;
         await pool.query('UPDATE indexer_aid_post_projections SET county_id=$2,postal_code=NULL,latitude=$3,longitude=$4 WHERE uri=$1',[requestUri,area.countyId,area.latitude,area.longitude]);

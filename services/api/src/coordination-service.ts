@@ -85,6 +85,12 @@ export const localizedInboxCopy = (
         'Coordination reminder': 'Recordatorio de coordinación',
         'Coordination window expired': 'Ventana de coordinación vencida',
         'Coordination schedule updated': 'Agenda de coordinación actualizada',
+        'Someone asked for your offer': 'Alguien pidió lo que ofreciste',
+        'Ask closed': 'Pedido cerrado',
+        'Ask accepted': 'Pedido aceptado',
+        'Ask declined': 'Pedido rechazado',
+        'Ask withdrawn': 'Pedido retirado',
+        'Ask expired': 'Pedido vencido',
     };
     const summaries: Record<string, string> = {
         'The requester closed this pickup.': 'La persona solicitante cerró esta recogida.',
@@ -105,6 +111,15 @@ export const localizedInboxCopy = (
             'Una ventana de coordinación confirmada comienza pronto.',
         'Open your connection to review the schedule status.':
             'Abre tu conexión para revisar el estado de la agenda.',
+        'A neighbor asked for what you offered. Their identity stays private until you accept.':
+            'Una persona vecina pidió lo que ofreciste. Su identidad permanece privada hasta que aceptes.',
+        'The poster accepted someone else for this offer.':
+            'La persona que publicó aceptó a otra persona para esta oferta.',
+        'Your ask was accepted. Participant identities are now available in the connection.':
+            'Tu pedido fue aceptado. Las identidades de las personas participantes ya están disponibles en la conexión.',
+        'Your ask was declined.': 'Tu pedido fue rechazado.',
+        'The neighbor withdrew their ask.': 'La persona vecina retiró su pedido.',
+        'An ask expired without being accepted.': 'Un pedido venció sin ser aceptado.',
     };
     return {
         title: titles[title] ?? title,
@@ -118,6 +133,7 @@ interface WorkflowRow {
     current_status: string;
     helper_capacity: number;
     pickup_configured: boolean;
+    post_type: PostType;
 }
 
 interface OfferRow {
@@ -131,6 +147,7 @@ interface OfferRow {
     expires_at: Date | string;
     decided_at: Date | string | null;
     updated_at: Date | string;
+    post_type?: PostType;
 }
 
 interface ConnectionRow {
@@ -143,7 +160,47 @@ interface ConnectionRow {
     accepted_at: Date | string;
     completed_at: Date | string | null;
     updated_at: Date | string;
+    post_type?: PostType;
 }
+
+type PostType = 'request' | 'offer';
+
+/**
+ * Inbox wording for a response to a post. On a request the responder offers
+ * help; on an offer (#135) the responder asks for the item or help. The rows
+ * and rules are the same; only the words change.
+ */
+const responseCopy = (postType: PostType) => postType === 'offer' ? {
+    createdTitle: 'Someone asked for your offer',
+    createdSummary: 'A neighbor asked for what you offered. Their identity stays private until you accept.',
+    createdEvent: 'Asked for an offer.',
+    closedTitle: 'Ask closed',
+    supersededSummary: 'The poster accepted someone else for this offer.',
+    supersededEvent: 'Ask closed because another ask was accepted.',
+    decidedTitle: { accepted: 'Ask accepted', declined: 'Ask declined', cancelled: 'Ask withdrawn' },
+    decidedSummary: {
+        accepted: 'Your ask was accepted. Participant identities are now available in the connection.',
+        declined: 'Your ask was declined.',
+        cancelled: 'The neighbor withdrew their ask.',
+    },
+    expiredTitle: 'Ask expired',
+    expiredSummary: 'An ask expired without being accepted.',
+} : {
+    createdTitle: 'New offer on your request',
+    createdSummary: 'A volunteer offered to help. Their identity stays private until you accept.',
+    createdEvent: 'Help offered on a request.',
+    closedTitle: 'Offer closed',
+    supersededSummary: 'Another offer was accepted for this request.',
+    supersededEvent: 'Offer closed because another offer was accepted.',
+    decidedTitle: { accepted: 'Offer accepted', declined: 'Offer declined', cancelled: 'Offer cancelled' },
+    decidedSummary: {
+        accepted: 'The offer was accepted. Participant identities are now available in the connection.',
+        declined: 'The offer was declined.',
+        cancelled: 'The offer was cancelled.',
+    },
+    expiredTitle: 'Offer expired',
+    expiredSummary: 'An offer expired without being accepted.',
+};
 
 const invalid = (code: string, message: string): never => {
     throw new PublicHttpError(400, code, message);
@@ -163,6 +220,7 @@ export class CoordinationService {
             await client.query('BEGIN');
             const workflow = await this.loadWorkflow(client, parsed.data.requestUri, true);
             if (workflow.requester_did !== actorDid) throw new PublicHttpError(403, 'PICKUP_FORBIDDEN', 'Only the requester may manage this pickup.');
+            if (workflow.post_type === 'offer') throw new PublicHttpError(409, 'PICKUP_NOT_FOR_OFFERS', 'An offer goes to one neighbor. Pickups with several helpers are for requests.');
             await this.assertSafety(client, workflow, actorDid, ['open', 'triaged', 'assigned', 'in_progress']);
             const counts = await client.query<{occupied: number; active: number}>(`SELECT count(*) FILTER (WHERE status IN ('active','completed'))::int AS occupied,
                 count(*) FILTER (WHERE status='active')::int AS active FROM coordination_connections WHERE request_uri=$1`, [workflow.post_uri]);
@@ -215,7 +273,9 @@ export class CoordinationService {
                 true,
             );
             if (workflow.requester_did === actorDid) {
-                throw new PublicHttpError(
+                throw workflow.post_type === 'offer'
+                    ? new PublicHttpError(409, 'SELF_ASK_FORBIDDEN', 'You cannot ask for your own offer.')
+                    : new PublicHttpError(
                     409,
                     'SELF_OFFER_FORBIDDEN',
                     'A requester cannot offer on their own request.',
@@ -226,7 +286,9 @@ export class CoordinationService {
                 'triaged',
                 ...(workflow.pickup_configured ? ['assigned', 'in_progress'] : []),
             ]);
-            const eligible = await client.query(
+            // Offering help needs a volunteer profile. Asking for an offered item does not:
+            // the person asking is the one who needs something.
+            const eligible = workflow.post_type === 'offer' ? { rowCount: 1 } : await client.query(
                 `SELECT 1
                  FROM indexer_volunteer_profile_projections
                  WHERE author_did_hash = $1
@@ -270,7 +332,9 @@ export class CoordinationService {
                     throw new PublicHttpError(
                         409,
                         'OFFER_ALREADY_OPEN',
-                        'An open offer already exists for this request.',
+                        workflow.post_type === 'offer'
+                            ? 'You already asked for this offer.'
+                            : 'An open offer already exists for this request.',
                     );
                 }
                 throw error;
@@ -281,16 +345,15 @@ export class CoordinationService {
                 action: 'offered',
                 previousStatus: null,
                 nextStatus: 'pending',
-                summary: 'Help offered on a request.',
+                summary: responseCopy(workflow.post_type).createdEvent,
                 details: { requestUri: workflow.post_uri },
                 now,
             });
             await this.addInboxItem(client, {
                 recipientDid: workflow.requester_did,
                 type: 'offer',
-                title: 'New offer on your request',
-                summary:
-                    'A volunteer offered to help. Their identity stays private until you accept.',
+                title: responseCopy(workflow.post_type).createdTitle,
+                summary: responseCopy(workflow.post_type).createdSummary,
                 actionUrl: `/inbox?${new URLSearchParams({ uri: workflow.post_uri }).toString()}`,
                 sourceKey: `offer:${offerId}:created`,
                 metadata: { offerId, requestUri: workflow.post_uri },
@@ -310,6 +373,7 @@ export class CoordinationService {
                         expires_at: expiresAt,
                         decided_at: null,
                         updated_at: now,
+                        post_type: workflow.post_type,
                     },
                     actorDid,
                 ),
@@ -346,7 +410,7 @@ export class CoordinationService {
                 const existing = await client.query<ConnectionRow>('SELECT * FROM coordination_connections WHERE offer_id=$1', [offer.offer_id]);
                 if (existing.rows[0]?.status === 'completed' || (existing.rows[0]?.status === 'active' && plusDays(new Date(existing.rows[0].accepted_at), 30) > now)) {
                     await client.query('COMMIT');
-                    return { offer: this.renderOffer(offer, actorDid), connection: this.renderConnection(existing.rows[0], actorDid) };
+                    return { offer: this.renderOffer(offer, actorDid), connection: this.renderConnection({ ...existing.rows[0], post_type: workflow.post_type }, actorDid) };
                 }
             }
             if (offer.status !== 'pending') {
@@ -466,6 +530,7 @@ export class CoordinationService {
                     accepted_at: now,
                     completed_at: null,
                     updated_at: now,
+                    post_type: workflow.post_type,
                 };
                 if (workflow.pickup_configured) await client.query(
                     `UPDATE request_workflows SET current_status='assigned', updated_at=$2 WHERE post_uri=$1`, [offer.request_uri, now]);
@@ -487,16 +552,15 @@ export class CoordinationService {
                         action: 'cancelled',
                         previousStatus: 'pending',
                         nextStatus: 'cancelled',
-                        summary:
-                            'Offer closed because another offer was accepted.',
+                        summary: responseCopy(workflow.post_type).supersededEvent,
                         details: { requestUri: offer.request_uri },
                         now,
                     });
                     await this.addInboxItem(client, {
                         recipientDid: other.offerer_did,
                         type: 'offer',
-                        title: 'Offer closed',
-                        summary: 'Another offer was accepted for this request.',
+                        title: responseCopy(workflow.post_type).closedTitle,
+                        summary: responseCopy(workflow.post_type).supersededSummary,
                         actionUrl: `/inbox?${new URLSearchParams({ uri: offer.request_uri }).toString()}`,
                         sourceKey: `offer:${other.offer_id}:cancelled`,
                         metadata: { offerId: other.offer_id },
@@ -526,11 +590,8 @@ export class CoordinationService {
                         ? offer.offerer_did
                         : offer.requester_did,
                 type: nextStatus === 'accepted' ? 'assignment' : 'offer',
-                title: `Offer ${nextStatus}`,
-                summary:
-                    nextStatus === 'accepted'
-                        ? 'The offer was accepted. Participant identities are now available in the connection.'
-                        : `The offer was ${nextStatus}.`,
+                title: responseCopy(workflow.post_type).decidedTitle[nextStatus],
+                summary: responseCopy(workflow.post_type).decidedSummary[nextStatus],
                 actionUrl: connection ? `/inbox?connection=${encodeURIComponent(connection.connection_id)}`
                     : `/inbox?${new URLSearchParams({ uri: offer.request_uri }).toString()}`,
                 sourceKey: `offer:${offer.offer_id}:${nextStatus}`,
@@ -550,6 +611,7 @@ export class CoordinationService {
                         status: nextStatus,
                         decided_at: now,
                         updated_at: now,
+                        post_type: workflow.post_type,
                     },
                     actorDid,
                 ),
@@ -736,7 +798,7 @@ export class CoordinationService {
         const offers = await this.pool.query<OfferRow>(
             `SELECT offer_id, request_uri, requester_did, offerer_did,
                     note, status, offered_at, expires_at, decided_at,
-                    updated_at
+                    updated_at, (SELECT w.post_type FROM request_workflows w WHERE w.post_uri = request_uri) AS post_type
              FROM coordination_offers
              WHERE requester_did = $1 OR offerer_did = $1
              ORDER BY updated_at DESC, offer_id`,
@@ -744,7 +806,7 @@ export class CoordinationService {
         );
         const connections = await this.pool.query<ConnectionRow>(
             `SELECT connection_id, offer_id, request_uri, requester_did,
-                    helper_did, status, accepted_at, completed_at, updated_at
+                    helper_did, status, accepted_at, completed_at, updated_at, (SELECT w.post_type FROM request_workflows w WHERE w.post_uri = request_uri) AS post_type
              FROM coordination_connections
              WHERE requester_did = $1 OR helper_did = $1
              ORDER BY updated_at DESC, connection_id`,
@@ -1038,6 +1100,13 @@ export class CoordinationService {
                 403,
                 'MATCH_REQUEST_FORBIDDEN',
                 'Only the requester may review match suggestions.',
+            );
+        }
+        if (workflow.post_type === 'offer') {
+            throw new PublicHttpError(
+                409,
+                'MATCH_NOT_FOR_OFFERS',
+                'Volunteer suggestions are for requests. Neighbors ask for an offer from its page.',
             );
         }
         if (!['open', 'triaged'].includes(workflow.current_status)) {
@@ -1601,6 +1670,9 @@ export class CoordinationService {
              WHERE offer_id = $1 AND status = 'pending'`,
             [offer.offer_id, now],
         );
+        const postType = (await client.query<{ post_type: PostType }>(
+            'SELECT post_type FROM request_workflows WHERE post_uri = $1', [offer.request_uri],
+        )).rows[0]?.post_type ?? 'request';
         await this.recordEvent(client, {
             offerId: offer.offer_id,
             actorDid: null,
@@ -1615,8 +1687,8 @@ export class CoordinationService {
             await this.addInboxItem(client, {
                 recipientDid,
                 type: 'expiry',
-                title: 'Offer expired',
-                summary: 'An offer expired without being accepted.',
+                title: responseCopy(postType).expiredTitle,
+                summary: responseCopy(postType).expiredSummary,
                 actionUrl: `/inbox?${new URLSearchParams({ uri: offer.request_uri }).toString()}`,
                 sourceKey: `offer:${offer.offer_id}:expired`,
                 metadata: { offerId: offer.offer_id },
@@ -1716,7 +1788,7 @@ export class CoordinationService {
         lock = false,
     ): Promise<WorkflowRow> {
         const result = await client.query<WorkflowRow>(
-            `SELECT post_uri, requester_did, current_status, helper_capacity, pickup_configured
+            `SELECT post_uri, requester_did, current_status, helper_capacity, pickup_configured, post_type
              FROM request_workflows
              WHERE post_uri = $1 ${lock ? 'FOR UPDATE' : ''}`,
             [requestUri],
@@ -1739,7 +1811,7 @@ export class CoordinationService {
         const result = await client.query<OfferRow>(
             `SELECT offer_id, request_uri, requester_did, offerer_did,
                     note, status, offered_at, expires_at, decided_at,
-                    updated_at
+                    updated_at, (SELECT w.post_type FROM request_workflows w WHERE w.post_uri = request_uri) AS post_type
              FROM coordination_offers
              WHERE offer_id = $1 ${lock ? 'FOR UPDATE' : ''}`,
             [offerId],
@@ -1761,7 +1833,7 @@ export class CoordinationService {
     ): Promise<ConnectionRow> {
         const result = await client.query<ConnectionRow>(
             `SELECT connection_id, offer_id, request_uri, requester_did,
-                    helper_did, status, accepted_at, completed_at, updated_at
+                    helper_did, status, accepted_at, completed_at, updated_at, (SELECT w.post_type FROM request_workflows w WHERE w.post_uri = request_uri) AS post_type
              FROM coordination_connections
              WHERE connection_id = $1 ${lock ? 'FOR UPDATE' : ''}`,
             [connectionId],
@@ -1781,6 +1853,7 @@ export class CoordinationService {
         return {
             id: row.offer_id,
             requestUri: row.request_uri,
+            postType: row.post_type ?? 'request',
             direction: actorDid === row.requester_did ? 'received' : 'sent',
             note: row.note,
             status: row.status,
@@ -1801,6 +1874,7 @@ export class CoordinationService {
             id: row.connection_id,
             offerId: row.offer_id,
             requestUri: row.request_uri,
+            postType: row.post_type ?? 'request',
             status: row.status,
             requesterDid: row.requester_did,
             helperDid: row.helper_did,
