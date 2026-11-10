@@ -35,7 +35,8 @@ env:
 
 jobs:
     preflight:
-        runs-on: ubuntu-latest
+        # Homelab deploy keys accept only Kvant's address (Kvant and its Kuznya VM); the kvant label keeps this job off Buran.
+        runs-on: [ubuntu-latest, kvant]
         timeout-minutes: 15
         steps:
             - name: Require dispatch from Gitea main
@@ -287,7 +288,8 @@ jobs:
 
     deploy:
         needs: manifest
-        runs-on: ubuntu-latest
+        # Homelab deploy keys accept only Kvant's address (Kvant and its Kuznya VM); the kvant label keeps this job off Buran.
+        runs-on: [ubuntu-latest, kvant]
         timeout-minutes: 45
         steps:
             - uses: actions/checkout@v4
