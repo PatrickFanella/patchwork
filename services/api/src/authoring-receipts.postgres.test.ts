@@ -49,6 +49,18 @@ describe('durable authoring receipts', () => {
         await pool.query('DELETE FROM http_idempotency_commands');
         expect((await service.list(owner, new URLSearchParams())).total).toBe(1);
     });
+    it('records an offer as an offer workflow and lists it with its post type', async () => {
+        const offerUri = `at://${owner}/app.patchwork.aid.post/offer`;
+        await executor.execute({ ...command, idempotencyKey: 'receipt-offer' }, async () => ({
+            statusCode: 201, body: { uri: offerUri, cid: 'cid-offer', record: { title: 'Spare crib', status: 'open', postType: 'offer' } },
+        }));
+        expect((await pool.query('SELECT post_type FROM request_workflows WHERE post_uri=$1', [offerUri])).rows).toEqual([{ post_type: 'offer' }]);
+        expect((await service.list(owner, new URLSearchParams({ uri: offerUri }))).requests).toEqual([
+            expect.objectContaining({ uri: offerUri, postType: 'offer' }),
+        ]);
+        await create();
+        expect((await pool.query('SELECT post_type FROM request_workflows WHERE post_uri=$1', [uri])).rows).toEqual([{ post_type: 'request' }]);
+    });
     it('requires the current source version in the indexer before acknowledging publication', async () => {
         await create();
         await project('cid-old');

@@ -30,6 +30,11 @@ const aidCategoryValues = [
 
 const aidUrgencyValues = ['low', 'medium', 'high', 'critical'] as const;
 
+/** An absent postType is a request, so records written before offers existed keep their meaning. */
+export const aidPostTypeValues = ['request', 'offer'] as const;
+export type AidPostType = (typeof aidPostTypeValues)[number];
+export const aidPostTypeOf = (record: { postType?: AidPostType }): AidPostType => record.postType ?? 'request';
+
 const legacyAidLocationSchema = z.object({
     countyId:z.undefined().optional(),
     latitude: z.number().min(-90).max(90),
@@ -65,6 +70,7 @@ const aidLocationSchema = z.union([normalizedCountyLocationSchema, postalLocatio
 export const aidPostSchema = z.object({
     $type: z.literal(recordNsid.aidPost),
     version: z.enum(['1.0.0', '2.0.0', '3.0.0']),
+    postType: z.enum(aidPostTypeValues).optional(),
     title: z.string().min(1).max(140),
     description: z.string().min(1).max(5000),
     category: z.enum(aidCategoryValues),

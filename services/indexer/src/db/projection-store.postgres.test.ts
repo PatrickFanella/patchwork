@@ -25,6 +25,7 @@ const createEvent = (overrides: Partial<NormalizedFirehoseEvent> = {}): Normaliz
     receivedAt: '2026-07-11T12:00:00.000Z',
     payload: {
         kind: 'aid-post',
+        postType: 'request',
         title: 'Food support needed',
         description: 'Shelf-stable groceries requested.',
         category: 'food',
@@ -156,6 +157,36 @@ describe('PostgresProjectionStore', () => {
             expect(stored.rows[0].latitude).toBe(event.event.payload.approximateGeo.latitude);
             expect(stored.rows[0].longitude).toBe(event.event.payload.approximateGeo.longitude);
         }
+    });
+
+    it('projects an offer and keeps its post type when a later edit tries to change it', async () => {
+        const record = { $type: recordNsid.aidPost, version: '2.0.0', postType: 'offer', title: 'Spare crib',
+            description: 'Pick up this week.', category: 'childcare', urgency: 'low', status: 'open',
+            location: { countryCode: 'US', postalCode: '60614' }, createdAt: '2026-11-09T12:00:00.000Z' };
+        const uri = 'at://did:plc:giver/app.patchwork.aid.post/crib';
+        const created = normalizeFirehoseEvent({ seq: 600, receivedAt: '2026-11-09T12:00:00.000Z', action: 'create',
+            uri, collection: recordNsid.aidPost, authorDid: 'did:plc:giver', record });
+        const edited = normalizeFirehoseEvent({ seq: 601, receivedAt: '2026-11-09T12:05:00.000Z', action: 'update',
+            uri, collection: recordNsid.aidPost, authorDid: 'did:plc:giver',
+            record: { ...record, postType: 'request', title: 'Spare crib (edited)', updatedAt: '2026-11-09T12:05:00.000Z' } });
+        if (!created.success || !edited.success) throw new Error('Offer normalization failed.');
+        const store = new PostgresProjectionStore(pool);
+        await store.apply(created.event);
+        expect(await store.get(uri)).toMatchObject({ postType: 'offer', title: 'Spare crib' });
+        await store.apply(edited.event);
+        expect(await store.get(uri)).toMatchObject({ postType: 'offer', title: 'Spare crib (edited)' });
+    });
+
+    it('projects records written before offers existed as requests', async () => {
+        const event = normalizeFirehoseEvent({ seq: 610, receivedAt: '2026-11-09T12:00:00.000Z', action: 'create',
+            uri: 'at://did:plc:asker/app.patchwork.aid.post/legacy', collection: recordNsid.aidPost, authorDid: 'did:plc:asker',
+            record: { $type: recordNsid.aidPost, version: '2.0.0', title: 'Need a ride', description: 'Thursday clinic visit.',
+                category: 'transport', urgency: 'medium', status: 'open', location: { countryCode: 'US', postalCode: '60614' },
+                createdAt: '2026-11-09T12:00:00.000Z' } });
+        if (!event.success) throw new Error('Legacy normalization failed.');
+        const store = new PostgresProjectionStore(pool);
+        await store.apply(event.event);
+        expect((await store.get(event.event.uri))?.postType).toBe('request');
     });
 
     it('persists a normalized aid-post projection with privacy-safe identity and geography', async () => {

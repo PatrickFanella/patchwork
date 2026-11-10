@@ -117,6 +117,19 @@ describe('AidPostCommandService', () => {
         );
     });
 
+    it('publishes an offer and refuses an edit that changes the post type', async () => {
+        const at = client();
+        const service = new AidPostCommandService(async () => at);
+        const offer = { ...postalRecord, postType: 'offer' as const, title: 'Spare crib' };
+        await expect(service.create('session', offer)).resolves.toMatchObject({ record: { postType: 'offer' } });
+        const reference = { uri: 'at://did:plc:alice/app.patchwork.aid.post/3abc', expectedCid: 'bafy-current' };
+        await expect(service.update('session', { ...reference, record: offer })).rejects.toMatchObject({ code: 'POST_TYPE_FIXED' });
+        vi.mocked(at.get).mockResolvedValue({ ...reference, cid: 'bafy-current', record: offer });
+        await expect(service.update('session', { ...reference, record: { ...postalRecord, title: 'Now a request' } })).rejects.toMatchObject({ code: 'POST_TYPE_FIXED' });
+        await expect(service.update('session', { ...reference, record: { ...offer, title: 'Spare crib, still here' } })).resolves.toMatchObject({ record: { postType: 'offer' } });
+        expect(at.update).toHaveBeenCalledTimes(1);
+    });
+
     it('closes the current record using compare-and-swap', async () => {
         const at = client();
         const service = new AidPostCommandService(async () => at);

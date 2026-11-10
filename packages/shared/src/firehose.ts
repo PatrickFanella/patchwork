@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import {
     type AidPostRecord,
+    type AidPostType,
+    aidPostTypeOf,
     type DirectoryResourceRecord,
     type VolunteerProfileRecord,
     type RecordByNsid,
@@ -54,6 +56,7 @@ export interface NormalizedAidPost {
     countyId?: string;
     postalCode?: string;
     kind: 'aid-post';
+    postType: AidPostType;
     title: string;
     description: string;
     category: AidPostRecord['category'];
@@ -265,6 +268,7 @@ const normalizeRecordPayload = (
         const aidRecord = validated as AidPostRecord;
         return {
             kind: 'aid-post',
+            postType: aidPostTypeOf(aidRecord),
             title: aidRecord.title,
             description: aidRecord.description,
             category: aidRecord.category,

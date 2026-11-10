@@ -1,7 +1,7 @@
 {
     "lexicon": 1,
     "id": "app.patchwork.aid.post",
-    "revision": "3.0.0",
+    "revision": "3.1.0",
     "description": "Aid request/offer post record.",
     "defs": {
         "main": {
@@ -41,6 +41,14 @@
                     "description": {
                         "type": "string",
                         "maxLength": 5000
+                    },
+                    "postType": {
+                        "type": "string",
+                        "enum": [
+                            "request",
+                            "offer"
+                        ],
+                        "description": "Whether the author is asking for help or offering an item or help. Absent means request. Fixed when the record is created."
                     },
                     "category": {
                         "type": "string"

@@ -5,7 +5,8 @@ import type { IdempotentCommand, IdempotentResponse } from './http/idempotency-s
 
 const sourceResult = z.object({
     uri: z.string(), cid: z.string().min(1),
-    record: z.object({ title: z.string().min(1).max(140), status: z.enum(['open', 'in-progress', 'resolved', 'closed']) }),
+    record: z.object({ title: z.string().min(1).max(140), status: z.enum(['open', 'in-progress', 'resolved', 'closed']),
+        postType: z.enum(['request', 'offer']).default('request') }),
 });
 const sourcePaths = new Set(['/at/aid-posts', '/at/aid-posts/close', '/at/aid-posts/status/reconcile']);
 
@@ -24,10 +25,10 @@ export async function recordAuthoringReceipt(client: PoolClient, command: Idempo
         const privateStatus = { open: 'open', 'in-progress': 'in_progress', resolved: 'resolved', closed: 'archived' }[result.record.status];
         await client.query(`INSERT INTO request_workflows (post_uri, requester_did, current_status,
             create_command_id, retention_until, created_at, updated_at,
-            public_status, public_cid, public_synced_at, public_sync_state)
-            VALUES ($1, $2, $3, $4, NOW() + INTERVAL '365 days', NOW(), NOW(), $5, $6, NOW(), 'synced')
+            public_status, public_cid, public_synced_at, public_sync_state, post_type)
+            VALUES ($1, $2, $3, $4, NOW() + INTERVAL '365 days', NOW(), NOW(), $5, $6, NOW(), 'synced', $7)
             ON CONFLICT (post_uri) DO NOTHING`,
-            [result.uri, command.actorDid, privateStatus, `authoring:${result.uri}`, result.record.status, result.cid]);
+            [result.uri, command.actorDid, privateStatus, `authoring:${result.uri}`, result.record.status, result.cid, result.record.postType]);
     }
     await client.query(`INSERT INTO aid_authoring_receipts (post_uri, owner_did, title, source_cid, public_status)
         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (post_uri) DO UPDATE SET
@@ -45,21 +46,22 @@ export class AuthoringReceiptService {
         const uri = params.get('uri');
         const result = await this.pool.query<{
             total: string; uri: string | null; title: string | null; status: string | null;
-            source_cid: string | null; projected_cid: string | null; source_written_at: Date | null;
+            source_cid: string | null; projected_cid: string | null; source_written_at: Date | null; post_type: 'request' | 'offer' | null;
         }>(`WITH owned AS (
             SELECT r.post_uri AS uri, r.title, COALESCE(w.current_status, r.public_status) AS status,
-                r.source_cid, CASE WHEN w.public_sync_state IN ('pending', 'failed') THEN NULL ELSE p.cid END AS projected_cid, r.source_written_at
+                r.source_cid, CASE WHEN w.public_sync_state IN ('pending', 'failed') THEN NULL ELSE p.cid END AS projected_cid, r.source_written_at,
+                COALESCE(p.post_type, w.post_type) AS post_type
             FROM aid_authoring_receipts r
             LEFT JOIN request_workflows w ON w.post_uri = r.post_uri
             LEFT JOIN indexer_aid_post_projections p ON p.uri = r.post_uri
             WHERE r.owner_did = $1 AND r.deleted_at IS NULL AND r.retention_until > NOW()
             UNION ALL
-            SELECT p.uri, p.title, COALESCE(w.current_status, p.status), p.cid, p.cid, p.record_updated_at
+            SELECT p.uri, p.title, COALESCE(w.current_status, p.status), p.cid, p.cid, p.record_updated_at, p.post_type
             FROM indexer_aid_post_projections p LEFT JOIN request_workflows w ON w.post_uri = p.uri
             WHERE split_part(p.uri, '/', 3) = $1
                 AND NOT EXISTS (SELECT 1 FROM aid_authoring_receipts r WHERE r.post_uri = p.uri)
             UNION ALL
-            SELECT w.post_uri, 'Request', w.current_status, w.public_cid, NULL, w.updated_at
+            SELECT w.post_uri, CASE w.post_type WHEN 'offer' THEN 'Offer' ELSE 'Request' END, w.current_status, w.public_cid, NULL, w.updated_at, w.post_type
             FROM request_workflows w
             WHERE w.requester_did = $1 AND (w.retention_until IS NULL OR w.retention_until > NOW())
                 AND NOT EXISTS (SELECT 1 FROM aid_authoring_receipts r WHERE r.post_uri = w.post_uri)
@@ -71,7 +73,7 @@ export class AuthoringReceiptService {
         const total = Number(result.rows[0]?.total ?? 0);
         return { page, pageSize: 20, total, hasNextPage: page * 20 < total,
             requests: result.rows.filter(row => row.uri).map(row => ({
-                uri: row.uri!, title: row.title!, status: row.status!, sourceCid: row.source_cid,
+                uri: row.uri!, title: row.title!, status: row.status!, postType: row.post_type ?? 'request', sourceCid: row.source_cid,
                 sourceWrittenAt: row.source_written_at?.toISOString(),
                 publication: row.source_cid && row.source_cid === row.projected_cid ? 'projected' as const : 'pending' as const,
             })),

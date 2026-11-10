@@ -10,6 +10,7 @@ export interface AidPostProjection {
     cid: string | null;
     revision: string | null;
     authorDidHash: string;
+    postType: 'request' | 'offer';
     title: string;
     description: string;
     category: string;
@@ -82,6 +83,7 @@ interface ProjectionRow {
     cid: string | null;
     revision: string | null;
     author_did_hash: string;
+    post_type: 'request' | 'offer';
     title: string;
     description: string;
     category: string;
@@ -157,6 +159,7 @@ const toProjection = (row: ProjectionRow): AidPostProjection => ({
     cid: row.cid,
     revision: row.revision,
     authorDidHash: row.author_did_hash,
+    postType: row.post_type,
     title: row.title,
     description: row.description,
     category: row.category,
@@ -356,10 +359,10 @@ export class PostgresProjectionStore {
                         uri, collection, cid, revision, author_did_hash, title,
                         description, category, urgency, status, searchable_text,
                         latitude, longitude, precision_km, record_created_at,
-                        record_updated_at, source_cursor, source_event_id, postal_code, county_id
+                        record_updated_at, source_cursor, source_event_id, postal_code, county_id, post_type
                      ) VALUES (
                         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                        $13, $14, $15, $16, $17, $18, $19, $20
+                        $13, $14, $15, $16, $17, $18, $19, $20, $21
                      )
                      ON CONFLICT (uri) DO UPDATE SET
                         collection = EXCLUDED.collection,
@@ -374,6 +377,8 @@ export class PostgresProjectionStore {
                         searchable_text = EXCLUDED.searchable_text,
                         postal_code = EXCLUDED.postal_code,
                         county_id = EXCLUDED.county_id,
+                        -- postType is fixed at creation. A later PDS edit cannot turn a
+                        -- request into an offer under people who already responded.
                         latitude = EXCLUDED.latitude,
                         longitude = EXCLUDED.longitude,
                         precision_km = EXCLUDED.precision_km,
@@ -405,6 +410,7 @@ export class PostgresProjectionStore {
                         event.eventId,
                         payload.postalCode ?? null,
                         payload.countyId ?? null,
+                        payload.postType,
                     ],
                 );
             } else if (
@@ -584,7 +590,7 @@ export class PostgresProjectionStore {
             `SELECT uri, collection, cid, revision, author_did_hash, title, description,
                     category, urgency, status, searchable_text, latitude,
                     longitude, precision_km, record_created_at,
-                    record_updated_at, source_cursor, postal_code, county_id
+                    record_updated_at, source_cursor, postal_code, county_id, post_type
              FROM indexer_aid_post_projections
              WHERE uri = $1`,
             [uri],
@@ -597,7 +603,7 @@ export class PostgresProjectionStore {
             `SELECT uri, collection, cid, revision, author_did_hash, title,
                     description, category, urgency, status, searchable_text,
                     latitude, longitude, precision_km, record_created_at,
-                    record_updated_at, source_cursor, postal_code, county_id
+                    record_updated_at, source_cursor, postal_code, county_id, post_type
              FROM indexer_aid_post_projections
              ORDER BY uri`,
         );

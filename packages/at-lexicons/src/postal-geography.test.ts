@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { lookupPostalArea, postalLocationSchema, lookupCountyArea, countyLocationSchema, isSmallPostalArea } from './postal-geography.js';
-import { aidPostSchema, decodeAidPostFromAt, encodeAidPostForAt } from './validators.js';
+import { aidPostSchema, aidPostTypeOf, decodeAidPostFromAt, encodeAidPostForAt } from './validators.js';
 
 describe('public ZIP locations', () => {
     const record = {
@@ -10,6 +10,14 @@ describe('public ZIP locations', () => {
         location: { countryCode: 'US', postalCode: '00601' },
         createdAt: '2026-09-06T12:00:00.000Z',
     };
+
+    it('accepts request and offer post types, keeps them on the wire and rejects other values', () => {
+        expect(aidPostSchema.parse({ ...record, postType: 'offer' }).postType).toBe('offer');
+        expect(aidPostSchema.parse(record).postType).toBeUndefined();
+        expect(aidPostTypeOf(aidPostSchema.parse(record))).toBe('request');
+        expect(encodeAidPostForAt(aidPostSchema.parse({ ...record, postType: 'offer' })).postType).toBe('offer');
+        expect(aidPostSchema.safeParse({ ...record, postType: 'gift' }).success).toBe(false);
+    });
 
     it('warns for small land areas and publishes only the selected county', () => {
         expect(isSmallPostalArea('10006')).toBe(true);
