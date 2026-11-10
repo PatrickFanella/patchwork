@@ -164,6 +164,11 @@
     border-left-color: var(--mh-accent-2);
 }
 
+/* Offers have no urgency; a green edge and the "Offer" eyebrow mark them. */
+.mh-request-card--offer {
+    border-left-color: var(--mh-success);
+}
+
 .mh-request-card.is-selected {
     box-shadow: 0 0 0 3px var(--mh-accent), var(--mh-shadow);
 }

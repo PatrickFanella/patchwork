@@ -271,6 +271,8 @@ const buildAidQueryParams = (
         params.set('radiusKm', String(radiusKm));
     }
 
+    if (state.postType) params.set('postType', state.postType);
+
     if (state.category) {
         params.set('category', state.category);
     }
@@ -2236,6 +2238,7 @@ const mapAidPayloadToRecords = (
             const urgency = readString(row, 'urgency');
             const updatedAt = readString(row, 'updatedAt');
             const recordOrigin = readString(row, 'recordOrigin');
+            const postType = readString(row, 'postType') === 'offer' ? 'offer' : 'request';
             if (
                 !uri ||
                 !authorDid ||
@@ -2282,6 +2285,7 @@ const mapAidPayloadToRecords = (
                 :   {}),
                 card: createFeedCard({
                     id: parseRecordIdFromUri(uri, `remote-${index}`),
+                    postType,
                     title,
                     description: summary,
                     category: parseAidCategory(category),
@@ -2701,6 +2705,8 @@ export type CoordinationOfferStatus =
 export interface CoordinationOffer {
     id: string;
     requestUri: string;
+    /** 'offer' when this is an ask on someone's offer rather than an offer of help. */
+    postType?: 'request' | 'offer';
     direction: 'received' | 'sent';
     note: string | null;
     status: CoordinationOfferStatus;
@@ -2734,6 +2740,7 @@ export interface CoordinationConnection {
     id: string;
     offerId: string;
     requestUri: string;
+    postType?: 'request' | 'offer';
     status: 'active' | 'completed' | 'cancelled' | 'expired';
     requesterDid: string;
     helperDid: string;
@@ -3841,6 +3848,7 @@ export const createAidPostViaApi = async (
     const record = aidPostSchema.parse({
         $type: 'app.patchwork.aid.post',
         version: input.draft.location.countyId ? '3.0.0' : '2.0.0',
+        ...(input.draft.postType === 'offer' ? { postType: 'offer' } : {}),
         title: input.draft.title,
         description: input.draft.description,
         category: input.draft.category,
@@ -3872,6 +3880,7 @@ export const createAidPostViaApi = async (
             cid: result.data.cid,
             card: createFeedCard({
                 id: parseRecordIdFromUri(result.data.uri, input.rkey),
+                postType: record.postType ?? 'request',
                 title: record.title,
                 description: record.description,
                 category: record.category,
@@ -4021,6 +4030,8 @@ export interface OwnedRequestReceipt {
     uri: string;
     title: string;
     status: string;
+    /** Absent from APIs older than offers; treat as a request. */
+    postType?: 'request' | 'offer';
     sourceCid: string | null;
     sourceWrittenAt: string;
     publication: 'pending' | 'projected';

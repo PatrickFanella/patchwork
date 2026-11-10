@@ -21,6 +21,9 @@ export const aidStatuses = [
     'closed',
 ] as const;
 
+/** Requests ask for help; offers give an item or help. No filter shows both. */
+export const aidPostTypes = ['request', 'offer'] as const;
+export type AidPostType = (typeof aidPostTypes)[number];
 export type AidCategory = (typeof aidCategories)[number];
 export type AidStatus = (typeof aidStatuses)[number];
 export type AidUrgency = 'low' | 'medium' | 'high' | 'critical';
@@ -52,6 +55,7 @@ export interface DiscoveryFilterState {
     dataset?: 'all' | 'community' | 'demo';
     feedTab: FeedTab;
     text?: string;
+    postType?: AidPostType;
     category?: AidCategory;
     status?: AidStatus;
     minUrgency?: 1 | 2 | 3 | 4 | 5;
@@ -65,6 +69,7 @@ export interface DiscoveryFilterState {
 export interface SharedAidDiscoveryQuery {
     postalCode?: string;
     text?: string;
+    postType?: AidPostType;
     category?: AidCategory;
     status?: AidStatus;
     minUrgency?: 1 | 2 | 3 | 4 | 5;
@@ -208,6 +213,7 @@ export function normalizeDiscoveryFilterState(
     const feedTab: FeedTab = state.feedTab === 'nearby' ? 'nearby' : 'latest';
     const text = normalizeText(state.text);
     const category = normalizeCategory(state.category);
+    const postType = aidPostTypes.find(value => value === state.postType);
     const status = normalizeStatus(state.status);
     const minUrgency = normalizeUrgency(state.minUrgency);
     const postalArea = state.postalCode ? lookupPostalArea(state.postalCode) : undefined;
@@ -229,6 +235,7 @@ export function normalizeDiscoveryFilterState(
         ...(state.postalCode && /^\d{5}$/.test(state.postalCode) ? { postalCode: state.postalCode } : {}),
         // Legacy dataset links now open the same integrated discovery view.
         ...(text ? { text } : {}),
+        ...(postType ? { postType } : {}),
         ...(category ? { category } : {}),
         ...(status ? { status } : {}),
         ...(minUrgency ? { minUrgency } : {}),
@@ -273,6 +280,7 @@ export function toMapDiscoveryQuery(
     return {
         postalCode: state.postalCode,
         text: state.text,
+        postType: state.postType,
         category: state.category,
         status: state.status,
         minUrgency: state.minUrgency,
@@ -289,6 +297,7 @@ export function toFeedDiscoveryQuery(
     return {
         postalCode: state.postalCode,
         text: state.text,
+        postType: state.postType,
         category: state.category,
         status: state.status,
         minUrgency: state.minUrgency,
@@ -317,6 +326,7 @@ export function serializeDiscoveryFilterState(
     if (state.text) {
         params.set('q', state.text);
     }
+    if (state.postType) params.set('type', state.postType);
     if (state.category) {
         params.set('cat', state.category);
     }
@@ -375,6 +385,7 @@ export function parseDiscoveryFilterState(
         includeLibraries:
             params.get('libraries') === '1' || fallback.includeLibraries === true,
         text: params.get('q') ?? fallback.text,
+        postType: (params.get('type') ?? fallback.postType) as AidPostType | undefined,
         category: parsedCategory ?? fallback.category,
         status: parsedStatus ?? fallback.status,
         minUrgency:

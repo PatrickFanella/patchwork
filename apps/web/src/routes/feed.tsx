@@ -14,7 +14,7 @@ import {
 } from '../feed-ux';
 import { type ChatEntrySurface } from '../chat-ux';
 import { Badge } from '../components/Badge';
-import { Button } from '../components/Button';
+import { Button, ButtonLink } from '../components/Button';
 import { Banner } from '../components/Banner';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
@@ -572,12 +572,17 @@ export const FeedRoute = ({
                     ) : null
                 }
                 actions={
-                    <Button
-                        variant='accent'
-                        onClick={() => onNavigate('/posting')}
-                    >
-                        {t('dashboard.askForHelp')}
-                    </Button>
+                    <>
+                        <Button
+                            variant='accent'
+                            onClick={() => onNavigate('/posting')}
+                        >
+                            {t('dashboard.askForHelp')}
+                        </Button>
+                        <ButtonLink variant='secondary' href='/posting?type=offer'>
+                            {t('posting.offerHeading')}
+                        </ButtonLink>
+                    </>
                 }
             />
 
@@ -720,6 +725,7 @@ export const FeedRoute = ({
                                 <li key={card.id}>
                                     <RequestCard
                                         areaLabel={record?.countyId ? lookupCountyArea(record.countyId)?.areaLabel : undefined}
+                                        postType={card.postType}
                                         title={card.title}
                                         description={card.description}
                                         category={card.category}
@@ -729,7 +735,8 @@ export const FeedRoute = ({
                                             presentation
                                                 ? [
                                                       presentation.statusBadge,
-                                                      presentation.urgencyBadge,
+                                                      // Offers have no urgency of their own.
+                                                      card.postType === 'offer' ? undefined : presentation.urgencyBadge,
                                                       presentation.lifecycleBadge,
                                                   ]
                                                 : []

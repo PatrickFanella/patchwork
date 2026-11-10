@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     aidCategories,
+    aidPostTypes,
     aidStatuses,
     type DiscoveryFilterState,
 } from '../../discovery-filters';
@@ -70,6 +71,13 @@ export const DiscoveryToolbar = ({
     const activeFilters = useMemo<ActiveFilter[]>(() => {
         if (mode !== 'requests') return [];
         const active: ActiveFilter[] = [];
+        if (state.postType) {
+            active.push({
+                key: 'postType',
+                label: String(t(`discovery.postTypes.${state.postType}`)),
+                clear: { postType: undefined },
+            });
+        }
         if (state.category) {
             active.push({
                 key: 'category',
@@ -94,11 +102,12 @@ export const DiscoveryToolbar = ({
             });
         }
         return active;
-    }, [mode, state.category, state.minUrgency, state.status, t]);
+    }, [mode, state.category, state.minUrgency, state.postType, state.status, t]);
 
     const activeCount = activeFilters.length + extraActiveCount;
     const clearAll = () => {
         onPatch({
+            postType: undefined,
             category: undefined,
             status: undefined,
             minUrgency: undefined,
@@ -273,6 +282,24 @@ export const DiscoveryToolbar = ({
                         <div className='grid gap-6'>
                             {mode === 'requests' ? (
                                 <>
+                                    <ChipGroup legend={t('discovery.postType')}>
+                                        {aidPostTypes.map((postType) => (
+                                            <ToggleChip
+                                                key={postType}
+                                                pressed={state.postType === postType}
+                                                onClick={() =>
+                                                    onPatch({
+                                                        postType:
+                                                            state.postType === postType
+                                                                ? undefined
+                                                                : postType,
+                                                    })
+                                                }
+                                            >
+                                                {t(`discovery.postTypes.${postType}`)}
+                                            </ToggleChip>
+                                        ))}
+                                    </ChipGroup>
                                     <ChipGroup legend={t('discovery.category')}>
                                         {aidCategories.map((category) => (
                                             <ToggleChip

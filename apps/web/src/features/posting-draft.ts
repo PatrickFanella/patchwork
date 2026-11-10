@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const draftSchema = z.object({
+    postType: z.enum(['request', 'offer']).optional(),
     countyInstead: z.boolean().optional(),
     postalCode: z.string().max(5).optional(),
     title: z.string().max(140), description: z.string().max(5000),

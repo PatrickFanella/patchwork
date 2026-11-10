@@ -29,6 +29,7 @@ export type MapLifecycleStatus =
 
 export interface MapAidCard {
     id: string;
+    postType?: 'request' | 'offer';
     title: string;
     summary: string;
     category: AidCategory;
@@ -220,6 +221,9 @@ export function filterMapCards(
 
     return cards.filter(card => {
         if (query.text && !cardMatchesText(card, query.text)) {
+            return false;
+        }
+        if (query.postType && (card.postType ?? 'request') !== query.postType) {
             return false;
         }
         if (query.category && card.category !== query.category) {

@@ -592,6 +592,19 @@ describe('api client', () => {
         expect(String(url)).toContain('pageSize=20');
     });
 
+    it('sends the post-type filter and labels offers, defaulting missing types to requests', async () => {
+        const row = { authorDid: 'did:example:alice', title: 'Spare crib', summary: 'Pick up this week.', status: 'open',
+            category: 'childcare', urgency: 'low', updatedAt: '2026-11-09T10:00:00.000Z' };
+        const fetchMock = vi.fn(async () => createJsonResponse({ total: 2, page: 1, pageSize: 20, hasNextPage: false, results: [
+            { ...row, uri: 'at://did:example:alice/app.patchwork.aid.post/offer', postType: 'offer' },
+            { ...row, uri: 'at://did:example:alice/app.patchwork.aid.post/legacy' },
+        ] }));
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+        const result = await fetchFeedRecordsFromApi({ feedTab: 'latest', postType: 'offer' }, 'feed');
+        expect(String((fetchMock.mock.calls as unknown as Array<[unknown]>)[0]?.[0])).toContain('postType=offer');
+        expect(result.ok && result.data.map(record => record.card.postType)).toEqual(['offer', 'request']);
+    });
+
     it('loads all-area map results without substituting a city after clearing the area', async () => {
         const fetchMock = vi.fn(async () => createJsonResponse({ total: 0, page: 1, pageSize: 20, hasNextPage: false, results: [] }));
         globalThis.fetch = fetchMock as unknown as typeof fetch;

@@ -111,7 +111,8 @@
         "processing": "Procesando",
         "under-review": "En revisión",
         "upheld": "Aceptada",
-        "rejected": "Rechazada"
+        "rejected": "Rechazada",
+        "request": "Solicitud"
     },
     "route": {
         "home": "Inicio",
@@ -336,7 +337,12 @@
         "searchQuery": "Búsqueda: «{{text}}»",
         "showingCount": "Mostrando {{loaded}} de {{total}}",
         "resultCount_one": "{{count}} resultado",
-        "resultCount_other": "{{count}} resultados"
+        "resultCount_other": "{{count}} resultados",
+        "postType": "Mostrar",
+        "postTypes": {
+            "request": "Solicitudes",
+            "offer": "Ofertas"
+        }
     },
     "map": {
         "aggregateHelp": "{{count}} solicitudes coincidentes en el mapa. Elige un código postal para reducir la lista.",
@@ -532,7 +538,15 @@
         "zipLabel": "Código postal donde se necesita ayuda",
         "zipHelp": "Elige la zona postal de esta solicitud. Tu dirección permanece privada.",
         "resourceContext": "Solicitud a la comunidad sobre {{name}}",
-        "resourceContextHelp": "Tu solicitud se dirige a la comunidad de Patchwork. Contacta directamente a la organización para acceder a sus servicios."
+        "resourceContextHelp": "Tu solicitud se dirige a la comunidad de Patchwork. Contacta directamente a la organización para acceder a sus servicios.",
+        "postTypeLabel": "¿Qué vas a publicar?",
+        "postTypeRequest": "Necesito ayuda",
+        "postTypeOffer": "Puedo dar algo",
+        "offerHeading": "Ofrecer algo",
+        "offerDescription": "Ofrece un objeto o un favor puntual, como una cuna que ya no usas o un viaje el domingo. Tus vecinos ven la oferta y una zona amplia, y la piden. Tú eliges quién la recibe.",
+        "offerZipLabel": "Código postal donde puedes entregarlo",
+        "offerZipHelp": "Elige el código postal de esta oferta. Tu dirección sigue siendo privada.",
+        "publishOffer": "Publicar oferta"
     },
     "resources": {
         "nearestFirst": "Primero los más cercanos a la zona seleccionada. Las distancias son aproximadas.",
@@ -937,7 +951,11 @@
         "savingOutcome": "Guardando resultado…",
         "markingRead": "Marcando elemento como leído…",
         "offerTitle": "Oferta {{direction}}",
-        "connectionTitle": "Conexión · {{status}}"
+        "connectionTitle": "Conexión · {{status}}",
+        "askTitle": "Pedido {{direction}}",
+        "offeredBy": "Ofrecido por: {{did}}",
+        "askedBy": "Pedido por: {{did}}",
+        "withdrawAsk": "Retirar pedido"
     },
     "organizations": {
         "heading": "Organizaciones",
@@ -2170,5 +2188,26 @@
                 "closed": "Cerrada"
             }
         }
+    },
+    "offers": {
+        "offered": "Qué se ofrece",
+        "locationPrivacy": "Aquí no se muestran direcciones privadas. Acuerden los detalles de la entrega después de aceptar un pedido.",
+        "updates": "Novedades de la oferta",
+        "manage": "Administra tu oferta",
+        "next": "Cómo pedirla",
+        "ownerHelp": "Revisa quién la pidió y acepta a una persona. Al aceptar a una, se cierran los demás pedidos. La entrega continúa en Mi actividad.",
+        "askHelp": "Cuenta por qué te ayudaría y cuándo podrías recogerlo. La persona que lo publicó elige a una persona.",
+        "askPrivacy": "Quien publicó ve tu nota, no tu nombre, hasta que acepte tu pedido.",
+        "askNote": "¿Por qué te ayudaría y cuándo podrías recogerlo?",
+        "askForThis": "Pedir esto",
+        "signInAsk": "Inicia sesión para pedir esto",
+        "askSent": "Tu pedido fue enviado. Puedes seguirlo en Mi actividad.",
+        "askFailed": "Tu pedido no se confirmó. Vuelve a intentarlo para comprobarlo o enviar el mismo pedido.",
+        "notAccepting": "Esta oferta no acepta pedidos nuevos.",
+        "reviewAsks": "Revisar pedidos y organizar la entrega",
+        "demo": "Esta oferta es ficticia. No se pueden hacer pedidos reales.",
+        "postOwn": "Publica tu propia oferta",
+        "share": "Copiar enlace de la oferta",
+        "sequence": "Pídela → quien publicó acepta → envíen mensajes y acuerden una hora → completen la entrega."
     }
 }

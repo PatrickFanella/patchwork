@@ -8,6 +8,8 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface RequestCardProps {
     areaLabel?: string;
+    /** Offers carry a label so they are not mistaken for requests. */
+    postType?: 'request' | 'offer';
     title: string;
     description: string;
     category: string;
@@ -25,6 +27,7 @@ interface RequestCardProps {
 
 /** A single aid request as it appears in discovery lists. */
 export const RequestCard = ({
+    postType = 'request',
     title,
     areaLabel,
     description,
@@ -44,7 +47,7 @@ export const RequestCard = ({
         <article
             className={[
                 'mh-request-card',
-                `mh-request-card--urgency-${urgency}`,
+                postType === 'offer' ? 'mh-request-card--offer' : `mh-request-card--urgency-${urgency}`,
                 selected ? 'is-selected' : '',
                 className,
             ]
@@ -53,7 +56,9 @@ export const RequestCard = ({
         >
             <div className='mh-request-card__meta'>
                 <span className='mh-eyebrow'>
-                    {formatLocalizedLabel(t, category)}
+                    {postType === 'offer'
+                        ? `${t('labels.offer')} · ${formatLocalizedLabel(t, category)}`
+                        : formatLocalizedLabel(t, category)}
                 </span>
                 <time
                     className='mh-request-card__time'

@@ -103,7 +103,9 @@ export const CoordinationInboxRoute = ({ did }: { did: string }) => {
                 fetchCoordinationViaApi(),
                 fetchActivityInboxViaApi(unreadOnly),
                 fetchMyOutcomeFeedbackViaApi(),
-                fetchFeedRecordsFromApi(defaultDiscoveryFilterState, 'feed'),
+                // Requests to offer help on, and the viewer's own requests for matching.
+                // Offers are asked for from their own page, and matching is request-only.
+                fetchFeedRecordsFromApi({ ...defaultDiscoveryFilterState, postType: 'request' }, 'feed'),
             ]);
         const failure = [
             coordination,
@@ -269,7 +271,7 @@ export const CoordinationInboxRoute = ({ did }: { did: string }) => {
                         {offers.map((offer) => (
                             <Surface as='article' tone='quiet'
                                 key={offer.id}
-                                title={t('inbox.offerTitle', {
+                                title={t(offer.postType === 'offer' ? 'inbox.askTitle' : 'inbox.offerTitle', {
                                     direction: formatLocalizedLabel(
                                         t,
                                         offer.direction,
@@ -299,13 +301,13 @@ export const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                 ) : null}
                                 {offer.status === 'accepted' ? (
                                     <p className='mt-2 break-all text-xs'>
-                                        {t('inbox.requester', {
+                                        {t(offer.postType === 'offer' ? 'inbox.offeredBy' : 'inbox.requester', {
                                             did: offer.requesterDid
                                                 ? accountLabel(offer.requesterDid, handles)
                                                 : '',
                                         })}
                                         <br />
-                                        {t('inbox.helper', {
+                                        {t(offer.postType === 'offer' ? 'inbox.askedBy' : 'inbox.helper', {
                                             did: offer.helperDid
                                                 ? accountLabel(offer.helperDid, handles)
                                                 : '',
@@ -379,7 +381,7 @@ export const CoordinationInboxRoute = ({ did }: { did: string }) => {
                                                     )
                                                 }
                                             >
-                                                {t('inbox.cancelOffer')}
+                                                {t(offer.postType === 'offer' ? 'inbox.withdrawAsk' : 'inbox.cancelOffer')}
                                             </Button>
                                         )}
                                     </div>

@@ -66,6 +66,8 @@ export const DRAFT_ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024;
 export const DRAFT_ATTACHMENT_MAX_COUNT = 5;
 
 export interface AidPostingDraft {
+    /** Absent is a request. An offer gives an item or help; it has no urgency. */
+    postType?: 'request' | 'offer';
     title: string;
     description: string;
     category?: AidPostingCategory;
@@ -77,6 +79,7 @@ export interface AidPostingDraft {
 }
 
 export interface NormalizedAidPostingDraft {
+    postType?: 'request' | 'offer';
     title: string;
     description: string;
     category: AidPostingCategory;
@@ -218,6 +221,9 @@ export function validatePostingDraft(draft: AidPostingDraft): PostingValidationR
     const tags = normalizeAccessibilityTags(draft.accessibilityTags);
     const location = normalizeLocation(draft.location);
     const timeWindow = normalizeTimeWindow(draft.timeWindow);
+    const postType = draft.postType === 'offer' ? 'offer' : 'request';
+    // Offers are published at the lowest urgency; the form does not ask for one.
+    const urgency = postType === 'offer' ? 1 : draft.urgency;
 
     if (title.length < 1 || title.length > 140) {
         errors.push({
@@ -240,7 +246,7 @@ export function validatePostingDraft(draft: AidPostingDraft): PostingValidationR
         });
     }
 
-    if (!draft.urgency || draft.urgency < 1 || draft.urgency > 5) {
+    if (!urgency || urgency < 1 || urgency > 5) {
         errors.push({
             field: 'urgency',
             message: 'Urgency must be between 1 and 5.',
@@ -297,7 +303,7 @@ export function validatePostingDraft(draft: AidPostingDraft): PostingValidationR
         }
     }
 
-    if (errors.length > 0 || !draft.category || !draft.urgency || !location) {
+    if (errors.length > 0 || !draft.category || !urgency || !location) {
         return {
             ok: false,
             errors,
@@ -308,10 +314,11 @@ export function validatePostingDraft(draft: AidPostingDraft): PostingValidationR
         ok: true,
         errors: [],
         normalizedDraft: {
+            postType,
             title,
             description,
             category: draft.category,
-            urgency: draft.urgency,
+            urgency,
             accessibilityTags: tags,
             location,
             timeWindow,
@@ -341,6 +348,8 @@ export function buildAidPostCreatePayload(
     const recordCandidate = {
         $type: aidPostRecordNsid,
         version: normalizedDraft.location.countyId ? '3.0.0' : normalizedDraft.location.postalCode ? '2.0.0' : '1.0.0',
+        // Requests omit postType so their records stay readable by pre-offer validators.
+        ...(normalizedDraft.postType === 'offer' ? { postType: 'offer' } : {}),
         title: normalizedDraft.title,
         description: normalizedDraft.description,
         category: normalizedDraft.category,
@@ -412,6 +421,7 @@ export function toPostingDraftFromRecord(
     },
 ): AidPostingDraft {
     return {
+        ...(record.postType === 'offer' ? { postType: 'offer' as const } : {}),
         title: record.title,
         description: record.description,
         category: record.category,

@@ -52,6 +52,7 @@ const toUrgencyTone = (
 const toMapAidCard = (record: FeedRecordEnvelope): MapAidCard => {
     return {
         id: record.card.id,
+        postType: record.card.postType,
         title: record.card.title,
         summary: record.card.description,
         category: record.card.category,
@@ -598,6 +599,11 @@ export const MapRoute = ({
                                             {card.title}
                                         </p>
                                         <div className='flex flex-wrap gap-2'>
+                                            {card.postType === 'offer' ? (
+                                                <Badge tone='success'>
+                                                    {t('labels.offer')}
+                                                </Badge>
+                                            ) : (
                                             <Badge
                                                 tone={toUrgencyTone(
                                                     card.urgency,
@@ -607,6 +613,7 @@ export const MapRoute = ({
                                                     level: card.urgency,
                                                 })}
                                             </Badge>
+                                            )}
                                             <Badge
                                                 tone={toSeverityTone(
                                                     card.status,
@@ -711,6 +718,9 @@ export const MapRoute = ({
                             {drawer.summary}
                         </p>
                         <div className='mt-3 flex flex-wrap gap-2'>
+                            {selectedRecord.card.postType === 'offer' ? (
+                                <Badge tone='success'>{t('labels.offer')}</Badge>
+                            ) : null}
                             {drawer.status ? (
                                 <Badge tone={toSeverityTone(drawer.status)}>
                                     {drawer.status}

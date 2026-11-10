@@ -42,6 +42,15 @@ describe('discovery filters', () => {
         expect(parsed).toEqual(initial);
     });
 
+    it('round-trips the requests/offers filter and drops unknown post types', () => {
+        const state = applyDiscoveryFilterPatch(defaultDiscoveryFilterState, { postType: 'offer' });
+        expect(serializeDiscoveryFilterState(state)).toContain('type=offer');
+        expect(parseDiscoveryFilterState('?type=offer').postType).toBe('offer');
+        expect(parseDiscoveryFilterState('?type=gift').postType).toBeUndefined();
+        expect(toFeedDiscoveryQuery(state).postType).toBe('offer');
+        expect(toMapDiscoveryQuery(state).postType).toBe('offer');
+    });
+
     it('keeps libraries excluded unless explicitly enabled', () => {
         expect(parseDiscoveryFilterState('', defaultDiscoveryFilterState).includeLibraries).toBeUndefined();
         expect(parseDiscoveryFilterState('?libraries=1', defaultDiscoveryFilterState).includeLibraries).toBe(true);

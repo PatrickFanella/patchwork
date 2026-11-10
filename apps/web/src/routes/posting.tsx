@@ -59,6 +59,10 @@ export const PostingRoute = ({
     const { t } = useLocale();
     const resourceName = new URLSearchParams(window.location.search).get('resourceName');
     const [saved] = useState(() => loadPostingDraft(sessionStorage));
+    // /posting?type=offer opens the offer form; a saved draft keeps its own type.
+    const [postType, setPostType] = useState<'request' | 'offer'>(
+        saved?.postType ?? (new URLSearchParams(window.location.search).get('type') === 'offer' ? 'offer' : 'request'));
+    const isOffer = postType === 'offer';
     const [postalCode, setPostalCode] = useState(saved?.postalCode ?? new URLSearchParams(window.location.search).get('zip') ?? '');
     const [countyInstead, setCountyInstead] = useState(saved?.countyInstead ?? false);
     const postalArea=lookupPostalArea(postalCode);
@@ -123,9 +127,9 @@ export const PostingRoute = ({
     };
 
     useEffect(() => {
-        if (title || description || postalCode) savePostingDraft(sessionStorage, { title, description, postalCode, countyInstead, category, urgency, tagsText, startAt, endAt });
+        if (title || description || postalCode) savePostingDraft(sessionStorage, { postType, title, description, postalCode, countyInstead, category, urgency, tagsText, startAt, endAt });
         else clearPostingDraft(sessionStorage);
-    }, [title, description, postalCode, countyInstead, category, urgency, tagsText, startAt, endAt]);
+    }, [postType, title, description, postalCode, countyInstead, category, urgency, tagsText, startAt, endAt]);
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -134,6 +138,7 @@ export const PostingRoute = ({
         setProjectionFailed(false);
 
         const draft = {
+            postType,
             title,
             description,
             category,
@@ -229,8 +234,8 @@ export const PostingRoute = ({
     return (
         <section className='mx-auto max-w-3xl'>
             <PageHeader
-                title={t('posting.heading')}
-                description={t('posting.description')}
+                title={t(isOffer ? 'posting.offerHeading' : 'posting.heading')}
+                description={t(isOffer ? 'posting.offerDescription' : 'posting.description')}
             >
                 {resourceName && <Banner tone='info' title={t('posting.resourceContext', { name: resourceName })}>
                     <p>{t('posting.resourceContextHelp')}</p>
@@ -239,10 +244,20 @@ export const PostingRoute = ({
 
             <Surface aria-label={String(t('posting.formTitle'))}>
                 <form className='grid gap-5' onSubmit={handleSubmit}>
+                    <SegmentedControl
+                        label={String(t('posting.postTypeLabel'))}
+                        hideLabel={false}
+                        value={postType}
+                        options={[
+                            { value: 'request', label: t('posting.postTypeRequest') },
+                            { value: 'offer', label: t('posting.postTypeOffer') },
+                        ]}
+                        onChange={setPostType}
+                    />
                     <div>
-                        <label className='mb-1.5 block mh-field-label' htmlFor='posting-zip'>{t('posting.zipLabel')}</label>
+                        <label className='mb-1.5 block mh-field-label' htmlFor='posting-zip'>{t(isOffer ? 'posting.offerZipLabel' : 'posting.zipLabel')}</label>
                         <Input id='posting-zip' inputMode='numeric' autoComplete='postal-code' maxLength={5} pattern='[0-9]{5}' required value={postalCode} onChange={event => { setPostalCode(event.target.value); setCountyInstead(false); }} />
-                        <p className='mt-1 text-sm text-mh-textMuted'>{t('posting.zipHelp')}</p>
+                        <p className='mt-1 text-sm text-mh-textMuted'>{t(isOffer ? 'posting.offerZipHelp' : 'posting.zipHelp')}</p>
                         {smallZip && postalArea && <div className='mt-2 space-y-2'>
                             <p role='status'>{t('postal.smallZipWarning')}</p>
                             <label className='flex items-start gap-2'>
@@ -324,7 +339,7 @@ export const PostingRoute = ({
 
                     </div>
 
-                    <div>
+                    {isOffer ? null : <div>
                         <SegmentedControl
                             label={String(t('posting.urgencyLabel'))}
                             hideLabel={false}
@@ -339,7 +354,7 @@ export const PostingRoute = ({
                         <p className='mh-field-hint mt-1.5'>
                             {t('posting.urgencyHint')}
                         </p>
-                    </div>
+                    </div>}
 
                     <div>
                         <label
@@ -519,7 +534,7 @@ export const PostingRoute = ({
                         >
                             {isSubmitting
                                 ? t('posting.publishing')
-                                : t('posting.publishRequest')}
+                                : t(isOffer ? 'posting.publishOffer' : 'posting.publishRequest')}
                         </Button>
                         <Button
                             variant='secondary'
