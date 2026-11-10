@@ -1,0 +1,358 @@
+name: Mirror CI
+run-name: Mirror CI ${{ github.sha }}
+
+# Pull request verification on the public GitHub mirror. Gitea stays canonical:
+# a bridge reports the "Mirror CI gate" result for the exact pushed commit back
+# to Gitea as "GitHub CI / Mirror CI gate". Main is verified and deployed by
+# .gitea/workflows/ci.yml after merge. This workflow has no secrets and never
+# publishes images or deploys.
+on:
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Production builds require a content-addressed tile URL. Images built here
+  # are never published, so the format-valid placeholder used by
+  # apps/web/playwright.config.ts stands in for the staging variable.
+  VITE_MAP_TILE_URL: /tiles/us.0000000000000000000000000000000000000000000000000000000000000000.pmtiles
+
+jobs:
+  quality-gates:
+    if: github.repository == 'subculture-collective/patchwork'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Verify public source inventory
+        run: |
+          python3 -B -m unittest discover -s scripts -p 'test_inventory_public_sources.py'
+          python3 -B scripts/inventory_public_sources.py --format markdown > /tmp/patchwork-source-inventory.md
+          diff -u docs/data/source-inventory.md /tmp/patchwork-source-inventory.md
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Workspace lint scripts currently alias typecheck. The step above
+      # checks every workspace once; coverage runs the full unit suite once.
+      - name: Unit tests and coverage
+        run: |
+          npm run test:coverage
+          npm run test:maps
+          npm run test:exact-location-absence
+
+      - name: Operational controls and sprint traceability
+        run: npm run test:operations
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: Browser E2E tests (Phase 8.2)
+        env:
+          DEBUG: pw:browser
+        run: |
+          node scripts/quarantine-fixture-browser-artifacts.mjs --check
+          npm run test:e2e -w @patchwork/web
+
+      - name: Record browser runner resource limits
+        if: always()
+        run: |
+          df -h / /tmp /dev/shm
+          for metric in memory.max memory.peak memory.events pids.max pids.events; do
+            if [ -r "/sys/fs/cgroup/$metric" ]; then
+              echo "$metric"
+              cat "/sys/fs/cgroup/$metric"
+            fi
+          done
+
+      # Retry diagnostics stay inside this ephemeral job and are never
+      # uploaded. A failed browser step still fails the job.
+      - name: Withhold unreviewed fixture browser diagnostics
+        if: always()
+        run: node scripts/quarantine-fixture-browser-artifacts.mjs --quarantine
+
+      - name: Refuse unreviewed browser artifacts
+        if: always()
+        run: npm run test:e2e:redact
+
+      - name: Dependency vulnerability scan
+        run: npm audit --package-lock-only --audit-level=high
+
+      - name: Hardcoded secrets check
+        run: |
+          PATTERN='(POSTGRES_PASSWORD|password|secret_key|api_key|apikey)\s*[:=]\s*["\x27]?[a-zA-Z0-9]'
+          # Scan compose and env files for hardcoded secrets, excluding
+          # .env.example, docker-compose.postgres.yml (dev-only), and
+          # documentation / CI workflow files (.github and .gitea/workflows).
+          HITS=$(grep -riEn "$PATTERN" \
+            --include='*.yml' --include='*.yaml' --include='*.env' \
+            --exclude='.env.example' \
+            --exclude='docker-compose.postgres.yml' \
+            --exclude-dir='.github' \
+            --exclude-dir='docs' \
+            --exclude-dir='node_modules' \
+            . | grep -vE '^(\./)?\.gitea/workflows/' || true)
+          if [ -n "$HITS" ]; then
+            echo "::error::Possible hardcoded secrets detected:"
+            echo "$HITS"
+            exit 1
+          fi
+          echo "No hardcoded secrets found."
+
+      - name: Build
+        run: npm run build
+
+  # Same image builds and Trivy gates as Gitea CI, in parallel with the suites
+  # above. The images stay on this runner.
+  images:
+    if: github.repository == 'subculture-collective/patchwork'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Compute immutable image tag (#109)
+        id: image-tag
+        run: |
+          GIT_SHA=$(git rev-parse --short=7 HEAD)
+          BUILD_VERSION="0.9.0"
+          IMAGE_TAG="${BUILD_VERSION}-${GIT_SHA}"
+          {
+            echo "sha=${GIT_SHA}"
+            echo "version=${BUILD_VERSION}"
+            echo "tag=${IMAGE_TAG}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Image tag: ${IMAGE_TAG}"
+
+      - name: Build Docker images with immutable tags (#109)
+        id: build-images
+        env:
+          GIT_SHA: ${{ steps.image-tag.outputs.sha }}
+          GIT_BRANCH: ${{ github.ref_name }}
+          BUILD_VERSION: ${{ steps.image-tag.outputs.version }}
+          IMAGE_TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          docker build --target api-runtime \
+            --iidfile "$RUNNER_TEMP/patchwork-api-image-id" \
+            --build-arg GIT_SHA="$GIT_SHA" \
+            --build-arg GIT_BRANCH="$GIT_BRANCH" \
+            --build-arg BUILD_VERSION="$BUILD_VERSION" \
+            --build-arg CI_RUN_ID="$GITHUB_RUN_ID" \
+            -t "patchwork-api:$IMAGE_TAG" \
+            -t patchwork-api:ci .
+          echo "api-id=$(cat "$RUNNER_TEMP/patchwork-api-image-id")" >> "$GITHUB_OUTPUT"
+          docker build --target web-runtime \
+            --build-arg VITE_MAP_TILE_URL="$VITE_MAP_TILE_URL" \
+            --iidfile "$RUNNER_TEMP/patchwork-web-image-id" \
+            --build-arg GIT_SHA="$GIT_SHA" \
+            --build-arg GIT_BRANCH="$GIT_BRANCH" \
+            --build-arg BUILD_VERSION="$BUILD_VERSION" \
+            --build-arg CI_RUN_ID="$GITHUB_RUN_ID" \
+            -t "patchwork-web:$IMAGE_TAG" \
+            -t patchwork-web:ci .
+          echo "web-id=$(cat "$RUNNER_TEMP/patchwork-web-image-id")" >> "$GITHUB_OUTPUT"
+
+      - name: Trivy container scan — API
+        env:
+          IMAGE_ID: ${{ steps.build-images.outputs.api-id }}
+        run: |
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e \
+            image --image-src docker --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
+            --format table "$IMAGE_ID"
+
+      - name: Trivy container scan — Web
+        if: ${{ !cancelled() && steps.build-images.outcome == 'success' }}
+        env:
+          IMAGE_ID: ${{ steps.build-images.outputs.web-id }}
+        run: |
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e \
+            image --image-src docker --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
+            --format table "$IMAGE_ID"
+
+  # Wave 3 (#99): production-like E2E contract-path tests. On hosted runners
+  # the job runs on the VM, so services publish loopback ports on 127.0.0.1.
+  e2e-production:
+    if: github.repository == 'subculture-collective/patchwork'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NODE_ENV: production
+      API_DATA_SOURCE: postgres
+      ATPROTO_SERVICE_DID: did:example:patchwork-ci
+      ATPROTO_PDS_URL: https://bsky.social
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      # ClamAV loads its signature database for several minutes; start it
+      # first so that overlaps dependency install and the PostgreSQL suite.
+      - name: Start ClamAV
+        run: |
+          set -euo pipefail
+          docker run --detach --name patchwork-ci-clamav \
+            --publish 127.0.0.1:3310:3310 \
+            --health-cmd "clamdscan --ping 1 >/dev/null" \
+            --health-interval 30s \
+            --health-timeout 10s \
+            --health-retries 20 \
+            --health-start-period 360s \
+            clamav/clamav@sha256:6b7c8e09559250f25b0184516b0a2ae805136e57485260e16c780c9fd6e6aba9
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Start PostgreSQL integration service
+        run: |
+          set -euo pipefail
+          container=patchwork-ci-postgres
+          # Disposable fixture data avoids contention on the runner disk.
+          docker run --detach --name "$container" \
+            --tmpfs /var/lib/postgresql/data:rw,size=1g \
+            --publish 127.0.0.1:5432:5432 \
+            --env POSTGRES_DB=patchwork_test \
+            --env POSTGRES_USER=patchwork \
+            --env POSTGRES_PASSWORD=patchwork_ci \
+            --health-cmd "pg_isready -U patchwork -d patchwork_test" \
+            --health-interval 5s \
+            --health-timeout 3s \
+            --health-retries 20 \
+            postgres:16-alpine
+          for attempt in $(seq 1 20); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' "$container")
+            if [ "$status" = healthy ]; then break; fi
+            if [ "$status" = unhealthy ] || [ "$attempt" -eq 20 ]; then
+              docker logs "$container"
+              exit 1
+            fi
+            sleep 5
+          done
+          url=postgresql://patchwork:patchwork_ci@127.0.0.1:5432/patchwork_test
+          {
+            echo "API_DATABASE_URL=$url"
+            echo "DATABASE_URL=$url"
+            echo "TEST_DATABASE_URL=$url"
+          } >> "$GITHUB_ENV"
+
+      - name: Run database migrations
+        run: |
+          npm run db:migrate -w @patchwork/api
+          npm run db:migrate -w @patchwork/indexer
+          npm run db:migrate -w @patchwork/moderation-worker
+
+      - name: PostgreSQL integration tests
+        run: npm run test:integration:postgres
+
+      - name: Start private attachment integration services
+        env:
+          ATTACHMENT_OBJECT_ACCESS_KEY: patchwork-ci
+          ATTACHMENT_OBJECT_SECRET_KEY: patchwork-ci-secret-key
+        run: |
+          set -euo pipefail
+          objects=patchwork-ci-objects
+          clamav=patchwork-ci-clamav
+          docker build --file deploy/ci/minio.Dockerfile \
+            --tag patchwork-ci-minio:local deploy/ci
+          objects_image=$(docker image inspect --format '{{.Id}}' patchwork-ci-minio:local)
+          test -n "$objects_image"
+          # Disposable objects avoid the runner's backing-disk free-space limit.
+          docker run --detach --name "$objects" \
+            --tmpfs /data:rw,size=1g,uid=10001,gid=10001,mode=0700 \
+            --publish 127.0.0.1:9000:9000 \
+            --env MINIO_ROOT_USER="$ATTACHMENT_OBJECT_ACCESS_KEY" \
+            --env MINIO_ROOT_PASSWORD="$ATTACHMENT_OBJECT_SECRET_KEY" \
+            --health-cmd "curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null" \
+            --health-interval 10s \
+            --health-timeout 5s \
+            --health-retries 18 \
+            "$objects_image" \
+            server /data
+          for container in "$objects" "$clamav"; do
+            for attempt in $(seq 1 90); do
+              status=$(docker inspect --format '{{.State.Health.Status}}' "$container")
+              if [ "$status" = healthy ]; then break; fi
+              if [ "$status" = unhealthy ] || [ "$attempt" -eq 90 ]; then
+                docker logs "$container"
+                exit 1
+              fi
+              sleep 10
+            done
+          done
+          {
+            echo "TEST_ATTACHMENT_OBJECT_ENDPOINT=http://127.0.0.1:9000"
+            echo "TEST_ATTACHMENT_CLAMD_HOST=127.0.0.1"
+          } >> "$GITHUB_ENV"
+
+      - name: Private attachment provider integration tests
+        env:
+          TEST_ATTACHMENT_OBJECT_ACCESS_KEY: patchwork-ci
+          TEST_ATTACHMENT_OBJECT_SECRET_KEY: patchwork-ci-secret-key
+          TEST_ATTACHMENT_OBJECT_BUCKET: patchwork-ci
+          TEST_ATTACHMENT_CLAMD_PORT: '3310'
+        run: npm run test:integration:attachments -w @patchwork/api
+
+      - name: Stop integration services
+        if: always()
+        run: docker rm -f patchwork-ci-objects patchwork-ci-clamav patchwork-ci-postgres >/dev/null 2>&1 || true
+
+  mirror-gate:
+    name: Mirror CI gate
+    if: always() && github.repository == 'subculture-collective/patchwork'
+    needs:
+      - quality-gates
+      - images
+      - e2e-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every verification job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          expected = {'quality-gates', 'images', 'e2e-production'}
+          assert set(results) == expected, results
+          for name, result in results.items():
+              assert result["result"] == "success", name + " did not pass"
+          PY

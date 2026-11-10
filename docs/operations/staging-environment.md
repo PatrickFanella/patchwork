@@ -52,7 +52,7 @@ Parity is enforced programmatically by `checkStagingParity()` in
 ## Deployment workflow
 
 After both main push CI jobs pass, `CI / deploy-staging` dispatches
-`.github/workflows/deploy-staging.yml` with the full accepted main SHA.
+`.gitea/workflows/deploy-staging.yml` with the full accepted main SHA.
 Pull requests and GitHub mirror runs cannot trigger deployment. A manual
 dispatch on Gitea `main` remains available for retrying an accepted revision.
 The deployment workflow runs:
@@ -153,7 +153,7 @@ secondary responder, a staffed rotation, or production-hours coverage.
 | Environment health | Patrick Fanella |
 | Primary on-call | Patrick Fanella |
 | Escalation | Patrick Fanella |
-| Deployment pipeline | `.github/workflows/deploy-staging.yml` |
+| Deployment pipeline | `.gitea/workflows/deploy-staging.yml` |
 
 Patrick Fanella may act as Incident Commander for home-staging incidents and
 is the first escalation point for alerts. Contact routing remains

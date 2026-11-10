@@ -10,7 +10,7 @@ const read = (path: string) => readFileSync(resolve(root, path), 'utf8');
 
 describe('immutable staging deployment contract', () => {
     it('builds, scans, signs, and publishes all runtime images exactly once', () => {
-        const workflow = read('.github/workflows/deploy-staging.yml');
+        const workflow = read('.gitea/workflows/deploy-staging.yml');
         expect(workflow).toContain('REGISTRY: git.subcult.tv/subculture-collective');
         expect(workflow).toContain('password: ${{ secrets.STAGING_REGISTRY_TOKEN }}');
         for (const target of [
@@ -35,7 +35,7 @@ describe('immutable staging deployment contract', () => {
     });
 
     it('deploys only digests, runs real gates, and can restore the previous manifest', () => {
-        const workflow = read('.github/workflows/deploy-staging.yml');
+        const workflow = read('.gitea/workflows/deploy-staging.yml');
         const deploy = read('scripts/deploy-staging-digests.sh');
         const rollback = read('scripts/rollback-staging-digests.sh');
         expect(workflow).not.toContain('environment: staging');
@@ -66,7 +66,7 @@ describe('immutable staging deployment contract', () => {
     });
 
     it('contains no echo-only deployment or progressive-delivery success claims', () => {
-        const ci = read('.github/workflows/ci.yml');
+        const ci = read('.gitea/workflows/ci.yml');
         expect(ci).not.toContain('PASS: All images built with immutable tags');
         expect(ci).not.toContain('Checkpoint: health-probe ......... PASS');
         expect(ci).not.toContain('Result: All checkpoints passed');

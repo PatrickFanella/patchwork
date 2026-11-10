@@ -38,7 +38,7 @@
       "tests": [
         {
           "kind": "automated",
-          "path": ".github/workflows/deploy-staging.yml",
+          "path": ".gitea/workflows/deploy-staging.yml",
           "covers": ["PPR-1-AC1"]
         },
         {

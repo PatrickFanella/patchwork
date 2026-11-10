@@ -6,10 +6,12 @@ do not commit resolved Compose output or an environment file.
 
 ## Gitea workflow configuration
 
-`.github/workflows/deploy-staging.yml` targets
-`git.subcult.tv/subculture-collective/patchwork`. Gitea loads the existing
-`.github/workflows` directory; do not introduce a second workflow directory
-that shadows CI. After both push CI gates pass, `CI / deploy-staging` uses the
+`.gitea/workflows/deploy-staging.yml` targets
+`git.subcult.tv/subculture-collective/patchwork`. Gitea loads only
+`.gitea/workflows`, which holds main CI and deployment. `.github/workflows`
+holds only `mirror-ci.yml`, which runs pull request branches on the public
+GitHub mirror and reports `GitHub CI / Mirror CI gate` back to Gitea; it has no
+secrets and cannot deploy. After both push CI gates pass, `CI / deploy-staging` uses the
 job token with `actions: write` to dispatch the current main SHA as `source_sha`.
 The dispatcher rechecks main and both successful push statuses before its
 request. Manual dispatch from `main` remains available for retries.
