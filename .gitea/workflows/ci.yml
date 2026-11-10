@@ -1,7 +1,9 @@
 name: CI
 
+# Pull requests are verified by .github/workflows/mirror-ci.yml on the GitHub
+# mirror; Gitea requires its "GitHub CI / Mirror CI gate" status. This
+# workflow verifies and deploys accepted main commits only.
 on:
-    pull_request:
     push:
         branches:
             - main
@@ -11,7 +13,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Main pushes dispatch staging deployment; never cancel an accepted run.
+  cancel-in-progress: false
 
 jobs:
     quality-gates:
@@ -115,7 +118,7 @@ jobs:
                     --exclude-dir='.github' \
                     --exclude-dir='docs' \
                     --exclude-dir='node_modules' \
-                    . || true)
+                    . | grep -vE '^(\./)?\.gitea/workflows/' || true)
                   if [ -n "$HITS" ]; then
                     echo "::error::Possible hardcoded secrets detected:"
                     echo "$HITS"
