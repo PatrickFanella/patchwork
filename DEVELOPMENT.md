@@ -1,5 +1,11 @@
 > For the product overview, see the [README](README.md).
 
+## Native iOS shell
+
+The independent Xcode project, environment configuration, unsigned build command
+and simulator-access limit are in [apps/ios/README.md](apps/ios/README.md).
+It is not an npm workspace and does not require JavaScript for compilation.
+
 # Patchwork
 
 Prototype for an intended AT Protocol-native mutual aid platform with a web client, query API, ingestion/indexing pipeline, and moderation worker.
@@ -236,9 +242,3 @@ https://www2.onnwee.me
 
 
 Transactional email can use Brevo; see [the setup and cutover guide](docs/brevo-email.md).
-
-## Native iOS shell
-
-The independent Xcode project, environment configuration, unsigned build command
-and simulator-access limit are in [apps/ios/README.md](apps/ios/README.md).
-It is not an npm workspace and does not require JavaScript for compilation.
