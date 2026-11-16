@@ -6,6 +6,9 @@ bundled English and Spanish, then add languages through resources and locale
 registration. No paid translation platform, live translation API or automatic
 translation of member content is part of this work.
 
+The maintained Android shell integration, validation and translator handoff are
+documented in [Android localization](android.md).
+
 ## Ownership and key conventions
 
 The web `en.json`/`es.json` files supply initial member-flow copy. After import,
