@@ -10,6 +10,10 @@ Settings includes a persisted system-default/English/Spanish language choice.
 See [Android localization](../../docs/localization/android.md) for native
 resource validation, translator export/import and large-text pseudolocale tests.
 
+Settings also provides the native provider-login and protected-session surface
+for #258. See [Android native sign-in](../../docs/operations/android-native-auth.md)
+for callback allowlists, storage boundaries, fixture tests and pending device/security gates.
+
 Build with JDK 21 and Android SDK platform 36/build tools 35.0.0:
 
 ```sh
