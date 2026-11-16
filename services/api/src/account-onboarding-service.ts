@@ -20,6 +20,7 @@ const consentExemptPaths = new Set([
     '/account/preferences',
     '/account/export',
     '/account/deactivate',
+    '/account/delete',
 ]);
 
 export const isConsentExemptPath = (pathname: string): boolean =>
