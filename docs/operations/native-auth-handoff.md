@@ -67,3 +67,9 @@ CSRF and client unit tests, 50 rate-limiter/config tests, two native binding
 unit tests and nine disposable PostgreSQL native/session/retention tests passed.
 The PostgreSQL caller also checks the shared browser completion responder's
 secure session/CSRF cookies and sanitized return path.
+
+Pending completion rows may retain the account DID for their remaining
+60-second lifetime after account deletion. They cannot recreate access:
+session creation checks the persistent suppression marker under the same
+account lock. The retention sweep removes expired completion rows.
+English/Spanish login and callback browser checks passed (four journeys).
