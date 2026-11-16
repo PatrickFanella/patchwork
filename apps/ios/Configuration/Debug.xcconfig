@@ -1,0 +1,4 @@
+// Reserved test identity; makes no claim to a store bundle identifier.
+PATCHWORK_BUNDLE_ID = org.example.patchwork.shell.development
+PATCHWORK_ENVIRONMENT = development
+PATCHWORK_API_BASE_URL = http:/$()/127.0.0.1:4000

@@ -236,3 +236,9 @@ https://www2.onnwee.me
 
 
 Transactional email can use Brevo; see [the setup and cutover guide](docs/brevo-email.md).
+
+## Native iOS shell
+
+The independent Xcode project, environment configuration, unsigned build command
+and simulator-access limit are in [apps/ios/README.md](apps/ios/README.md).
+It is not an npm workspace and does not require JavaScript for compilation.

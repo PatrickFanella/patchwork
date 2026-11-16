@@ -1,0 +1,2 @@
+// Supply PATCHWORK_BUNDLE_ID and PATCHWORK_API_BASE_URL explicitly at build time.
+PATCHWORK_ENVIRONMENT = release

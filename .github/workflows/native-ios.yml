@@ -1,0 +1,26 @@
+name: Native iOS shell
+on:
+  pull_request:
+    paths: ['apps/ios/**', '.github/workflows/native-ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Compile unsigned simulator app and smoke-test target
+        run: |
+          xcodebuild -version
+          xcodebuild -quiet -project apps/ios/Patchwork.xcodeproj \
+            -scheme Patchwork -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/patchwork-ios" CODE_SIGNING_ALLOWED=NO build-for-testing
+      - name: Compile staging environment
+        run: |
+          xcodebuild -quiet -project apps/ios/Patchwork.xcodeproj \
+            -scheme Patchwork -configuration Staging -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/patchwork-ios-staging" CODE_SIGNING_ALLOWED=NO build
