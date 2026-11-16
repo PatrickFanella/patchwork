@@ -10,6 +10,7 @@ import {
 } from '@patchwork/at-client';
 import type { ApiConfig } from '@patchwork/shared';
 import type { Pool } from 'pg';
+import { NativeHandoffService, PostgresNativeCompletionStore } from './native-handoff.js';
 import { AtAuthService } from './at-auth-service.js';
 import {
     AesGcmJsonCipher,
@@ -21,6 +22,7 @@ import {
 
 export interface AtAuthRuntime {
     service: AtAuthService;
+    nativeHandoff: NativeHandoffService;
     clientMetadata: NodeOAuthClient['clientMetadata'];
     aidPostClient(sessionToken: string): Promise<AidPostRecordClient>;
     directoryResourceClient(
@@ -68,13 +70,20 @@ export const createAtAuthRuntime = (
         sessionStore: new PostgresOAuthSessionStore(pool, cipher),
     });
 
+    const sessions = new PostgresBrowserSessionRepository(pool);
+    const nativeHandoff = new NativeHandoffService(
+        config.API_NATIVE_CALLBACK_URLS.split(',').map(value => value.trim()).filter(Boolean),
+        new PostgresNativeCompletionStore(pool), sessions,
+    );
     const service = new AtAuthService(
             createNodeOAuthAdapter(client),
-            new PostgresBrowserSessionRepository(pool),
+            sessions,
+            nativeHandoff,
         );
 
     return {
         service,
+        nativeHandoff,
         clientMetadata: client.clientMetadata,
         resolveIdentity: async (identifier, signal) => {
             const identity = await client.identityResolver.resolve(

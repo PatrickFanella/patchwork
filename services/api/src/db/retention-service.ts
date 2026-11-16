@@ -40,6 +40,7 @@ export class PostgresRetentionService {
         try {
             await client.query('BEGIN');
             const cutoff = new Date(now.getTime() - REPLAY_RETENTION_MS);
+            await client.query('DELETE FROM native_auth_completions WHERE expires_at <= $1', [now.toISOString()]);
             const oauthStates = await client.query(
                 'DELETE FROM at_oauth_state WHERE expires_at <= $1',
                 [now.toISOString()],

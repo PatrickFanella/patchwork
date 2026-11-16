@@ -1,3 +1,5 @@
+import { completeOAuthResponse } from './http/oauth-completion.js';
+import { createNativeAuthHandler, nativeAuthPaths } from './http/native-auth-handler.js';
 import { renderRegisteredSourceMetrics } from './source-refresh/source-refresh-metrics.js';
 import { ResourceCorrectionService } from './resource-correction-service.js';
 import { createResourceCorrectionHandler } from './http/resource-correction-handler.js';
@@ -33,7 +35,6 @@ import {
 import { AtClientError } from '@patchwork/at-client';
 import { createAtAuthRuntime } from './auth/runtime.js';
 import {
-    oauthCallbackLandingPath,
     serializeSessionCookie,
 } from './auth/at-auth-service.js';
 import { AidPostCommandService } from './records/aid-post-command-service.js';
@@ -160,7 +161,6 @@ import {
 import { securityHeaders } from './http/security-headers.js';
 import {
     assertCsrfProtection,
-    createCsrfToken,
     serializeCsrfCookie,
 } from './http/csrf.js';
 import {
@@ -1100,6 +1100,9 @@ const writeAtAuthError = (response: ServerResponse, error: unknown): void => {
     });
 };
 
+const nativeAuthHandler = atAuthRuntime
+    ? createNativeAuthHandler(atAuthRuntime.service, atAuthRuntime.nativeHandoff) : undefined;
+
 const handleRealAuthRoute = (
     request: IncomingMessage,
     response: ServerResponse,
@@ -1284,33 +1287,9 @@ const handleRealAuthRoute = (
                 request.method === 'GET' &&
                 requestUrl.pathname === '/oauth/callback'
             ) {
-                const result = await atAuthRuntime.service.completeLogin(
-                    requestUrl.searchParams,
-                );
-                const csrfToken = createCsrfToken();
-                console.info(
-                    JSON.stringify({
-                        level: 'info',
-                        event: 'oauth_callback_completed',
-                    }),
-                );
-                response.writeHead(302, {
-                    location: new URL(
-                        oauthCallbackLandingPath(result.returnTo),
-                        config.API_PUBLIC_ORIGIN,
-                    ).toString(),
-                    'set-cookie': [
-                        serializeSessionCookie(
-                            result.sessionToken,
-                            config.NODE_ENV === 'production',
-                        ),
-                        serializeCsrfCookie(
-                            csrfToken,
-                            config.NODE_ENV === 'production',
-                        ),
-                    ],
-                });
-                response.end();
+                await completeOAuthResponse(atAuthRuntime.service, requestUrl.searchParams,
+                    response, config.API_PUBLIC_ORIGIN, config.NODE_ENV === 'production');
+                console.info(JSON.stringify({ level: 'info', event: 'oauth_callback_completed' }));
                 return;
             }
 
@@ -1952,6 +1931,7 @@ type ApiRouteHandler = (
 ) => ApiRouteResult | Promise<ApiRouteResult>;
 
 const contractRoutes = [
+    ...nativeAuthPaths,
     '/oauth/client-metadata.json',
     '/auth/signup',
     '/admin/signup-invitations',
@@ -2246,6 +2226,14 @@ export const createApiServer = () => {
             return;
         }
 
+        if (nativeAuthPaths.includes(requestUrl.pathname)) {
+            if (config.NODE_ENV === 'production' && new URL(config.API_PUBLIC_ORIGIN).protocol !== 'https:') {
+                writePublicError(response, new PublicHttpError(503, 'NATIVE_AUTH_UNAVAILABLE', 'Native sign-in requires HTTPS.'));
+            } else if (!nativeAuthHandler?.(request, response, requestUrl)) {
+                writePublicError(response, new PublicHttpError(503, 'NATIVE_AUTH_UNAVAILABLE', 'Native sign-in is unavailable.'));
+            }
+            return;
+        }
         if (handleRealAuthRoute(request, response, requestUrl)) {
             return;
         }
