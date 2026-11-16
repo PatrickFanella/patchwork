@@ -1,0 +1,4 @@
+PATCHWORK_BUNDLE_ID = org.example.patchwork.shell.staging
+PATCHWORK_ENVIRONMENT = staging
+// Reserved non-routable endpoint. Override for an authorized staging install.
+PATCHWORK_API_BASE_URL = https:/$()/staging.patchwork.invalid/api
