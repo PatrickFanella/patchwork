@@ -28,7 +28,7 @@ App/build version is 0.1.0 (1), visible with environment in About.
 ## Verification on 2026-11-15
 
 Soyuz Xcode 27.2 (27B52), Swift 6.4.2, simulator SDK 27.2: unsigned Debug app
-and UI-test target compiled successfully from a task-owned copy at
+and UI-test target plus the Staging app compiled successfully from a task-owned copy at
 `/Users/onnwee/Work/Builds/patchwork-wave2-9c67d399`. This is compilation only.
 The same checks run from checkout in `.github/workflows/native-ios.yml`.
 
@@ -45,3 +45,7 @@ Native list/navigation accessibility follows [SwiftUI's built-in accessibility
 behavior](https://developer.apple.com/documentation/SwiftUI/View-Accessibility);
 physical-device, larger-text and screen-reader qualification remain future
 acceptance work.
+
+The shell declares the SwiftUI scene lifecycle explicitly and uses a named
+light/dark accent. Source review caught both before release. Simulator launch
+is still unverified despite successful compilation.

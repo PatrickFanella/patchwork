@@ -28,7 +28,7 @@ struct ShellView: View {
             }
             .tabItem { Label("shell.settings", systemImage: "gearshape") }
         }
-        .tint(Color(red: 0.27, green: 0.35, blue: 0.23))
+        .tint(Color("PatchworkAccent"))
     }
 }
 

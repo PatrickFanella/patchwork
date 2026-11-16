@@ -3,7 +3,7 @@
 000000000000000000000001 = { isa = PBXProject; attributes = { BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2720; TargetAttributes = { 00000000000000000000000A = { CreatedOnToolsVersion = 27.2; }; 00000000000000000000000B = { CreatedOnToolsVersion = 27.2; TestTargetID = 00000000000000000000000A; }; }; }; buildConfigurationList = 000000000000000000000028; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en, es, Base); mainGroup = 000000000000000000000002; productRefGroup = 000000000000000000000003; projectDirPath = ""; projectRoot = ""; targets = (00000000000000000000000A, 00000000000000000000000B); };
 000000000000000000000002 = { isa = PBXGroup; children = (000000000000000000000004, 000000000000000000000005, 000000000000000000000006, 000000000000000000000003); sourceTree = "<group>"; };
 000000000000000000000003 = { isa = PBXGroup; name = Products; children = (000000000000000000000014, 000000000000000000000015); sourceTree = "<group>"; };
-000000000000000000000004 = { isa = PBXGroup; path = Patchwork; children = (000000000000000000000016, 000000000000000000000017, 000000000000000000000018, 000000000000000000000019); sourceTree = "<group>"; };
+000000000000000000000004 = { isa = PBXGroup; path = Patchwork; children = (000000000000000000000016, 000000000000000000000017, 000000000000000000000018, 000000000000000000000019, 000000000000000000000051); sourceTree = "<group>"; };
 000000000000000000000005 = { isa = PBXGroup; path = PatchworkUITests; children = (00000000000000000000001A); sourceTree = "<group>"; };
 000000000000000000000006 = { isa = PBXGroup; path = Configuration; children = (00000000000000000000001B, 00000000000000000000001C, 00000000000000000000001D); sourceTree = "<group>"; };
 000000000000000000000014 = { isa = PBXFileReference; explicitFileType = wrapper.application; path = Patchwork.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -21,7 +21,7 @@
 000000000000000000000020 = { isa = PBXBuildFile; fileRef = 000000000000000000000018; };
 000000000000000000000021 = { isa = PBXBuildFile; fileRef = 00000000000000000000001A; };
 00000000000000000000000C = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000001E, 00000000000000000000001F); runOnlyForDeploymentPostprocessing = 0; };
-00000000000000000000000D = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000020); runOnlyForDeploymentPostprocessing = 0; };
+00000000000000000000000D = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000020, 000000000000000000000052); runOnlyForDeploymentPostprocessing = 0; };
 00000000000000000000000E = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 00000000000000000000000F = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000021); runOnlyForDeploymentPostprocessing = 0; };
 000000000000000000000010 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
@@ -43,4 +43,6 @@
 000000000000000000000047 = { isa = XCBuildConfiguration; buildSettings = { PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = "org.example.patchwork.shell.uitests"; GENERATE_INFOPLIST_FILE = YES; TEST_TARGET_NAME = Patchwork; TARGETED_DEVICE_FAMILY = 1; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Staging; };
 000000000000000000000048 = { isa = XCBuildConfiguration; buildSettings = { PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = "org.example.patchwork.shell.uitests"; GENERATE_INFOPLIST_FILE = YES; TEST_TARGET_NAME = Patchwork; TARGETED_DEVICE_FAMILY = 1; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Release; };
 000000000000000000000050 = { isa = PBXShellScriptBuildPhase; buildActionMask = 2147483647; files = (); inputPaths = ("$(SRCROOT)/scripts/validate-build.sh"); outputPaths = (); runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = "\"$SRCROOT/scripts/validate-build.sh\""; alwaysOutOfDate = 1; };
+000000000000000000000051 = { isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+000000000000000000000052 = { isa = PBXBuildFile; fileRef = 000000000000000000000051; };
 }; rootObject = 000000000000000000000001; }
