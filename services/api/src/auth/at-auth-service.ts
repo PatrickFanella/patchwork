@@ -4,6 +4,7 @@ import {
     type OAuthAdapter,
     type OAuthSessionHandle,
 } from '@patchwork/at-client';
+import type { NativeHandoffService, NativeLoginBinding } from './native-handoff.js';
 import type { BrowserSessionRepository } from './session-repository.js';
 
 const BROWSER_SESSION_TTL_MILLISECONDS = 12 * 60 * 60 * 1000;
@@ -32,6 +33,7 @@ const safeReturnTo = (state: string | null): string => {
 interface LoginAppState {
     handle?: string;
     returnTo: string;
+    native?: NativeLoginBinding;
 }
 
 const encodeLoginAppState = (handle: string, returnTo: string): string =>
@@ -49,6 +51,7 @@ const decodeLoginAppState = (state: string | null): LoginAppState => {
         return {
             handle:
                 typeof decoded.handle === 'string' ? decoded.handle : undefined,
+            ...(decoded.native ? { native: decoded.native } : {}),
             returnTo: safeReturnTo(
                 typeof decoded.returnTo === 'string' ? decoded.returnTo : null,
             ),
@@ -86,6 +89,7 @@ export class AtAuthService {
     constructor(
         private readonly oauth: OAuthAdapter,
         private readonly browserSessions: BrowserSessionRepository,
+        private readonly nativeHandoff?: NativeHandoffService,
     ) {}
 
     async beginLogin(
@@ -103,11 +107,19 @@ export class AtAuthService {
         }
     }
 
+    async beginNativeLogin(value: unknown): Promise<{ authorizationUrl: string }> {
+        if (!this.nativeHandoff) throw new AtClientError('UNAUTHORIZED', 'Native sign-in is unavailable.');
+        const { handle, binding } = this.nativeHandoff.bind(value);
+        const state = Buffer.from(JSON.stringify({ handle, returnTo: '/', native: binding }), 'utf8').toString('base64url');
+        const authorizationUrl = await this.oauth.authorize(handle, state);
+        return { authorizationUrl: authorizationUrl.toString() };
+    }
+
     async completeLogin(params: URLSearchParams): Promise<{
         did: string;
         returnTo: string;
         sessionToken: string;
-    }> {
+    } | { nativeRedirect: string }> {
         try {
             const result = await this.oauth.callback(params);
             const appState = decodeLoginAppState(result.state);
@@ -116,6 +128,10 @@ export class AtAuthService {
                     result.session.did,
                     appState.handle,
                 );
+            }
+            if (appState.native) {
+                if (!this.nativeHandoff) throw new AtClientError('UNAUTHORIZED', 'Native sign-in is unavailable.');
+                return { nativeRedirect: await this.nativeHandoff.complete(result.session.did, appState.native) };
             }
             const expiresAt = new Date(
                 Date.now() + BROWSER_SESSION_TTL_MILLISECONDS,
