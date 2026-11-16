@@ -6,6 +6,10 @@ and external English/Spanish XML resources. Browse and Settings link to About;
 Android back dismisses About. Feature screens and authentication follow in
 separate issues. It makes no API calls or simulated successful member actions.
 
+Settings includes a persisted system-default/English/Spanish language choice.
+See [Android localization](../../docs/localization/android.md) for native
+resource validation, translator export/import and large-text pseudolocale tests.
+
 Build with JDK 21 and Android SDK platform 36/build tools 35.0.0:
 
 ```sh

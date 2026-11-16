@@ -1,7 +1,7 @@
 name: Native Android shell
 on:
   pull_request:
-    paths: ['apps/android/**', '.github/workflows/native-android.yml']
+    paths: ['apps/android/**', 'scripts/*android_localization.py', 'docs/localization/android*', '.github/workflows/native-android.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,6 +20,8 @@ jobs:
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
       - name: Lint, unit test and build app and instrumentation APKs
         run: |
+          python3 -B scripts/check_android_localization.py
+          python3 -B -m unittest discover -s scripts -p 'test_android_localization.py'
           apps/android/gradlew -p apps/android --no-daemon \
             :app:lintDebug :app:testDebugUnitTest :app:testStagingUnitTest :app:assembleDebug \
             :app:assembleDebugAndroidTest :app:assembleStaging

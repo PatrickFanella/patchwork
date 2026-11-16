@@ -1,0 +1,98 @@
+{
+  "status": "Existing shell Spanish retained; new settings copy reviewed in shell context by the implementing agent. Independent linguistic review remains part of #308.",
+  "provenance": "shell_* from #250; discovery.resultCount from the reviewed #254 web seed; settings.language and settings.languageSystem are native settings copy.",
+  "resources": {
+    "en": {
+      "shell_browse": {
+        "source": "99fc2210847c1e15c1588426592829feabcd4c1f36ac4ef5bb90a2f2e7ccfb17",
+        "translation": "99fc2210847c1e15c1588426592829feabcd4c1f36ac4ef5bb90a2f2e7ccfb17"
+      },
+      "shell_settings": {
+        "source": "eb431ce5dcdcd5e4b19b431ab50a545e2667a80b9f28f6f49c068a607436d099",
+        "translation": "eb431ce5dcdcd5e4b19b431ab50a545e2667a80b9f28f6f49c068a607436d099"
+      },
+      "shell_about": {
+        "source": "a46c43794a08a50d3b71568f8255073689c990c07f1f39fba486e6170076d73b",
+        "translation": "a46c43794a08a50d3b71568f8255073689c990c07f1f39fba486e6170076d73b"
+      },
+      "shell_welcome": {
+        "source": "308ad0fd1665f0a340f77c876fd23b4129c2f29b934a8a93c6aab39f1e0d2ea5",
+        "translation": "308ad0fd1665f0a340f77c876fd23b4129c2f29b934a8a93c6aab39f1e0d2ea5"
+      },
+      "shell_purpose": {
+        "source": "74e5b567bdb9a70090f8d4ab2e00b4d6301c9911cae99c449830794dc5c54d1e",
+        "translation": "74e5b567bdb9a70090f8d4ab2e00b4d6301c9911cae99c449830794dc5c54d1e"
+      },
+      "shell_environment": {
+        "source": "6f44fafbacd9adbbfdfa3ce214f9b235cc004a44d713e282d3be28a2236fe830",
+        "translation": "6f44fafbacd9adbbfdfa3ce214f9b235cc004a44d713e282d3be28a2236fe830"
+      },
+      "shell_version": {
+        "source": "480f30bf62b4c871963ec6d705bee2246eb5b2693f8af4f5fa49287cbfaba240",
+        "translation": "480f30bf62b4c871963ec6d705bee2246eb5b2693f8af4f5fa49287cbfaba240"
+      },
+      "shell_back": {
+        "source": "befc29c331c5aa33df0ed1ea7aaa3ee1420c76b58b064212728258c0ac8f618e",
+        "translation": "befc29c331c5aa33df0ed1ea7aaa3ee1420c76b58b064212728258c0ac8f618e"
+      },
+      "settings_language": {
+        "source": "02935b348b57817fa8d0051cc558635fa273896d6ef7e009e5a652a9529454a1",
+        "translation": "02935b348b57817fa8d0051cc558635fa273896d6ef7e009e5a652a9529454a1"
+      },
+      "settings_language_system": {
+        "source": "237c62505097078de3d24e455c568872add905a6f736db6ee08e47a08d8c2597",
+        "translation": "237c62505097078de3d24e455c568872add905a6f736db6ee08e47a08d8c2597"
+      },
+      "discovery_result_count": {
+        "source": "07464b63691b22dd615c3f883613db4b94db20fc061ce470dbec926b1756ea0d",
+        "translation": "07464b63691b22dd615c3f883613db4b94db20fc061ce470dbec926b1756ea0d"
+      }
+    },
+    "es": {
+      "shell_browse": {
+        "source": "99fc2210847c1e15c1588426592829feabcd4c1f36ac4ef5bb90a2f2e7ccfb17",
+        "translation": "bc5a85b4870859ebc655e2c57d3e240daaf738bd62b673f281dbc21d0b542b29"
+      },
+      "shell_settings": {
+        "source": "eb431ce5dcdcd5e4b19b431ab50a545e2667a80b9f28f6f49c068a607436d099",
+        "translation": "702257994981e603aec6ba0f36107b87f53d8e074389f80806f7ada20c748de7"
+      },
+      "shell_about": {
+        "source": "a46c43794a08a50d3b71568f8255073689c990c07f1f39fba486e6170076d73b",
+        "translation": "609062d8b6ceac11199f8a2980752db78b93a21046fa432e1eeb8621c15d036e"
+      },
+      "shell_welcome": {
+        "source": "308ad0fd1665f0a340f77c876fd23b4129c2f29b934a8a93c6aab39f1e0d2ea5",
+        "translation": "0f26955fefe6bcfe7c77450afa5dc05bd4f2afd9363b00f074bcd450e207660d"
+      },
+      "shell_purpose": {
+        "source": "74e5b567bdb9a70090f8d4ab2e00b4d6301c9911cae99c449830794dc5c54d1e",
+        "translation": "5aecfabb7375e3f9ec7e7262d72ea30040ed489e430fc843d318477df1b09882"
+      },
+      "shell_environment": {
+        "source": "6f44fafbacd9adbbfdfa3ce214f9b235cc004a44d713e282d3be28a2236fe830",
+        "translation": "bdf2ec225e763d4418d81f2cd5922afc17e4a3bc26becd1b9c46d360f23a2d41"
+      },
+      "shell_version": {
+        "source": "480f30bf62b4c871963ec6d705bee2246eb5b2693f8af4f5fa49287cbfaba240",
+        "translation": "74c8e04203e95e41a98cea4007931e129fb6cdbac8bc547a850798c5c43258d5"
+      },
+      "shell_back": {
+        "source": "befc29c331c5aa33df0ed1ea7aaa3ee1420c76b58b064212728258c0ac8f618e",
+        "translation": "db2085d1fa8afd2b6be0387cf05a55a6c4ee21193c38771a0ebb8b610c8910bf"
+      },
+      "settings_language": {
+        "source": "02935b348b57817fa8d0051cc558635fa273896d6ef7e009e5a652a9529454a1",
+        "translation": "7c4df7736d7bcc5d5d20a0a4c6b356e03dd183b122a85da1bc08b8eb9a024505"
+      },
+      "settings_language_system": {
+        "source": "237c62505097078de3d24e455c568872add905a6f736db6ee08e47a08d8c2597",
+        "translation": "24a456781ea2e6e50e87614b631020e22dede49d15fe0ddf92c04a5af35163e4"
+      },
+      "discovery_result_count": {
+        "source": "07464b63691b22dd615c3f883613db4b94db20fc061ce470dbec926b1756ea0d",
+        "translation": "dc8c19a801e185c85f4c5eb8aad56b2272011fee86505ecf5c0fddd21d681bf5"
+      }
+    }
+  }
+}

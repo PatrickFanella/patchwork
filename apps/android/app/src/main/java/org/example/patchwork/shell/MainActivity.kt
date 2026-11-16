@@ -1,12 +1,16 @@
 package org.example.patchwork.shell
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -18,10 +22,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import java.util.Locale
+import org.xmlpull.v1.XmlPullParser
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -66,9 +74,45 @@ fun PatchworkShell() {
                 }
             } else {
                 if (selectedTab == 0) Text(stringResource(R.string.shell_welcome))
+                else LanguagePicker()
                 Button(onClick = { about = true }, modifier = Modifier.testTag("shell.about")) {
                     Text(stringResource(R.string.shell_about))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LanguagePicker() {
+    val context = LocalContext.current
+    val languages = remember(context) {
+        buildList {
+            context.resources.getXml(R.xml.locales_config).use { xml ->
+                while (xml.next() != XmlPullParser.END_DOCUMENT) {
+                    if (xml.eventType == XmlPullParser.START_TAG && xml.name == "locale") {
+                        add(xml.getAttributeValue("http://schemas.android.com/apk/res/android", "name"))
+                    }
+                }
+            }
+        }
+    }
+    val selected = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+    Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleMedium)
+    Column(Modifier.selectableGroup()) {
+        (listOf("") + languages).forEach { tag ->
+            Row(
+                Modifier.fillMaxWidth().testTag("language.${tag.ifEmpty { "system" }}")
+                    .selectable(selected = selected == tag, role = Role.RadioButton, onClick = {
+                        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+                    }).padding(vertical = 8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                RadioButton(selected = selected == tag, onClick = null)
+                // Language self-names come from the OS locale registry, not translated sentence fragments.
+                Text(if (tag.isEmpty()) stringResource(R.string.settings_language_system)
+                    else Locale.forLanguageTag(tag).let { it.getDisplayName(it) },
+                    modifier = Modifier.padding(start = 8.dp))
             }
         }
     }
