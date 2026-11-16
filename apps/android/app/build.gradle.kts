@@ -51,10 +51,20 @@ android {
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/public-geography"))
     testOptions.unitTests.all {
         it.systemProperty("patchwork.contracts", rootProject.file("../../packages/mobile-contracts/fixtures").absolutePath)
+        it.systemProperty("patchwork.geography", rootProject.file("../../packages/at-lexicons/src").absolutePath)
     }
 }
+
+val bundlePublicGeography by tasks.registering(Copy::class) {
+    from(rootProject.file("../../packages/at-lexicons/src")) {
+        include("postal-index.json", "county-index.json", "geography-names.json")
+    }
+    into(layout.buildDirectory.dir("generated/public-geography"))
+}
+tasks.named("preBuild") { dependsOn(bundlePublicGeography) }
 
 gradle.taskGraph.whenReady {
     if (allTasks.any { it.project == project && it.name.contains("Release") }) {
