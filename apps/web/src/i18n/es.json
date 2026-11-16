@@ -2210,5 +2210,18 @@
         "postOwn": "Publica tu propia oferta",
         "share": "Copiar enlace de la oferta",
         "sequence": "Pídela → quien publicó acepta → envíen mensajes y acuerden una hora → completen la entrega."
+    },
+    "deletion": {
+        "title": "Eliminar tu cuenta de Patchwork",
+        "scope": "Elimina tus publicaciones, datos privados y acceso a Patchwork. Se revocan todas las sesiones y destinos de notificaciones. Esta acción no se puede deshacer aquí.",
+        "retention": "Los registros de seguridad pueden conservarse siete días y los de auditoría operativa 30 días. Un hash impide la recreación automática. Los comprobantes caducan a los siete días. Los adjuntos se eliminan de forma asíncrona; las copias de seguridad caducan según su política de conservación. Se ponen en cola las cancelaciones de suscripciones existentes.",
+        "identity": "No se eliminan tu cuenta AT independiente ni las copias ya federadas. Gestiona esos datos con tu proveedor de cuenta.",
+        "signInHelp": "Vuelve a iniciar sesión y confirma la cuenta que aparece abajo en un plazo de cinco minutos. Si el resultado es incierto, inicia sesión de nuevo para comprobarlo; una cuenta eliminada no puede volver a entrar automáticamente.",
+        "signIn": "Iniciar sesión para solicitar la eliminación",
+        "confirm": "Entiendo qué se elimina y qué se conserva, y confirmo la eliminación de esta cuenta de Patchwork.",
+        "submit": "Eliminar cuenta de Patchwork",
+        "pending": "Eliminando…",
+        "complete": "Se aceptó la eliminación de tu cuenta de Patchwork. Se cerró tu sesión.",
+        "retry": "No se pudo confirmar la eliminación. Vuelve a iniciar sesión e inténtalo de nuevo. Este mensaje no incluye datos de la cuenta."
     }
 }

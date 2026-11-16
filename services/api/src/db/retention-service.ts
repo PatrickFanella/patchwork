@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 
 export interface RetentionResult {
+    deletionReceipts: number;
     blocks: number;
     reports: number;
     auditEvents: number;
@@ -58,6 +59,13 @@ export class PostgresRetentionService {
                  WHERE completed_at IS NOT NULL AND completed_at <= $1`,
                 [cutoff.toISOString()],
             );
+            const deletionReceipts = await client.query(
+                `UPDATE account_deactivations
+                    SET command_id = NULL, result = '{}'::jsonb,
+                        requested_at = NULL, retention_until = 'infinity'
+                  WHERE retention_until <= $1`,
+                [now.toISOString()],
+            );
             const authoringReceipts = await client.query('DELETE FROM aid_authoring_receipts WHERE retention_until <= $1', [now.toISOString()]);
             const workflows = await client.query(
                 `DELETE FROM request_workflows
@@ -95,6 +103,7 @@ export class PostgresRetentionService {
             );
             await client.query('COMMIT');
             return {
+                deletionReceipts: deletionReceipts.rowCount ?? 0,
                 blocks,
                 reports,
                 auditEvents,

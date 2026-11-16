@@ -1985,6 +1985,7 @@ const contractRoutes = [
     '/moderation/audit',
     '/account/export',
     '/account/deactivate',
+    '/account/delete',
     '/account/requests',
     '/account/onboarding',
     '/account/consent',
@@ -2116,6 +2117,7 @@ const routeHandlers: Readonly<Record<string, ApiRouteHandler>> = {
             },
         },
     }),
+    '/account/delete': () => ({ statusCode: 503, body: { error: { code: 'ACCOUNT_PRIVACY_UNAVAILABLE', message: 'Account privacy is unavailable.' } } }),
     '/account/deactivate': () => ({
         statusCode: 503,
         body: {

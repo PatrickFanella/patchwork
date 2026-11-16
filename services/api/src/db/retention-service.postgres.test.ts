@@ -130,6 +130,23 @@ describe('private-data retention enforcement', () => {
         ]);
     });
 
+    it('discards expired deletion receipts but preserves the suppression hash and safe retry', async () => {
+        const hash = 'b'.repeat(64);
+        await pool.query(`INSERT INTO account_deactivations
+            (did_hash, command_id, result, requested_at, retention_until)
+            VALUES ($1, 'retention-test-deletion', '{"removed":{"preferences":1}}',
+                '2026-07-01T00:00:00Z', '2026-07-08T00:00:00Z')
+            ON CONFLICT (did_hash) DO UPDATE SET result=EXCLUDED.result,
+                command_id=EXCLUDED.command_id, requested_at=EXCLUDED.requested_at,
+                retention_until=EXCLUDED.retention_until`, [hash]);
+        try {
+            expect((await retention.enforce(new Date('2026-07-09T00:00:00Z'))).deletionReceipts).toBeGreaterThanOrEqual(1);
+            const rows = await pool.query('SELECT command_id, result, requested_at, retention_until::text FROM account_deactivations WHERE did_hash=$1', [hash]);
+            expect(rows.rows).toEqual([{ command_id: null, result: {}, requested_at: null, retention_until: 'infinity' }]);
+            expect((await retention.enforce(new Date('2026-08-09T00:00:00Z'))).deletionReceipts).toBe(0);
+        } finally { await pool.query('DELETE FROM account_deactivations WHERE did_hash=$1', [hash]); }
+    });
+
     it('removes an expired workflow and its cascading private timeline', async () => {
         await pool.query(
             `INSERT INTO request_workflows (

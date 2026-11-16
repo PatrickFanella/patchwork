@@ -168,7 +168,7 @@ portable AT repository.
 
 ### 6.2 Deletion
 
-You may deactivate your Patchwork account through the Settings page. The
+You may delete your Patchwork data and access through [the account deletion request page](/account/delete), also linked from Settings. The page is accessible outside the native app; applying deletion requires a fresh sign-in and explicit confirmation. The legacy deactivation command remains available for existing clients. The
 authenticated command immediately revokes Patchwork browser and OAuth sessions,
 removes Patchwork discovery projections and owned workflow state, and prevents
 future event replay or login from recreating them. It does not delete records
@@ -291,3 +291,9 @@ protection authority.
 [Community Guidelines](./community-guidelines.md) |
 [Acceptable Use Policy](./acceptable-use-policy.md) |
 [Policy Changelog](./changelog.md)*
+
+Attachment metadata removal enqueues durable object-deletion jobs. Original and
+derived objects are removed asynchronously with retries. Backup copies expire
+under the deployment backup policy rather than being rewritten immediately.
+Existing recurring gifts are queued for cancellation; accounting records remain
+pseudonymized under their applicable retention requirements.
