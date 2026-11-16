@@ -2210,5 +2210,18 @@
         "postOwn": "Post your own offer",
         "share": "Copy offer link",
         "sequence": "Ask for it → the poster accepts → message and agree on a time → complete the handoff."
+    },
+    "deletion": {
+        "title": "Delete your Patchwork account",
+        "scope": "Delete your Patchwork listings, private account data and access. All Patchwork sessions and notification targets are revoked. This action cannot be undone here.",
+        "retention": "Safety records may remain for seven days and operational audit records for 30 days. A suppression hash prevents automatic recreation. Deletion receipts expire after seven days. Attachment objects are removed asynchronously; backups expire under the backup retention policy. Existing subscription cancellations are queued.",
+        "identity": "Your independently owned AT account and already federated copies are not deleted. Manage those through your account provider.",
+        "signInHelp": "Sign in again, then confirm the account shown below within five minutes. If the result is uncertain, sign in again to check; a deleted account cannot sign back in automatically.",
+        "signIn": "Sign in to request deletion",
+        "confirm": "I understand what is removed and retained, and confirm deletion of this Patchwork account.",
+        "submit": "Delete Patchwork account",
+        "pending": "Deleting…",
+        "complete": "Your Patchwork account deletion was accepted. You have been signed out.",
+        "retry": "Deletion could not be confirmed. Sign in again and retry. No account details are included in this message."
     }
 }

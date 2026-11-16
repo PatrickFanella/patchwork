@@ -375,6 +375,7 @@ export const AppShell = ({
                             {t(key)}
                         </a>
                     ))}
+                    <a href='/account/delete'>{t('deletion.title')}</a>
                 </div>
             </footer>
 

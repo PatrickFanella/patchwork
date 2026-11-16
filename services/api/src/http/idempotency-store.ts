@@ -68,7 +68,7 @@ export class PostgresIdempotencyExecutor {
     ): Promise<IdempotentResponse> {
         const hash = requestHash(command.body);
         return withTransaction(this.pool, async client => {
-            if (command.pathname !== '/account/deactivate') {
+            if (!['/account/deactivate', '/account/delete'].includes(command.pathname)) {
                 const actorDidHash = createHash('sha256')
                     .update(command.actorDid)
                     .digest('hex');

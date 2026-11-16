@@ -74,13 +74,13 @@ export class AccountPrivacyService {
             );
             if (duplicate.rows[0]) {
                 await client.query('COMMIT');
-                return duplicate.rows[0].result;
+                return Object.keys(duplicate.rows[0].result).length ? duplicate.rows[0].result : { status: 'deactivated' };
             }
             await client.query(
                 `INSERT INTO account_deactivations (
                     did_hash, command_id, result, requested_at, retention_until
                  ) VALUES ($1, $2, '{}'::jsonb, $3, $4)`,
-                [didHash, commandId, now, 'infinity'],
+                [didHash, commandId, now, safetyRetentionUntil],
             );
 
             const publicAidPosts = await client.query(
@@ -424,7 +424,7 @@ export class AccountPrivacyService {
             );
             const commandMetadata = await client.query(
                 `DELETE FROM http_idempotency_commands
-                 WHERE actor_did = $1 AND pathname <> '/account/deactivate'`,
+                 WHERE actor_did = $1 AND pathname NOT IN ('/account/deactivate', '/account/delete')`,
                 [did],
             );
             const notificationIntents = await client.query(

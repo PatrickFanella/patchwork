@@ -2082,6 +2082,10 @@ export const deactivateAccountViaApi = async (
     };
 };
 
+/** Explicit deletion contract; the legacy deactivation caller remains compatible. */
+export const deleteAccountViaApi = async (signal?: AbortSignal) =>
+    requestJsonPost('/account/delete', { confirmDeletion: true }, signal);
+
 export const exportDataViaApi = async (
     signal?: AbortSignal,
 ): Promise<ApiClientResult<AccountExportApiResponse>> => {

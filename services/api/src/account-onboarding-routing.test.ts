@@ -10,6 +10,7 @@ describe('policy consent routing', () => {
         '/account/preferences',
         '/account/export',
         '/account/deactivate',
+    '/account/delete',
     ])('allows %s before current policy consent', pathname => {
         expect(isConsentExemptPath(pathname)).toBe(true);
     });

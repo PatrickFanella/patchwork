@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AccountPrivacyService } from '../account-privacy-service.js';
 import type { AuthenticatedRequest } from './authenticated-request.js';
-import { writeJsonResponse, writePublicError } from './error-response.js';
+import { PublicHttpError, writeJsonResponse, writePublicError } from './error-response.js';
 import {
     IdempotencyError,
     type IdempotentResponse,
@@ -27,7 +27,7 @@ export const isAccountPrivacyRoute = (
     requestUrl: URL,
 ): boolean =>
     (request.method === 'GET' && requestUrl.pathname === '/account/export') ||
-    (request.method === 'POST' && requestUrl.pathname === '/account/deactivate');
+    (request.method === 'POST' && ['/account/deactivate', '/account/delete'].includes(requestUrl.pathname));
 
 export const createAccountPrivacyHandler = (
     dependencies: AccountPrivacyHandlerDependencies,
@@ -57,6 +57,17 @@ export const createAccountPrivacyHandler = (
                     return;
                 }
                 const body = await readJsonBody(request);
+                if (requestUrl.pathname === '/account/delete') {
+                    const at = Date.parse(authenticated.session.authenticatedAt ?? '');
+                    if (!Number.isFinite(at) || at > Date.now() || Date.now() - at > 5 * 60_000) {
+                        throw new PublicHttpError(401, 'ACCOUNT_DELETION_STEP_UP_REQUIRED',
+                            'Sign in again before deleting your Patchwork account.');
+                    }
+                    if (!body || typeof body !== 'object' || !('confirmDeletion' in body) || body.confirmDeletion !== true) {
+                        throw new PublicHttpError(400, 'ACCOUNT_DELETION_CONFIRMATION_REQUIRED',
+                            'Confirm deletion of your Patchwork account.');
+                    }
+                }
                 const result = await dependencies.executeIdempotent(
                     request,
                     authenticated.principal.did,

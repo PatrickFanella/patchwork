@@ -273,6 +273,7 @@ export const AccountPrivacyRoute = ({ onDeactivated }: AccountPrivacyRouteProps)
                     </Surface>
 
                     <Surface as='article' tone='quiet' title={String(t('account.deactivation'))}>
+                        <a href='/account/delete'>{t('deletion.title')}</a>
                         <p className='text-sm text-mh-textMuted'>
                             {t('account.deactivationHelp')}
                         </p>

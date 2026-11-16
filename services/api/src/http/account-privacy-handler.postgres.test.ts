@@ -26,7 +26,8 @@ const startServer = async (pool: Pool) => {
         authenticate: request =>
             authenticateRequest(request, {
                 resolveSession: async token => {
-                    if (token === 'privacy-session') return { did: viewerDid };
+                    if (token === 'privacy-session') return { did: viewerDid, authenticatedAt: new Date().toISOString() };
+                    if (token === 'stale-session') return { did: viewerDid };
                     if (token === 'other-session') return { did: otherDid };
                     throw new Error('bad session');
                 },
@@ -659,17 +660,37 @@ describe('authenticated account privacy HTTP boundary', () => {
         });
     });
 
+    it('requires recent authentication and explicit confirmation for the deletion caller', async () => {
+        const running = await startServer(pool);
+        try {
+            for (const [token, body, status] of [
+                ['', { confirmDeletion: true }, 401],
+                ['stale-session', { confirmDeletion: true }, 401],
+                ['privacy-session', {}, 400],
+            ] as const) {
+                const response = await fetch(`${running.origin}/account/delete`, {
+                    method: 'POST',
+                    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
+                        'content-type': 'application/json', 'idempotency-key': 'delete-rejected' },
+                    body: JSON.stringify(body),
+                });
+                expect(response.status).toBe(status);
+            }
+            expect((await pool.query('SELECT 1 FROM account_preferences WHERE did=$1', [viewerDid])).rowCount).toBe(1);
+        } finally { await stopServer(running.server); }
+    });
+
     it('deactivates only the authenticated subject and reports retained exceptions', async () => {
         expect((await pool.query('SELECT COUNT(*) FROM aid_authoring_receipts WHERE owner_did=$1', [viewerDid])).rows[0].count).toBe('1');
         const running = await startServer(pool);
-        const response = await fetch(`${running.origin}/account/deactivate`, {
+        const response = await fetch(`${running.origin}/account/delete`, {
             method: 'POST',
             headers: {
                 cookie: 'patchwork_session=privacy-session',
                 'content-type': 'application/json',
                 'idempotency-key': 'privacy-deactivate-1',
             },
-            body: JSON.stringify({ did: otherDid }),
+            body: JSON.stringify({ did: otherDid, confirmDeletion: true }),
         });
         const body = await response.json();
 
@@ -717,14 +738,14 @@ describe('authenticated account privacy HTTP boundary', () => {
         expect((await pool.query('SELECT COUNT(*) FROM aid_authoring_receipts WHERE owner_did=$1', [viewerDid])).rows[0].count).toBe('0');
         expect((await pool.query('SELECT COUNT(*) FROM aid_authoring_receipts WHERE owner_did=$1', [otherDid])).rows[0].count).toBe('1');
 
-        const reused = await fetch(`${running.origin}/account/deactivate`, {
+        const reused = await fetch(`${running.origin}/account/delete`, {
             method: 'POST',
             headers: {
                 cookie: 'patchwork_session=privacy-session',
                 'content-type': 'application/json',
                 'idempotency-key': 'privacy-deactivate-1',
             },
-            body: JSON.stringify({ changed: true }),
+            body: JSON.stringify({ changed: true, confirmDeletion: true }),
         });
         expect(reused.status).toBe(409);
         await expect(reused.json()).resolves.toMatchObject({
